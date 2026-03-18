@@ -4,6 +4,16 @@
 
 A batteries-included MCP server for email. Works with any IMAP provider (Gmail, Outlook, Fastmail, ProtonMail, Yahoo, self-hosted). Features a local SQLite cache, operation queue with undo, optional web dashboard, LLM-powered email analysis, and full observability.
 
+## Superseded Documents
+
+This spec supersedes the following earlier documents which were written for an initial Node.js/TypeScript design:
+
+- `docs/ARCHITECTURE.md` — superseded by the Architecture, Solution Structure, and component sections in this spec. The .NET stack replaces Node.js, ASP.NET Core replaces Express, SignalR replaces raw WebSocket, MailKit replaces imapflow/nodemailer.
+- `docs/PROJECT_PLAN.md` — superseded by the Phased Implementation section in this spec. The tech stack, project structure, and package names are all different.
+- `docs/FEATURE_MATRIX.md` — the feature comparison remains valid, but the "Language" row for Ultimate IMAP MCP should read "C# (.NET 8+)" not "TypeScript (Node)".
+- `docs/DATA_MODEL.md` — the SQLite schema definitions remain the canonical reference and are valid as-is for the .NET implementation (SQL is stack-agnostic). This spec adds two new tables (`metrics`, `logs`) and one new column (`sends_at` on `operation_queue`).
+- `config.example.yaml` — superseded. Config format is JSON (`config.example.json`).
+
 ## Stack Decision
 
 ### Requirements
@@ -174,7 +184,34 @@ Key decisions:
 
 ### Schema
 
-All tables from the original DATA_MODEL.md apply (accounts, folders, messages, messages_fts, attachments, operation_queue, llm_analysis, llm_rules, llm_usage, sync_log, dashboard_sessions), plus:
+All tables from `DATA_MODEL.md` are the canonical schema reference and remain valid as-is (SQL is stack-agnostic). The following tables are defined there: `accounts`, `folders`, `messages`, `messages_fts` (FTS5 + triggers), `attachments`, `operation_queue`, `llm_analysis`, `llm_rules`, `llm_usage`, `sync_log`, `dashboard_sessions`.
+
+#### Schema modifications to DATA_MODEL.md tables
+
+**operation_queue** — add column for undo window timing:
+
+```sql
+ALTER TABLE operation_queue ADD COLUMN sends_at TEXT;  -- ISO 8601 timestamp, set for implicit-confirm sends
+```
+
+The `sends_at` column is populated when a send operation is enqueued with implicit confirm mode. The queue worker checks `sends_at <= datetime('now')` during P0 flush to determine if the undo window has expired. For explicit confirm mode, `sends_at` is NULL and the operation waits for `status = 'confirmed'`.
+
+**dashboard_sessions** — extend for PIN/auth storage:
+
+```sql
+CREATE TABLE dashboard_auth (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    auth_type   TEXT NOT NULL,           -- 'pin' | 'password'
+    username    TEXT,                    -- NULL for PIN mode
+    hash        TEXT NOT NULL,           -- bcrypt hash of PIN or password
+    created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+```
+
+The existing `dashboard_sessions` table remains as-is for session token management. `dashboard_auth` stores the PIN hash (PIN mode) or username+password hash (full auth mode).
+
+#### New tables added by this spec
 
 #### metrics
 
@@ -320,11 +357,13 @@ SQLite is a **cache**, not a full mailbox mirror:
 - **Beyond cache (IMAP fallback):** `search_emails` does a two-phase search — hit SQLite first (instant), then IMAP SEARCH for older results if needed. IMAP fallback results are temporarily cached (configurable TTL, default: 1 hour).
 
 **Eviction strategy:**
-1. **Size-based (primary):** if DB exceeds `max_size_mb` (default: 500MB), evict oldest entries until under the limit.
+1. **Size-based (primary):** if DB exceeds `max_size_mb` (default: 500MB), evict oldest entries (by `cached_at`) until under the limit. Bodies are evicted first (set `body_text`, `body_html` to NULL, `body_fetched` to 0), then full message rows if still over limit.
 2. **Time-based (optional):** `cache_window_days` and `max_body_age_days` default to `0` (disabled). User can enable if desired.
 3. Both can coexist — whichever triggers first wins.
 
 Configured in the setup wizard with sensible defaults. 500MB is safe for SQLite with WAL mode.
+
+**CacheEvictor BackgroundService:** Runs every 10 minutes. Checks DB file size against `max_size_mb`. If over limit, runs eviction in batches of 500 rows to avoid long-running transactions. Also handles time-based eviction if configured. Emits `cache.evictions` counter metric with `reason` tag (size/time).
 
 ```json
 {
@@ -343,6 +382,8 @@ Per-folder override:
 ```json
 {
   "accounts": [{
+    "confirm_mode": "implicit",
+    "undo_window_seconds": 10,
     "sync": {
       "folders": [
         { "path": "INBOX", "cache_window_days": 60 },
@@ -474,19 +515,45 @@ Provider values: `"anthropic"`, `"openai"`, `"acp_claude"`, `"acp_copilot"`, `"i
 
 ### ACP Client (built-in, lightweight)
 
-No .NET ACP SDK exists, so we build a minimal one:
+No .NET ACP SDK exists, so we build a minimal client that implements enough of the Agent Client Protocol to send prompts and receive responses.
 
 ```csharp
 public class AcpClient : IAsyncDisposable
 {
-    // Spawns agent process in ACP mode via stdio
-    // JSON-RPC over stdin/stdout
+    // Spawns agent process (e.g., "claude --acp" or "gh copilot --acp") via stdio
+    // Communicates using the ACP protocol (JSON-RPC 2.0 over stdin/stdout)
 
     public Task<AcpSession> CreateSessionAsync(string workingDir);
     public IAsyncEnumerable<AcpEvent> SendPromptAsync(AcpSession session, string prompt);
     public Task CancelAsync(AcpSession session);
+    public Task DisposeAsync();  // kills the agent process
+}
+
+public record AcpSession(string SessionId, string WorkingDir);
+
+public record AcpEvent
+{
+    public AcpEventType Type { get; init; }   // TextDelta, ToolUse, PermissionRequest, Complete, Error
+    public string? Text { get; init; }         // for TextDelta
+    public string? Error { get; init; }        // for Error
 }
 ```
+
+**ACP protocol methods used:**
+
+| JSON-RPC Method | Purpose |
+|---|---|
+| `initialize` | Handshake: exchange capabilities, protocol version |
+| `sessions/create` | Create an isolated session with a working directory |
+| `prompts/send` | Send a text prompt, receive streaming events |
+| `prompts/cancel` | Cancel an in-flight prompt |
+| `sessions/delete` | Clean up a session |
+
+**Lifecycle:** One long-lived agent process per active analysis batch. The process is spawned on first use and kept alive for subsequent analysis requests. Sessions are created per analysis run. The process is killed on `DisposeAsync` or application shutdown.
+
+**Error handling:** If the agent process crashes or becomes unresponsive (no response within 30 seconds), the client kills the process, logs the error, and falls back to the next configured provider (if any). Permission requests from the agent are auto-denied (the analysis client should not need file/tool permissions).
+
+**Protocol reference:** The ACP protocol spec is at https://agentclientprotocol.com. Our implementation covers only the subset needed for prompt→response workflows, not the full protocol (no tool execution, no file operations).
 
 ### Analysis Types
 
@@ -666,6 +733,21 @@ public class DashboardHub : Hub
 
 Internal services emit events via an `IEventBus` (in-memory pub/sub). The hub subscribes and forwards to connected clients.
 
+```csharp
+public interface IEventBus
+{
+    void Publish<T>(T @event) where T : IEvent;
+    IDisposable Subscribe<T>(Action<T> handler) where T : IEvent;
+}
+
+// Event types: SyncProgressEvent, SyncCompleteEvent, SyncErrorEvent,
+//              QueueAddedEvent, QueueCompletedEvent, QueueFailedEvent,
+//              AnalysisProgressEvent, AnalysisCompleteEvent,
+//              MetricsUpdateEvent, LogEvent
+```
+
+The `IEventBus` is registered as a singleton in the DI container. SyncManager, QueueWorker, MetricsCollector, and the LLM rule engine publish events. The SignalR hub and any other interested services subscribe. Implementation is a simple in-memory `Channel<T>`-based pub/sub — no external message broker needed.
+
 ### React SPA
 
 **Stack:** Vite + React + TypeScript + shadcn/ui + TanStack Query + Recharts
@@ -685,8 +767,19 @@ Internal services emit events via an `IEventBus` (in-memory pub/sub). The hub su
 
 ### Authentication
 
-- **Default (PIN mode):** On first access, user sets a PIN. Stored as bcrypt hash in SQLite. Session cookie with configurable expiry.
-- **Full auth (optional):** Username + password login. For when dashboard is exposed beyond localhost.
+- **Default (PIN mode):** On first access, user sets a PIN. Stored as bcrypt hash in `dashboard_auth` table. Session token stored in `dashboard_sessions` with configurable expiry (default: 24 hours).
+- **Full auth (optional):** Username + password login, stored in `dashboard_auth` with `auth_type = 'password'`. Enabled via config: `"dashboard_auth": "full"`. For when dashboard is exposed beyond localhost.
+
+### OAuth2 Flows
+
+OAuth2 for Gmail and Outlook is handled entirely through the dashboard:
+
+1. **Client credentials:** User provides their own OAuth `client_id` and `client_secret` (from Google Cloud Console or Azure AD app registration) via the dashboard Accounts page. These are encrypted and stored in the `accounts.credentials_enc` field.
+2. **Authorization:** Dashboard redirects the browser to the provider's auth URL with `redirect_uri=http://localhost:{dashboard_port}/api/accounts/oauth/callback` (loopback redirect, no external server needed).
+3. **Token exchange:** Callback endpoint receives the auth code, exchanges it for access + refresh tokens via the provider's token endpoint, encrypts and stores them.
+4. **Token refresh:** `ImapConnectionManager` checks token expiry before each IMAP/SMTP connection. If expired, refreshes using the stored refresh token. If refresh fails, marks the account as requiring re-auth and emits an event to the dashboard.
+
+This uses the standard OAuth2 loopback redirect flow (RFC 8252 Section 7.3), which is the recommended approach for native/localhost apps.
 
 ### Build Integration
 
@@ -862,7 +955,8 @@ Includes the app + Dovecot (local IMAP server for integration tests).
 
 ### Phase 7: Polish + Distribution
 
-- .NET global tool, Docker image, HTTP transport
+- .NET global tool, Docker image
+- HTTP+SSE transport for MCP (alternative to stdio, for remote MCP clients; uses the same Kestrel host as the dashboard on a separate port `http_port`, configured via `"transport": "http"` or `"transport": "both"` in config)
 - Claude Code plugin bundle
 - CI/CD (GitHub Actions)
 - Security audit, performance testing (100k+ messages)
