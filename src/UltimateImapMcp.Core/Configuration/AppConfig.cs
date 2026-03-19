@@ -1,0 +1,174 @@
+using System.Text.Json.Serialization;
+
+namespace UltimateImapMcp.Core.Configuration;
+
+/// <summary>Top-level application configuration.</summary>
+public class AppConfig
+{
+    [JsonPropertyName("server")]
+    public ServerConfig Server { get; set; } = new();
+
+    [JsonPropertyName("accounts")]
+    public List<AccountConfig> Accounts { get; set; } = [];
+
+    [JsonPropertyName("cache")]
+    public CacheConfig Cache { get; set; } = new();
+
+    [JsonPropertyName("queue")]
+    public QueueConfig Queue { get; set; } = new();
+
+    [JsonPropertyName("llm")]
+    public LlmConfig Llm { get; set; } = new();
+
+    [JsonPropertyName("metrics")]
+    public MetricsConfig Metrics { get; set; } = new();
+}
+
+/// <summary>MCP server transport and dashboard settings.</summary>
+public class ServerConfig
+{
+    [JsonPropertyName("transport")]
+    public string Transport { get; set; } = "stdio";
+
+    [JsonPropertyName("dashboard_port")]
+    public int DashboardPort { get; set; } = 3847;
+
+    [JsonPropertyName("dashboard_enabled")]
+    public bool DashboardEnabled { get; set; } = true;
+
+    [JsonPropertyName("log_level")]
+    public string LogLevel { get; set; } = "Information";
+
+    [JsonPropertyName("log_file")]
+    public string? LogFile { get; set; }
+}
+
+/// <summary>IMAP/SMTP account configuration.</summary>
+public class AccountConfig
+{
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = string.Empty;
+
+    [JsonPropertyName("imap_host")]
+    public string ImapHost { get; set; } = string.Empty;
+
+    [JsonPropertyName("imap_port")]
+    public int ImapPort { get; set; } = 993;
+
+    [JsonPropertyName("username")]
+    public string Username { get; set; } = string.Empty;
+
+    [JsonPropertyName("auth_type")]
+    public string AuthType { get; set; } = "app_password";
+
+    [JsonPropertyName("provider")]
+    public string Provider { get; set; } = "generic";
+
+    [JsonPropertyName("password")]
+    public string? Password { get; set; }
+
+    [JsonPropertyName("oauth2_client_id")]
+    public string? OAuth2ClientId { get; set; }
+
+    [JsonPropertyName("oauth2_client_secret")]
+    public string? OAuth2ClientSecret { get; set; }
+
+    [JsonPropertyName("oauth2_refresh_token")]
+    public string? OAuth2RefreshToken { get; set; }
+
+    [JsonPropertyName("smtp_host")]
+    public string? SmtpHost { get; set; }
+
+    [JsonPropertyName("smtp_port")]
+    public int SmtpPort { get; set; } = 587;
+
+    [JsonPropertyName("confirm_mode")]
+    public string ConfirmMode { get; set; } = "implicit";
+
+    [JsonPropertyName("undo_window_seconds")]
+    public int UndoWindowSeconds { get; set; } = 10;
+
+    [JsonPropertyName("sync")]
+    public SyncConfig Sync { get; set; } = new();
+}
+
+/// <summary>Sync behaviour for an account.</summary>
+public class SyncConfig
+{
+    [JsonPropertyName("interval_minutes")]
+    public int IntervalMinutes { get; set; } = 5;
+
+    [JsonPropertyName("max_messages_per_sync")]
+    public int MaxMessagesPerSync { get; set; } = 500;
+
+    [JsonPropertyName("folders")]
+    public List<FolderSyncConfig> Folders { get; set; } = [];
+}
+
+/// <summary>Per-folder sync configuration.</summary>
+public class FolderSyncConfig
+{
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = string.Empty;
+
+    [JsonPropertyName("enabled")]
+    public bool Enabled { get; set; } = true;
+
+    [JsonPropertyName("max_age_days")]
+    public int? MaxAgeDays { get; set; }
+}
+
+/// <summary>SQLite cache configuration.</summary>
+public class CacheConfig
+{
+    [JsonPropertyName("db_path")]
+    public string DbPath { get; set; } = "~/.ultimate-imap-mcp/cache.db";
+
+    [JsonPropertyName("max_size_mb")]
+    public int MaxSizeMb { get; set; } = 500;
+
+    [JsonPropertyName("vacuum_on_startup")]
+    public bool VacuumOnStartup { get; set; } = false;
+}
+
+/// <summary>Async operation queue settings.</summary>
+public class QueueConfig
+{
+    [JsonPropertyName("max_concurrent_operations")]
+    public int MaxConcurrentOperations { get; set; } = 3;
+
+    [JsonPropertyName("retry_attempts")]
+    public int RetryAttempts { get; set; } = 3;
+
+    [JsonPropertyName("retry_delay_seconds")]
+    public int RetryDelaySeconds { get; set; } = 5;
+}
+
+/// <summary>Optional LLM integration settings.</summary>
+public class LlmConfig
+{
+    [JsonPropertyName("enabled")]
+    public bool Enabled { get; set; } = false;
+
+    [JsonPropertyName("provider")]
+    public string Provider { get; set; } = "openai";
+
+    [JsonPropertyName("api_key")]
+    public string? ApiKey { get; set; }
+
+    [JsonPropertyName("model")]
+    public string Model { get; set; } = "gpt-4o-mini";
+}
+
+/// <summary>Prometheus/metrics endpoint settings.</summary>
+public class MetricsConfig
+{
+    [JsonPropertyName("enabled")]
+    public bool Enabled { get; set; } = false;
+
+    [JsonPropertyName("port")]
+    public int Port { get; set; } = 9090;
+
+    [JsonPropertyName("path")]
+    public string Path { get; set; } = "/metrics";
+}
