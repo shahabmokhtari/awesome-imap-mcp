@@ -8,6 +8,7 @@ using UltimateImapMcp.Core.Encryption;
 using UltimateImapMcp.Core.Providers;
 using UltimateImapMcp.ImapClient;
 using UltimateImapMcp.ImapClient.Repositories;
+using UltimateImapMcp.Dashboard;
 using UltimateImapMcp.Queue;
 using UltimateImapMcp.Queue.Executors;
 
@@ -58,6 +59,12 @@ builder.Services.AddSingleton<IOperationExecutor, DeleteExecutor>();
 builder.Services.AddSingleton<IOperationExecutor, MoveExecutor>();
 builder.Services.AddSingleton<IOperationExecutor, FlagExecutor>();
 builder.Services.AddHostedService<QueueWorker>();
+
+// Dashboard (conditional)
+if (config.Server.DashboardEnabled)
+{
+    builder.Services.AddDashboard(config);
+}
 
 builder.Services.AddMcpServer(options =>
 {
