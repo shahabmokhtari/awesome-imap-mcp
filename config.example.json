@@ -1,0 +1,63 @@
+{
+  "server": {
+    "transport": "stdio",
+    "http_port": 3846,
+    "dashboard_port": 3847,
+    "dashboard_enabled": true,
+    "dashboard_auth": "pin"
+  },
+  "accounts": [
+    {
+      "name": "personal",
+      "imap_host": "imap.gmail.com",
+      "imap_port": 993,
+      "smtp_host": "smtp.gmail.com",
+      "smtp_port": 465,
+      "smtp_use_ssl": true,
+      "username": "you@gmail.com",
+      "auth_type": "app_password",
+      "password": "${ACCOUNT_PERSONAL_PASSWORD}",
+      "provider": "gmail",
+      "confirm_mode": "implicit",
+      "undo_window_seconds": 10,
+      "sync": {
+        "idle_folders": ["INBOX"],
+        "poll_interval": 300,
+        "folders": [
+          { "path": "INBOX", "cache_window_days": 60 },
+          { "path": "[Gmail]/Sent Mail", "cache_window_days": 14 },
+          { "path": "[Gmail]/Drafts" }
+        ]
+      }
+    }
+  ],
+  "cache": {
+    "db_path": "~/.ultimate-imap-mcp/cache.db",
+    "max_size_mb": 500,
+    "default_window_days": 0,
+    "max_body_age_days": 0,
+    "imap_fallback_ttl_hours": 1
+  },
+  "queue": {
+    "p0_flush_interval": 2,
+    "p1_flush_interval": 30,
+    "p2_flush_interval": 300,
+    "send_undo_window": 10,
+    "max_retries": 3
+  },
+  "llm": {
+    "enabled": false,
+    "provider": "anthropic",
+    "model": "claude-haiku-4-5-20251001",
+    "api_key_env": "ANTHROPIC_API_KEY",
+    "daily_token_budget": 1000000,
+    "monthly_cost_limit": 5.00,
+    "auto_analyze_new": false
+  },
+  "metrics": {
+    "internal_retention_days": 7,
+    "otlp_endpoint": null,
+    "otlp_protocol": "grpc",
+    "export_interval_seconds": 15
+  }
+}
