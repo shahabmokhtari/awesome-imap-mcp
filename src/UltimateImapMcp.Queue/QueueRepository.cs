@@ -53,6 +53,20 @@ public class QueueRepository(AppDatabase db)
         return list;
     }
 
+    public List<QueuedOperation> GetAll(string? statusFilter = null, int limit = 100)
+    {
+        using var conn = db.GetReadConnection();
+        using var cmd = conn.CreateCommand();
+        var where = statusFilter != null ? "WHERE status = $status" : "";
+        cmd.CommandText = $"SELECT * FROM operation_queue {where} ORDER BY created_at DESC LIMIT $limit;";
+        if (statusFilter != null) cmd.Parameters.AddWithValue("$status", statusFilter);
+        cmd.Parameters.AddWithValue("$limit", limit);
+        using var reader = cmd.ExecuteReader();
+        var list = new List<QueuedOperation>();
+        while (reader.Read()) list.Add(ReadRecord(reader));
+        return list;
+    }
+
     public List<QueuedOperation> GetAllPending(string? accountId = null)
     {
         using var conn = db.GetReadConnection();
