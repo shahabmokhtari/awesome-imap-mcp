@@ -129,7 +129,7 @@ public class QueueRepository(AppDatabase db)
         var conn = db.GetWriteConnection();
         using var cmd = conn.CreateCommand();
         cmd.CommandText = """
-            UPDATE operation_queue SET error_message = $error, retry_count = retry_count + 1
+            UPDATE operation_queue SET status = 'confirmed', error_message = $error, retry_count = retry_count + 1
             WHERE id = $id;
             """;
         cmd.Parameters.AddWithValue("$id", id);
