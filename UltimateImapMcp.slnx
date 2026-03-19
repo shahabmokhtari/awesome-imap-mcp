@@ -9,6 +9,7 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/UltimateImapMcp.Core.Tests/UltimateImapMcp.Core.Tests.csproj" />
+    <Project Path="tests/UltimateImapMcp.Dashboard.Tests/UltimateImapMcp.Dashboard.Tests.csproj" />
     <Project Path="tests/UltimateImapMcp.ImapClient.Tests/UltimateImapMcp.ImapClient.Tests.csproj" />
     <Project Path="tests/UltimateImapMcp.Llm.Tests/UltimateImapMcp.Llm.Tests.csproj" />
     <Project Path="tests/UltimateImapMcp.Queue.Tests/UltimateImapMcp.Queue.Tests.csproj" />
