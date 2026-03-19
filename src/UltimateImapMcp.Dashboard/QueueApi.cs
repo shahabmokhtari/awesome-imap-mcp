@@ -1,0 +1,37 @@
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Routing;
+using UltimateImapMcp.Queue;
+
+namespace UltimateImapMcp.Dashboard;
+
+public static class QueueApi
+{
+    public static IEndpointRouteBuilder MapQueueApi(this IEndpointRouteBuilder app)
+    {
+        app.MapGet("/api/queue", (QueueRepository repo, HttpContext ctx) =>
+        {
+            var status = ctx.Request.Query["status"].FirstOrDefault();
+            var operations = repo.GetAll(status);
+            return Results.Ok(operations);
+        });
+
+        app.MapPost("/api/queue/{id}/cancel", (string id, QueueManager queueManager) =>
+        {
+            var success = queueManager.Cancel(id);
+            return success
+                ? Results.Ok(new { Id = id, Cancelled = true })
+                : Results.BadRequest(new { Error = "Operation cannot be cancelled" });
+        });
+
+        app.MapPost("/api/queue/{id}/confirm", (string id, QueueManager queueManager) =>
+        {
+            var success = queueManager.Confirm(id);
+            return success
+                ? Results.Ok(new { Id = id, Confirmed = true })
+                : Results.BadRequest(new { Error = "Operation cannot be confirmed" });
+        });
+
+        return app;
+    }
+}
