@@ -12,6 +12,9 @@ public sealed class AppDatabase : IDisposable
     private readonly SemaphoreSlim _writeLock = new(1, 1);
     private bool _disposed;
 
+    /// <summary>Full path to the SQLite database file.</summary>
+    public string DbPath => _dbPath;
+
     public AppDatabase(string dbPath)
     {
         _dbPath = dbPath;

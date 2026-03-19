@@ -140,6 +140,79 @@ public class MessageRepository(AppDatabase db)
         return Convert.ToInt32(cmd.ExecuteScalar());
     }
 
+    /// <summary>
+    /// Null out body_text and body_html on the oldest messages (by cached_at)
+    /// that have bodies fetched. Returns the number of rows affected.
+    /// </summary>
+    public int EvictBodies(int batchSize)
+    {
+        var conn = db.GetWriteConnection();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            UPDATE messages SET body_text = NULL, body_html = NULL, body_fetched = 0
+            WHERE id IN (
+                SELECT id FROM messages
+                WHERE body_fetched = 1
+                ORDER BY cached_at ASC
+                LIMIT $batchSize
+            );
+            """;
+        cmd.Parameters.AddWithValue("$batchSize", batchSize);
+        return cmd.ExecuteNonQuery();
+    }
+
+    /// <summary>
+    /// Delete the oldest message rows (by cached_at).
+    /// Returns the number of rows deleted.
+    /// </summary>
+    public int EvictMessages(int batchSize)
+    {
+        var conn = db.GetWriteConnection();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            DELETE FROM messages WHERE id IN (
+                SELECT id FROM messages
+                ORDER BY cached_at ASC
+                LIMIT $batchSize
+            );
+            """;
+        cmd.Parameters.AddWithValue("$batchSize", batchSize);
+        return cmd.ExecuteNonQuery();
+    }
+
+    /// <summary>
+    /// Evict bodies older than the specified number of days.
+    /// Returns the number of rows affected.
+    /// </summary>
+    public int EvictBodiesOlderThan(int days)
+    {
+        var conn = db.GetWriteConnection();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            UPDATE messages SET body_text = NULL, body_html = NULL, body_fetched = 0
+            WHERE body_fetched = 1
+              AND cached_at < datetime('now', $days);
+            """;
+        cmd.Parameters.AddWithValue("$days", $"-{days} days");
+        return cmd.ExecuteNonQuery();
+    }
+
+    /// <summary>
+    /// Delete messages older than the specified number of days.
+    /// Returns the number of rows deleted.
+    /// </summary>
+    public int EvictMessagesOlderThan(int days)
+    {
+        var conn = db.GetWriteConnection();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            DELETE FROM messages
+            WHERE cached_at < datetime('now', $days);
+            """;
+        cmd.Parameters.AddWithValue("$days", $"-{days} days");
+        return cmd.ExecuteNonQuery();
+    }
+
     private static MessageRecord ReadRecord(Microsoft.Data.Sqlite.SqliteDataReader r) => new(
         Id: r.GetInt32(r.GetOrdinal("id")),
         AccountId: r.GetString(r.GetOrdinal("account_id")),
