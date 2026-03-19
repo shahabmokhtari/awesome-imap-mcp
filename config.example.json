@@ -3,7 +3,7 @@
     "transport": "stdio",
     "http_port": 3846,
     "dashboard_port": 3847,
-    "dashboard_enabled": true,
+    "dashboard_enabled": false,
     "dashboard_auth": "pin"
   },
   "accounts": [

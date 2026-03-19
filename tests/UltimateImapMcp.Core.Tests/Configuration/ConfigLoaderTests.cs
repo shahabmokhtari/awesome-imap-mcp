@@ -47,7 +47,7 @@ public class ConfigLoaderTests
             var config = ConfigLoader.LoadFromFile(tmpFile);
             Assert.Equal("stdio", config.Server.Transport);
             Assert.Equal(3847, config.Server.DashboardPort);
-            Assert.True(config.Server.DashboardEnabled);
+            Assert.False(config.Server.DashboardEnabled);
             Assert.Equal(500, config.Cache.MaxSizeMb);
         }
         finally { File.Delete(tmpFile); }

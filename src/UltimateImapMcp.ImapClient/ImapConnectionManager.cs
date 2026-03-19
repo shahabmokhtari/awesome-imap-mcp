@@ -22,6 +22,12 @@ public sealed class ImapConnectionManager : IDisposable
         ArgumentNullException.ThrowIfNull(config);
         ArgumentNullException.ThrowIfNull(encryptor);
         _config = config;
+        // Phase 1: _encryptor is injected but intentionally not used here.
+        // Passwords are read directly from config.Password (plaintext from the config
+        // file with environment-variable substitution applied by ConfigLoader).
+        // Encrypted credential support — calling _encryptor.Decrypt() on the
+        // credentials_enc column from the database — will be wired up in Phase 4
+        // when the Dashboard's account-management UI is implemented.
         _encryptor = encryptor;
     }
 

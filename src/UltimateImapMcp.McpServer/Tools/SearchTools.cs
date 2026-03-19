@@ -18,22 +18,32 @@ public class SearchTools(MessageRepository messageRepo)
         [Description("Search query text")] string query,
         [Description("Account ID to search (optional)")] string? accountId = null,
         [Description("Maximum results (default: 20)")] int maxResults = 20,
-        [Description("If true, return only subject/from/date/snippet (default: true)")] bool summaryOnly = true)
+        [Description("If true, return only subject/from/date/snippet (default: true)")] bool summaryOnly = true,
+        [Description("Max body length in characters (0=unlimited, default: 0). Applied when summary_only=false.")] int maxBodyLength = 0)
     {
         var results = messageRepo.SearchFts(query, accountId, maxResults: maxResults);
 
-        var mapped = results.Select(m => summaryOnly
-            ? (object)new
+        var mapped = results.Select(m =>
+        {
+            if (summaryOnly)
             {
-                uid = m.Uid,
-                subject = m.Subject,
-                from = m.FromAddress,
-                date = m.Date,
-                snippet = m.Snippet,
-                has_attachments = m.HasAttachments,
-                thread_id = m.ThreadId
+                return (object)new
+                {
+                    uid = m.Uid,
+                    subject = m.Subject,
+                    from = m.FromAddress,
+                    date = m.Date,
+                    snippet = m.Snippet,
+                    has_attachments = m.HasAttachments,
+                    thread_id = m.ThreadId
+                };
             }
-            : (object)new
+
+            var body = m.BodyText;
+            if (maxBodyLength > 0 && body != null && body.Length > maxBodyLength)
+                body = body[..maxBodyLength] + "... [truncated]";
+
+            return (object)new
             {
                 uid = m.Uid,
                 subject = m.Subject,
@@ -44,9 +54,10 @@ public class SearchTools(MessageRepository messageRepo)
                 snippet = m.Snippet,
                 has_attachments = m.HasAttachments,
                 thread_id = m.ThreadId,
-                body = m.BodyText,
+                body,
                 body_fetched = m.BodyFetched
-            }).ToList();
+            };
+        }).ToList();
 
         return JsonSerializer.Serialize(new { count = mapped.Count, results = mapped }, JsonOptions);
     }
