@@ -49,7 +49,7 @@ public class QueueManagerTests : IDisposable
         var result = manager.EnqueueSend("test", """{"to":"bob@test.com"}""");
         Assert.Equal("explicit", result.ConfirmMode);
         Assert.Null(result.SendsAt);
-        Assert.Equal("awaiting_confirmation", result.Status);
+        Assert.Equal("pending", result.Status);
     }
 
     [Fact]

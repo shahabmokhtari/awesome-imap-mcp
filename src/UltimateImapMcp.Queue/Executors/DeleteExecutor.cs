@@ -1,6 +1,7 @@
 using System.Text.Json;
 using MailKit;
 using UltimateImapMcp.Core.Configuration;
+using UltimateImapMcp.Core.Encryption;
 using UltimateImapMcp.ImapClient;
 using UltimateImapMcp.Queue.Models;
 
@@ -8,9 +9,9 @@ using ImapClientLib = MailKit.Net.Imap.ImapClient;
 
 namespace UltimateImapMcp.Queue.Executors;
 
-public class DeleteExecutor(AppConfig config) : IOperationExecutor
+public class DeleteExecutor(AppConfig config, CredentialEncryptor encryptor) : IOperationExecutor
 {
-    public string OperationType => "delete";
+    public IReadOnlyList<string> SupportedOperations { get; } = ["delete", "bulkdelete"];
 
     public async Task ExecuteAsync(QueuedOperation operation, CancellationToken ct)
     {
@@ -22,7 +23,6 @@ public class DeleteExecutor(AppConfig config) : IOperationExecutor
         var accountConfig = config.Accounts.FirstOrDefault(a =>
             a.Name.Equals(operation.AccountId, StringComparison.OrdinalIgnoreCase))
             ?? throw new InvalidOperationException($"Account '{operation.AccountId}' not found in configuration.");
-        var encryptor = Core.Encryption.CredentialEncryptor.FromMachineId();
         using var connMgr = new ImapConnectionManager(accountConfig, encryptor);
         var client = await connMgr.GetConnectedClientAsync(ct);
 

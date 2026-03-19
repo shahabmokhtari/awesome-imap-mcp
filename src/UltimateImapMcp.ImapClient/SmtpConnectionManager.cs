@@ -12,6 +12,7 @@ public sealed class SmtpConnectionManager : IDisposable
 {
     private readonly AccountConfig _config;
     private readonly ILogger _logger;
+    private readonly SemaphoreSlim _semaphore = new(1, 1);
     private SmtpClient? _client;
     private bool _disposed;
 
@@ -23,8 +24,16 @@ public sealed class SmtpConnectionManager : IDisposable
 
     public async Task SendAsync(MimeMessage message, CancellationToken ct = default)
     {
-        var client = await GetConnectedClientAsync(ct);
-        await client.SendAsync(message, ct);
+        await _semaphore.WaitAsync(ct);
+        try
+        {
+            var client = await GetConnectedClientAsync(ct);
+            await client.SendAsync(message, ct);
+        }
+        finally
+        {
+            _semaphore.Release();
+        }
     }
 
     private async Task<SmtpClient> GetConnectedClientAsync(CancellationToken ct)
@@ -93,5 +102,6 @@ public sealed class SmtpConnectionManager : IDisposable
         if (_disposed) return;
         _disposed = true;
         _client?.Dispose();
+        _semaphore.Dispose();
     }
 }

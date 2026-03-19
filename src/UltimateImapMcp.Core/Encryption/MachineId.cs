@@ -79,21 +79,31 @@ public static class MachineId
 
     private static string RunProcess(string fileName, string arguments)
     {
-        using var process = new System.Diagnostics.Process();
-        process.StartInfo = new System.Diagnostics.ProcessStartInfo
+        try
         {
-            FileName = fileName,
-            Arguments = arguments,
-            RedirectStandardOutput = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-        process.Start();
-        var output = process.StandardOutput.ReadToEnd();
-        if (!process.WaitForExit(5000))
-        {
-            try { process.Kill(); } catch (Exception ex) { Console.Error.WriteLine($"[MachineId] Failed to kill process: {ex.Message}"); }
+            var psi = new System.Diagnostics.ProcessStartInfo(fileName, arguments)
+            {
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            using var process = System.Diagnostics.Process.Start(psi);
+            if (process == null) return Environment.MachineName;
+
+            // Read async to avoid deadlock when stdout buffer fills
+            var readTask = process.StandardOutput.ReadToEndAsync();
+            if (!readTask.Wait(TimeSpan.FromSeconds(5)))
+            {
+                try { process.Kill(); } catch (Exception ex) { Console.Error.WriteLine($"[MachineId] Failed to kill process: {ex.Message}"); }
+                return Environment.MachineName;
+            }
+            process.WaitForExit(1000); // brief wait for clean exit
+            return readTask.Result.Trim();
         }
-        return output;
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[MachineId] RunProcess failed: {ex.Message}");
+            return Environment.MachineName;
+        }
     }
 }
