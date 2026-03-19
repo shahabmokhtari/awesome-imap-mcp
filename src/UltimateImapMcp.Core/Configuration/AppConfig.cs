@@ -212,6 +212,23 @@ public class LlmConfig
 
     [JsonPropertyName("auto_analyze_new")]
     public bool AutoAnalyzeNew { get; set; } = false;
+
+    [JsonPropertyName("acp")]
+    public AcpConfig Acp { get; set; } = new();
+
+    /// <summary>Resolve the API key from config or environment variable.</summary>
+    public string? ResolveApiKey() =>
+        ApiKey ?? (ApiKeyEnv is not null ? Environment.GetEnvironmentVariable(ApiKeyEnv) : null);
+}
+
+/// <summary>Agent Client Protocol configuration for spawning LLM agents.</summary>
+public class AcpConfig
+{
+    [JsonPropertyName("command")]
+    public string Command { get; set; } = "claude";
+
+    [JsonPropertyName("args")]
+    public List<string> Args { get; set; } = ["--acp"];
 }
 
 /// <summary>Prometheus/metrics endpoint settings.</summary>
