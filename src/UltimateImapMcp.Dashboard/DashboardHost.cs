@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using UltimateImapMcp.Core.Configuration;
+using UltimateImapMcp.Core.Repositories;
 
 namespace UltimateImapMcp.Dashboard;
 
@@ -54,6 +55,10 @@ public sealed class DashboardHost : BackgroundService
         builder.Services.AddSingleton(_rootServices.GetRequiredService<UltimateImapMcp.Queue.QueueRepository>());
         builder.Services.AddSingleton(_rootServices.GetRequiredService<UltimateImapMcp.Queue.QueueManager>());
 
+        // Observability repositories
+        builder.Services.AddSingleton(_rootServices.GetRequiredService<MetricsRepository>());
+        builder.Services.AddSingleton(_rootServices.GetRequiredService<LogsRepository>());
+
         // Dashboard-own services
         builder.Services.AddSingleton(_rootServices.GetRequiredService<IEventBus>());
         builder.Services.AddSingleton<DashboardAuthRepository>();
@@ -72,6 +77,8 @@ public sealed class DashboardHost : BackgroundService
         app.MapSyncApi();
         app.MapQueueApi();
         app.MapSettingsApi();
+        app.MapMetricsApi();
+        app.MapLogsApi();
 
         // Map SignalR hub
         app.MapHub<DashboardHub>("/hub");
