@@ -2,10 +2,13 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
+using UltimateImapMcp.Core;
 using UltimateImapMcp.Core.Configuration;
 using UltimateImapMcp.Core.Database;
 using UltimateImapMcp.Core.Encryption;
+using UltimateImapMcp.Core.Logging;
 using UltimateImapMcp.Core.Providers;
+using UltimateImapMcp.Core.Repositories;
 using UltimateImapMcp.ImapClient;
 using UltimateImapMcp.ImapClient.Repositories;
 using UltimateImapMcp.Dashboard;
@@ -96,6 +99,16 @@ builder.Services.AddSingleton<IEmailAnalyzer>(sp =>
         _ => new InContextAnalyzer()
     };
 });
+
+// Observability
+builder.Services.AddSingleton<MetricsRepository>();
+builder.Services.AddSingleton<LogsRepository>();
+builder.Services.AddSingleton(config.Metrics);
+builder.Services.AddHostedService<MetricsCollector>();
+
+// SQLite log sink — writes logs to DB for dashboard viewing
+builder.Logging.AddProvider(new SqliteLoggerProvider(
+    new LogsRepository(database)));
 
 // Dashboard (conditional)
 if (config.Server.DashboardEnabled)
