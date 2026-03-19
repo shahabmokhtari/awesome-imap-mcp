@@ -60,7 +60,14 @@ public class QueueWorker(
                 logger.LogError(ex, "QueueWorker flush cycle failed");
             }
 
-            await Task.Delay(TimeSpan.FromSeconds(1), ct);
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(1), ct);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                break;
+            }
         }
     }
 

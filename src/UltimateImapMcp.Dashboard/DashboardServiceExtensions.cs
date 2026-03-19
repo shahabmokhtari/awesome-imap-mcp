@@ -15,7 +15,6 @@ public static class DashboardServiceExtensions
     public static IServiceCollection AddDashboard(this IServiceCollection services, AppConfig config)
     {
         services.AddSingleton<IEventBus, EventBus>();
-        services.AddSingleton<DashboardAuthRepository>();
         services.AddHostedService<DashboardHost>();
         services.AddHostedService<DashboardHubRelay>();
 
