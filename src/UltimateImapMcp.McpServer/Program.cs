@@ -6,6 +6,7 @@ using UltimateImapMcp.Core.Configuration;
 using UltimateImapMcp.Core.Database;
 using UltimateImapMcp.Core.Encryption;
 using UltimateImapMcp.Core.Providers;
+using UltimateImapMcp.ImapClient;
 using UltimateImapMcp.ImapClient.Repositories;
 using UltimateImapMcp.Queue;
 using UltimateImapMcp.Queue.Executors;
@@ -39,6 +40,14 @@ builder.Services.AddSingleton<AccountRepository>();
 builder.Services.AddSingleton<FolderRepository>();
 builder.Services.AddSingleton<MessageRepository>();
 builder.Services.AddSingleton<AttachmentRepository>();
+
+// Sync
+builder.Services.AddSingleton<SyncLogRepository>();
+builder.Services.AddSingleton<ImapSyncService>();
+builder.Services.AddSingleton(config.Cache);
+builder.Services.AddSingleton<SyncManager>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<SyncManager>());
+builder.Services.AddHostedService<CacheEvictor>();
 
 // Queue
 builder.Services.AddSingleton<QueueRepository>();
