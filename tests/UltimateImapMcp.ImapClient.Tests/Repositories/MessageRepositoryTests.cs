@@ -144,6 +144,72 @@ public class MessageRepositoryTests : IDisposable
         Assert.Equal(10, _messageRepo.GetMaxUid("test", folderId));
     }
 
+    [Fact]
+    public void SearchFts_AfterUpdateBody_FindsByBodyContent()
+    {
+        var folderId = _folderRepo.GetByPath("test", "INBOX")!.Id;
+        _messageRepo.Insert("test", folderId, uid: 100, messageId: "<body-test@test.com>",
+            inReplyTo: null, referencesHdr: null, threadId: "t-body",
+            subject: "Generic Subject", fromAddress: "Charlie <charlie@test.com>",
+            fromEmail: "charlie@test.com", toAddresses: "[]",
+            ccAddresses: null, bccAddresses: null, date: "2026-03-18T10:00:00Z",
+            dateEpoch: 1774040400, flags: "[]", sizeBytes: 512,
+            hasAttachments: false, snippet: "Original snippet");
+
+        var msg = _messageRepo.GetByUid("test", folderId, 100)!;
+        _messageRepo.UpdateBody(msg.Id, "The xylophone orchestra performed brilliantly", null);
+
+        // FTS update trigger should allow searching the new body text
+        var results = _messageRepo.SearchFts("xylophone", accountId: "test", maxResults: 10);
+        Assert.Single(results);
+        Assert.Equal("Generic Subject", results[0].Subject);
+    }
+
+    [Fact]
+    public void SearchFts_AfterDelete_ReturnsEmpty()
+    {
+        var folderId = _folderRepo.GetByPath("test", "INBOX")!.Id;
+        _messageRepo.Insert("test", folderId, uid: 200, messageId: "<del-test@test.com>",
+            inReplyTo: null, referencesHdr: null, threadId: "t-del",
+            subject: "Ephemeral platypus message", fromAddress: "Dave <dave@test.com>",
+            fromEmail: "dave@test.com", toAddresses: "[]",
+            ccAddresses: null, bccAddresses: null, date: "2026-03-18T10:00:00Z",
+            dateEpoch: 1774040400, flags: "[]", sizeBytes: 256,
+            hasAttachments: false, snippet: "Platypus content");
+
+        // Verify it's searchable before deletion
+        var before = _messageRepo.SearchFts("platypus", accountId: "test", maxResults: 10);
+        Assert.Single(before);
+
+        // Delete the message directly (triggers FTS delete trigger)
+        _db.ExecuteWrite(conn =>
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "DELETE FROM messages WHERE uid = 200 AND account_id = 'test';";
+            cmd.ExecuteNonQuery();
+        });
+
+        var after = _messageRepo.SearchFts("platypus", accountId: "test", maxResults: 10);
+        Assert.Empty(after);
+    }
+
+    [Fact]
+    public void SearchFts_ByFromAddress_FindsMessage()
+    {
+        var folderId = _folderRepo.GetByPath("test", "INBOX")!.Id;
+        _messageRepo.Insert("test", folderId, uid: 300, messageId: "<from-test@test.com>",
+            inReplyTo: null, referencesHdr: null, threadId: "t-from",
+            subject: "Normal subject line", fromAddress: "Zephyrine <zephyrine@exotic-domain.com>",
+            fromEmail: "zephyrine@exotic-domain.com", toAddresses: "[]",
+            ccAddresses: null, bccAddresses: null, date: "2026-03-18T10:00:00Z",
+            dateEpoch: 1774040400, flags: "[]", sizeBytes: 1024,
+            hasAttachments: false, snippet: "Some snippet");
+
+        var results = _messageRepo.SearchFts("zephyrine", accountId: "test", maxResults: 10);
+        Assert.Single(results);
+        Assert.Equal("zephyrine@exotic-domain.com", results[0].FromEmail);
+    }
+
     public void Dispose()
     {
         _db.Dispose();

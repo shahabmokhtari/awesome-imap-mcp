@@ -71,4 +71,35 @@ public class ConfigLoaderTests
         }
         finally { File.Delete(tmpFile); Environment.SetEnvironmentVariable("TEST_IMAP_PASSWORD", null); }
     }
+
+    [Fact]
+    public void ResolveDbPath_TildePath_ExpandsToHome()
+    {
+        var result = ConfigLoader.ResolveDbPath("~/data/cache.db");
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        Assert.StartsWith(home, result);
+        Assert.EndsWith(Path.Combine("data", "cache.db"), result);
+        Assert.DoesNotContain("~", result);
+    }
+
+    [Fact]
+    public void ResolveDbPath_AbsolutePath_ReturnsUnchanged()
+    {
+        var absolute = "/var/data/cache.db";
+        var result = ConfigLoader.ResolveDbPath(absolute);
+        Assert.Equal(absolute, result);
+    }
+
+    [Fact]
+    public void Load_NullDeserialization_ThrowsInvalidOperation()
+    {
+        // A JSON file that deserializes to null (the literal word "null")
+        var tmpFile = Path.GetTempFileName();
+        File.WriteAllText(tmpFile, "null");
+        try
+        {
+            Assert.Throws<InvalidOperationException>(() => ConfigLoader.LoadFromFile(tmpFile));
+        }
+        finally { File.Delete(tmpFile); }
+    }
 }

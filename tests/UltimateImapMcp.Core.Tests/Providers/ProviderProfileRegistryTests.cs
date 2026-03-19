@@ -48,4 +48,20 @@ public class ProviderProfileRegistryTests
             Assert.Equal("INBOX", profile.FolderMap[FolderRole.Inbox]);
         }
     }
+
+    [Fact]
+    public void GetProfileByName_Gmail_ReturnsGmailProfile()
+    {
+        var profile = _registry.GetProfileByName("Gmail");
+        Assert.Equal(ProviderType.Gmail, profile.Type);
+        Assert.Equal("Gmail", profile.Name);
+    }
+
+    [Fact]
+    public void GetProfileByName_Unknown_ReturnsGeneric()
+    {
+        var profile = _registry.GetProfileByName("NonexistentProvider");
+        Assert.Equal(ProviderType.Generic, profile.Type);
+        Assert.Equal("Generic", profile.Name);
+    }
 }

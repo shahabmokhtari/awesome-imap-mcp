@@ -92,6 +92,81 @@ public class QueueWorkerTests : IDisposable
         Assert.Equal("failed", op!.Status);
     }
 
+    [Fact]
+    public async Task FlushPriority_SendsAtInFuture_SkipsOperation()
+    {
+        var executor = new FakeExecutor { OperationType = "send" };
+        var executors = new Dictionary<string, IOperationExecutor> { ["send"] = executor };
+
+        // Enqueue with sends_at 60 seconds from now (well within undo window)
+        var sendsAt = DateTime.UtcNow.AddSeconds(60).ToString("O");
+        var id = _repo.Insert(new EnqueueRequest
+        {
+            AccountId = "test",
+            Operation = OperationType.Send,
+            Priority = OperationPriority.P0,
+            Payload = """{"to":"bob@test.com","subject":"Hi","body":"Hello"}""",
+            SendsAt = sendsAt
+        });
+        _repo.UpdateStatus(id, "confirmed");
+
+        await QueueWorker.FlushPriorityAsync(_repo, executors, 0, null, CancellationToken.None);
+
+        // Should NOT have been executed because sends_at is in the future
+        Assert.Equal(0, executor.ExecuteCount);
+        var op = _repo.GetById(id);
+        // Still confirmed (not completed), but was claimed for processing then skipped
+        // Actually the skip happens before TryClaimForProcessing, so status stays confirmed
+        Assert.Equal("confirmed", op!.Status);
+    }
+
+    [Fact]
+    public async Task FlushPriority_SendsAtInPast_ExecutesOperation()
+    {
+        var executor = new FakeExecutor { OperationType = "send" };
+        var executors = new Dictionary<string, IOperationExecutor> { ["send"] = executor };
+
+        // Enqueue with sends_at 10 seconds in the past (undo window expired)
+        var sendsAt = DateTime.UtcNow.AddSeconds(-10).ToString("O");
+        var id = _repo.Insert(new EnqueueRequest
+        {
+            AccountId = "test",
+            Operation = OperationType.Send,
+            Priority = OperationPriority.P0,
+            Payload = """{"to":"bob@test.com","subject":"Hi","body":"Hello"}""",
+            SendsAt = sendsAt
+        });
+        _repo.UpdateStatus(id, "confirmed");
+
+        await QueueWorker.FlushPriorityAsync(_repo, executors, 0, null, CancellationToken.None);
+
+        Assert.Equal(1, executor.ExecuteCount);
+        var op = _repo.GetById(id);
+        Assert.Equal("completed", op!.Status);
+    }
+
+    [Fact]
+    public async Task FlushPriority_NoExecutorFound_MarksFailed()
+    {
+        // Register no executors for the "delete" operation type
+        var executors = new Dictionary<string, IOperationExecutor>();
+
+        var id = _repo.Insert(new EnqueueRequest
+        {
+            AccountId = "test",
+            Operation = OperationType.Delete,
+            Priority = OperationPriority.P1,
+            Payload = """{"uids":[1],"folder":"INBOX"}"""
+        });
+        _repo.UpdateStatus(id, "confirmed");
+
+        await QueueWorker.FlushPriorityAsync(_repo, executors, 1, null, CancellationToken.None);
+
+        var op = _repo.GetById(id);
+        Assert.Equal("failed", op!.Status);
+        Assert.Contains("No executor found", op.ErrorMessage);
+    }
+
     public void Dispose()
     {
         _db.Dispose();
