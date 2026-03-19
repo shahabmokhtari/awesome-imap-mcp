@@ -3,12 +3,14 @@
     <Project Path="src/UltimateImapMcp.Core/UltimateImapMcp.Core.csproj" />
     <Project Path="src/UltimateImapMcp.Dashboard/UltimateImapMcp.Dashboard.csproj" />
     <Project Path="src/UltimateImapMcp.ImapClient/UltimateImapMcp.ImapClient.csproj" />
+    <Project Path="src/UltimateImapMcp.Llm/UltimateImapMcp.Llm.csproj" />
     <Project Path="src/UltimateImapMcp.McpServer/UltimateImapMcp.McpServer.csproj" />
     <Project Path="src/UltimateImapMcp.Queue/UltimateImapMcp.Queue.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/UltimateImapMcp.Core.Tests/UltimateImapMcp.Core.Tests.csproj" />
     <Project Path="tests/UltimateImapMcp.ImapClient.Tests/UltimateImapMcp.ImapClient.Tests.csproj" />
+    <Project Path="tests/UltimateImapMcp.Llm.Tests/UltimateImapMcp.Llm.Tests.csproj" />
     <Project Path="tests/UltimateImapMcp.Queue.Tests/UltimateImapMcp.Queue.Tests.csproj" />
   </Folder>
 </Solution>
