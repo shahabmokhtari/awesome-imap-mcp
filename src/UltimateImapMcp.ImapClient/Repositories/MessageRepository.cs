@@ -11,6 +11,12 @@ public record MessageRecord(
     bool HasAttachments, string? BodyText, string? BodyHtml,
     bool BodyFetched, string? Snippet, string? RawHeaders, string CachedAt);
 
+/// <summary>Volume stats per folder.</summary>
+public record EmailVolumeRecord(string FolderPath, int MessageCount, long TotalSizeBytes, int WithAttachments);
+
+/// <summary>Top sender stats.</summary>
+public record TopSenderRecord(string FromEmail, int MessageCount, long TotalSizeBytes);
+
 public class MessageRepository(AppDatabase db)
 {
     public void Insert(string accountId, int folderId, int uid, string? messageId,
@@ -232,6 +238,75 @@ public class MessageRepository(AppDatabase db)
             """;
         cmd.Parameters.AddWithValue("$days", $"-{days} days");
         return cmd.ExecuteNonQuery();
+    }
+
+    /// <summary>
+    /// Gets email volume stats for an account over the specified number of days.
+    /// Returns (total_count, total_size_bytes, folder_path, folder_count) per folder.
+    /// </summary>
+    public List<EmailVolumeRecord> GetEmailVolume(string accountId, int days = 30)
+    {
+        using var conn = db.GetReadConnection();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT f.path, COUNT(m.id) as msg_count,
+                   COALESCE(SUM(m.size_bytes), 0) as total_size,
+                   SUM(CASE WHEN m.has_attachments = 1 THEN 1 ELSE 0 END) as with_attachments
+            FROM messages m
+            JOIN folders f ON f.id = m.folder_id
+            WHERE m.account_id = $accountId
+              AND m.date_epoch >= $since
+            GROUP BY f.path
+            ORDER BY msg_count DESC;
+            """;
+        cmd.Parameters.AddWithValue("$accountId", accountId);
+        cmd.Parameters.AddWithValue("$since", DateTimeOffset.UtcNow.AddDays(-days).ToUnixTimeSeconds());
+
+        using var reader = cmd.ExecuteReader();
+        var list = new List<EmailVolumeRecord>();
+        while (reader.Read())
+        {
+            list.Add(new EmailVolumeRecord(
+                reader.GetString(0),
+                reader.GetInt32(1),
+                reader.GetInt64(2),
+                reader.GetInt32(3)));
+        }
+        return list;
+    }
+
+    /// <summary>
+    /// Gets top senders by message count for an account over the specified days.
+    /// </summary>
+    public List<TopSenderRecord> GetTopSenders(string accountId, int days = 30, int limit = 10)
+    {
+        using var conn = db.GetReadConnection();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT from_email, COUNT(*) as msg_count,
+                   COALESCE(SUM(size_bytes), 0) as total_size
+            FROM messages
+            WHERE account_id = $accountId
+              AND from_email IS NOT NULL
+              AND date_epoch >= $since
+            GROUP BY from_email
+            ORDER BY msg_count DESC
+            LIMIT $limit;
+            """;
+        cmd.Parameters.AddWithValue("$accountId", accountId);
+        cmd.Parameters.AddWithValue("$since", DateTimeOffset.UtcNow.AddDays(-days).ToUnixTimeSeconds());
+        cmd.Parameters.AddWithValue("$limit", limit);
+
+        using var reader = cmd.ExecuteReader();
+        var list = new List<TopSenderRecord>();
+        while (reader.Read())
+        {
+            list.Add(new TopSenderRecord(
+                reader.GetString(0),
+                reader.GetInt32(1),
+                reader.GetInt64(2)));
+        }
+        return list;
     }
 
     private static MessageRecord ReadRecord(Microsoft.Data.Sqlite.SqliteDataReader r) => new(

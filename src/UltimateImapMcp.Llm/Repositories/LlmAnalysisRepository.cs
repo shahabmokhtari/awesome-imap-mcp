@@ -8,6 +8,9 @@ public record LlmAnalysisRecord(
     string? ModelUsed, int? TokensInput, int? TokensOutput,
     double? CostUsd, string AnalyzedAt);
 
+/// <summary>Category breakdown aggregate record.</summary>
+public record CategoryBreakdownRecord(string CategoryResult, int Count);
+
 /// <summary>
 /// Reads and writes the llm_analysis table for email analysis results.
 /// </summary>
@@ -106,6 +109,40 @@ public class LlmAnalysisRepository(AppDatabase db)
         cmd.Parameters.AddWithValue("$limit", limit);
 
         return ReadRecords(cmd);
+    }
+
+    /// <summary>
+    /// Gets category breakdown aggregated from llm_analysis category results.
+    /// Returns (category_value, count) pairs for an account.
+    /// </summary>
+    public List<CategoryBreakdownRecord> GetCategoryBreakdown(string? accountId = null)
+    {
+        using var conn = db.GetReadConnection();
+        using var cmd = conn.CreateCommand();
+
+        var join = accountId is not null ? "JOIN messages m ON m.id = a.message_id" : "";
+        var where = accountId is not null ? "AND m.account_id = $accountId" : "";
+
+        cmd.CommandText = $"""
+            SELECT a.result, COUNT(*) as cnt
+            FROM llm_analysis a
+            {join}
+            WHERE a.analysis_type = 'category'
+            {where}
+            GROUP BY a.result
+            ORDER BY cnt DESC;
+            """;
+
+        if (accountId is not null)
+            cmd.Parameters.AddWithValue("$accountId", accountId);
+
+        using var reader = cmd.ExecuteReader();
+        var list = new List<CategoryBreakdownRecord>();
+        while (reader.Read())
+        {
+            list.Add(new CategoryBreakdownRecord(reader.GetString(0), reader.GetInt32(1)));
+        }
+        return list;
     }
 
     /// <summary>

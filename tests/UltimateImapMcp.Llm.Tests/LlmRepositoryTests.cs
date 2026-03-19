@@ -142,6 +142,50 @@ public class LlmRepositoryTests : IDisposable
     }
 
     [Fact]
+    public void AnalysisRepo_GetCategoryBreakdown_AggregatesCategories()
+    {
+        // Need multiple messages for breakdown
+        var conn = _db.GetWriteConnection();
+        using var cmd2 = conn.CreateCommand();
+        cmd2.CommandText = "INSERT INTO messages (account_id, folder_id, uid, subject, from_address, date, body_fetched) VALUES ('test', 1, 2, 'Subject 2', 'sender2@test.com', '2024-01-02', 0);";
+        cmd2.ExecuteNonQuery();
+
+        using var cmd3 = conn.CreateCommand();
+        cmd3.CommandText = "INSERT INTO messages (account_id, folder_id, uid, subject, from_address, date, body_fetched) VALUES ('test', 1, 3, 'Subject 3', 'sender3@test.com', '2024-01-03', 0);";
+        cmd3.ExecuteNonQuery();
+
+        _analysisRepo.Upsert(1, "category", """{"category":"work"}""", null, null, null, null);
+        _analysisRepo.Upsert(2, "category", """{"category":"work"}""", null, null, null, null);
+        _analysisRepo.Upsert(3, "category", """{"category":"personal"}""", null, null, null, null);
+
+        var breakdown = _analysisRepo.GetCategoryBreakdown("test");
+        Assert.Equal(2, breakdown.Count);
+
+        // Work has 2, personal has 1, ordered by count DESC
+        Assert.Equal("""{"category":"work"}""", breakdown[0].CategoryResult);
+        Assert.Equal(2, breakdown[0].Count);
+        Assert.Equal("""{"category":"personal"}""", breakdown[1].CategoryResult);
+        Assert.Equal(1, breakdown[1].Count);
+    }
+
+    [Fact]
+    public void AnalysisRepo_GetCategoryBreakdown_AllAccounts()
+    {
+        _analysisRepo.Upsert(1, "category", """{"category":"newsletter"}""", null, null, null, null);
+
+        var breakdown = _analysisRepo.GetCategoryBreakdown(); // no account filter
+        Assert.Single(breakdown);
+        Assert.Equal(1, breakdown[0].Count);
+    }
+
+    [Fact]
+    public void AnalysisRepo_GetCategoryBreakdown_EmptyResult()
+    {
+        var breakdown = _analysisRepo.GetCategoryBreakdown("test");
+        Assert.Empty(breakdown);
+    }
+
+    [Fact]
     public void AnalysisRepo_DeleteByMessageId_RemovesRecords()
     {
         _analysisRepo.Upsert(1, "spam_score", """{"score":23}""", null, null, null, null);
