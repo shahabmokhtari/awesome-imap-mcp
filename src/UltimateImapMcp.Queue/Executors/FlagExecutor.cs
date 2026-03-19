@@ -1,6 +1,7 @@
 using System.Text.Json;
 using MailKit;
 using UltimateImapMcp.Core.Configuration;
+using UltimateImapMcp.Core.Encryption;
 using UltimateImapMcp.ImapClient;
 using UltimateImapMcp.Queue.Models;
 
@@ -8,9 +9,9 @@ using ImapClientLib = MailKit.Net.Imap.ImapClient;
 
 namespace UltimateImapMcp.Queue.Executors;
 
-public class FlagExecutor(AppConfig config) : IOperationExecutor
+public class FlagExecutor(AppConfig config, CredentialEncryptor encryptor) : IOperationExecutor
 {
-    public string OperationType => "flag";  // handles flag, unflag, mark_read, mark_unread
+    public IReadOnlyList<string> SupportedOperations { get; } = ["markread", "markunread", "flag", "unflag"];
 
     public async Task ExecuteAsync(QueuedOperation operation, CancellationToken ct)
     {
@@ -21,8 +22,8 @@ public class FlagExecutor(AppConfig config) : IOperationExecutor
 
         var (flags, add) = operation.Operation switch
         {
-            "mark_read" => (MessageFlags.Seen, true),
-            "mark_unread" => (MessageFlags.Seen, false),
+            "markread" => (MessageFlags.Seen, true),
+            "markunread" => (MessageFlags.Seen, false),
             "flag" => (MessageFlags.Flagged, true),
             "unflag" => (MessageFlags.Flagged, false),
             _ => throw new InvalidOperationException($"Unknown flag operation: {operation.Operation}")
@@ -31,7 +32,6 @@ public class FlagExecutor(AppConfig config) : IOperationExecutor
         var accountConfig = config.Accounts.FirstOrDefault(a =>
             a.Name.Equals(operation.AccountId, StringComparison.OrdinalIgnoreCase))
             ?? throw new InvalidOperationException($"Account '{operation.AccountId}' not found in configuration.");
-        var encryptor = Core.Encryption.CredentialEncryptor.FromMachineId();
         using var connMgr = new ImapConnectionManager(accountConfig, encryptor);
         var client = await connMgr.GetConnectedClientAsync(ct);
 

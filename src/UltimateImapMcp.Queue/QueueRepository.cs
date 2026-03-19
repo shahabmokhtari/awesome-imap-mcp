@@ -137,6 +137,22 @@ public class QueueRepository(AppDatabase db)
         });
     }
 
+    /// <summary>
+    /// Atomically confirms a pending operation.
+    /// Returns true only if the row was actually updated (i.e., it was still in 'pending' status).
+    /// Prevents TOCTOU race conditions in QueueManager.Confirm.
+    /// </summary>
+    public bool TryConfirm(string id)
+    {
+        return db.ExecuteWrite(conn =>
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "UPDATE operation_queue SET status = 'confirmed', confirmed_at = datetime('now') WHERE id = $id AND status IN ('pending');";
+            cmd.Parameters.AddWithValue("$id", id);
+            return cmd.ExecuteNonQuery() == 1;
+        });
+    }
+
     public bool Cancel(string id)
     {
         return db.ExecuteWrite(conn =>

@@ -9,7 +9,7 @@ namespace UltimateImapMcp.Queue.Tests;
 
 public class FakeExecutor : IOperationExecutor
 {
-    public string OperationType { get; init; } = "delete";
+    public IReadOnlyList<string> SupportedOperations { get; init; } = ["delete"];
     public int ExecuteCount { get; private set; }
     public bool ShouldThrow { get; set; }
 
@@ -44,7 +44,7 @@ public class QueueWorkerTests : IDisposable
     [Fact]
     public async Task FlushPriority_ExecutesConfirmedOps()
     {
-        var executor = new FakeExecutor { OperationType = "delete" };
+        var executor = new FakeExecutor { SupportedOperations = ["delete"] };
         var executors = new Dictionary<string, IOperationExecutor> { ["delete"] = executor };
 
         _repo.Insert(new EnqueueRequest { AccountId = "test", Operation = OperationType.Delete, Priority = OperationPriority.P1, Payload = """{"uids":[1],"folder":"INBOX"}""" });
@@ -62,7 +62,7 @@ public class QueueWorkerTests : IDisposable
     [Fact]
     public async Task FlushPriority_FailedOp_RetriesUnderMax()
     {
-        var executor = new FakeExecutor { OperationType = "delete", ShouldThrow = true };
+        var executor = new FakeExecutor { SupportedOperations = ["delete"], ShouldThrow = true };
         var executors = new Dictionary<string, IOperationExecutor> { ["delete"] = executor };
 
         _repo.Insert(new EnqueueRequest { AccountId = "test", Operation = OperationType.Delete, Priority = OperationPriority.P1, Payload = """{"uids":[1],"folder":"INBOX"}""", MaxRetries = 3 });
@@ -79,7 +79,7 @@ public class QueueWorkerTests : IDisposable
     [Fact]
     public async Task FlushPriority_FailedOp_ExceedsMaxRetries_MarksFailed()
     {
-        var executor = new FakeExecutor { OperationType = "delete", ShouldThrow = true };
+        var executor = new FakeExecutor { SupportedOperations = ["delete"], ShouldThrow = true };
         var executors = new Dictionary<string, IOperationExecutor> { ["delete"] = executor };
 
         var id = _repo.Insert(new EnqueueRequest { AccountId = "test", Operation = OperationType.Delete, Priority = OperationPriority.P1, Payload = """{"uids":[1],"folder":"INBOX"}""", MaxRetries = 1 });
@@ -96,7 +96,7 @@ public class QueueWorkerTests : IDisposable
     [Fact]
     public async Task FlushPriority_SendsAtInFuture_SkipsOperation()
     {
-        var executor = new FakeExecutor { OperationType = "send" };
+        var executor = new FakeExecutor { SupportedOperations = ["send"] };
         var executors = new Dictionary<string, IOperationExecutor> { ["send"] = executor };
 
         // Enqueue with sends_at 60 seconds from now (well within undo window)
@@ -124,7 +124,7 @@ public class QueueWorkerTests : IDisposable
     [Fact]
     public async Task FlushPriority_SendsAtInPast_ExecutesOperation()
     {
-        var executor = new FakeExecutor { OperationType = "send" };
+        var executor = new FakeExecutor { SupportedOperations = ["send"] };
         var executors = new Dictionary<string, IOperationExecutor> { ["send"] = executor };
 
         // Enqueue with sends_at 10 seconds in the past (undo window expired)

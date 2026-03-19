@@ -8,7 +8,7 @@ namespace UltimateImapMcp.Queue.Executors;
 
 public class SendExecutor(AppConfig config) : IOperationExecutor
 {
-    public string OperationType => "send";
+    public IReadOnlyList<string> SupportedOperations { get; } = ["send", "reply", "forward"];
 
     public async Task ExecuteAsync(QueuedOperation operation, CancellationToken ct)
     {

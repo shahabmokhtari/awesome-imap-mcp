@@ -4,6 +4,6 @@ namespace UltimateImapMcp.Queue.Executors;
 
 public interface IOperationExecutor
 {
-    string OperationType { get; }
+    IReadOnlyList<string> SupportedOperations { get; }
     Task ExecuteAsync(QueuedOperation operation, CancellationToken ct);
 }

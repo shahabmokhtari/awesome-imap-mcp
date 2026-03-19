@@ -13,7 +13,8 @@ public class QueueWorker(
     ILogger<QueueWorker> logger) : BackgroundService
 {
     private readonly Dictionary<string, IOperationExecutor> _executors =
-        executors.ToDictionary(e => e.OperationType, StringComparer.OrdinalIgnoreCase);
+        executors.SelectMany(e => e.SupportedOperations.Select(op => (op, e)))
+            .ToDictionary(x => x.op, x => x.e, StringComparer.OrdinalIgnoreCase);
 
     protected override async Task ExecuteAsync(CancellationToken ct)
     {

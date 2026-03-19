@@ -23,7 +23,7 @@ public class QueueManager(QueueRepository repo, AppConfig config)
         if (confirmMode == "explicit")
         {
             requiresConfirm = true;
-            status = "awaiting_confirmation";
+            status = "pending";
         }
         else
         {
@@ -73,14 +73,7 @@ public class QueueManager(QueueRepository repo, AppConfig config)
         return id;
     }
 
-    public bool Confirm(string pendingId)
-    {
-        var op = repo.GetById(pendingId);
-        if (op == null || op.Status is not ("pending" or "awaiting_confirmation"))
-            return false;
-        repo.UpdateStatus(pendingId, "confirmed");
-        return true;
-    }
+    public bool Confirm(string pendingId) => repo.TryConfirm(pendingId);
 
     public bool Cancel(string pendingId) => repo.Cancel(pendingId);
 
