@@ -4,6 +4,8 @@ A batteries-included MCP server for email. Works with any IMAP provider (Gmail, 
 
 Unlike every other email MCP server out there, this one has a **local cache**, an **operation queue with undo**, a **web dashboard**, and **LLM-powered email analysis**.
 
+Built with **.NET 8+** and **MailKit** for maximum performance and cross-platform support.
+
 ## Why This Exists
 
 Every existing IMAP MCP server hits the IMAP server on every single tool call. No caching, no queuing, no UI, no intelligence. This project fixes all of that.
@@ -14,37 +16,36 @@ Every existing IMAP MCP server hits the IMAP server on every single tool call. N
 - **IMAP IDLE + polling** - real-time inbox sync, configurable per folder
 - **Operation queue** - all writes are queued with priority tiers, retry logic, and undo
 - **Send with undo** - emails are queued, not sent immediately. Cancel within a configurable window
-- **Web dashboard** - account management, OAuth flows, sync monitoring, queue viewer, bulk ops
-- **LLM analysis** - spam scoring, category labeling, priority detection, custom rules
+- **Web dashboard (optional)** - account management, OAuth flows, sync monitoring, queue viewer, bulk ops
+- **LLM analysis** - spam scoring, category labeling, priority detection, custom rules (via API, ACP, or in-context)
 - **Bulk operations with preview** - query emails by any criteria (including LLM scores), preview results, then execute
 - **Mailbox reports** - volume trends, top senders, category breakdown, spam analysis
 - **Multi-account** - first-class support for multiple email accounts
 - **Thread reconstruction** - groups messages into conversations from headers
 - **Provider quirk profiles** - auto-adapts folder names, auth methods, and search capabilities per provider
 - **Token budget awareness** - configurable response sizes so you don't blow context windows
+- **Full observability** - metrics, logs, and tracing (OpenTelemetry export optional)
 
 ## Quick Start
 
 ```bash
-# Install and run setup wizard
-npx ultimate-imap-mcp setup
+# Install as a .NET global tool
+dotnet tool install -g ultimate-imap-mcp
 
-# Or with config file
-npx ultimate-imap-mcp --config ./config.yaml
+# Run with config file
+ultimate-imap-mcp --config ./config.json
 
 # Add to Claude Code
-claude mcp add ultimate-imap-mcp -- npx ultimate-imap-mcp
+claude mcp add ultimate-imap-mcp -- ultimate-imap-mcp
 
-# Open the dashboard
+# Open the dashboard (if enabled)
 open http://localhost:3847
 ```
 
 ## Documentation
 
-- [Architecture](docs/ARCHITECTURE.md) - system design and component details
+- [Design Specification](docs/superpowers/specs/2026-03-18-ultimate-imap-mcp-design.md) - full system design, architecture, and implementation plan
 - [Data Model](docs/DATA_MODEL.md) - SQLite schema and indexes
-- [Project Plan](docs/PROJECT_PLAN.md) - phased implementation plan with task lists
-- [Feature Matrix](docs/FEATURE_MATRIX.md) - comparison with existing email MCP servers
 
 ## MCP Tools
 
@@ -72,7 +73,7 @@ open http://localhost:3847
 
 ## Configuration
 
-See [config.example.yaml](config.example.yaml) for all options. Accounts can also be configured via the web dashboard.
+JSON-based configuration. See the [design spec](docs/superpowers/specs/2026-03-18-ultimate-imap-mcp-design.md#configuration) for all options. Accounts can also be configured via the web dashboard.
 
 ## License
 

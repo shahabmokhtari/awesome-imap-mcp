@@ -1,0 +1,48 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+.vs/
+*.DotSettings.user
+publish/
+
+# Build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+
+# NuGet
+*.nupkg
+**/packages/*
+!**/packages/build/
+
+# Node (dashboard)
+node_modules/
+dashboard/client/dist/
+
+# SQLite
+*.db
+*.db-shm
+*.db-wal
+
+# Config (may contain credentials)
+config.json
+!config.example.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*~
+
+# Test results
+TestResults/
+coverage/
