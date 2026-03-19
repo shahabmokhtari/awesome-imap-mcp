@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/UltimateImapMcp.Core/UltimateImapMcp.Core.csproj" />
+    <Project Path="src/UltimateImapMcp.ImapClient/UltimateImapMcp.ImapClient.csproj" />
+    <Project Path="src/UltimateImapMcp.McpServer/UltimateImapMcp.McpServer.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/UltimateImapMcp.Core.Tests/UltimateImapMcp.Core.Tests.csproj" />
+    <Project Path="tests/UltimateImapMcp.ImapClient.Tests/UltimateImapMcp.ImapClient.Tests.csproj" />
+  </Folder>
+</Solution>
