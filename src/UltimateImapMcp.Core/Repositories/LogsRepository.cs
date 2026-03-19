@@ -17,18 +17,20 @@ public class LogsRepository(AppDatabase db)
     public void Write(string level, string category, string message,
         string? exception = null, string? metadata = null)
     {
-        var conn = db.GetWriteConnection();
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            INSERT INTO logs (level, category, message, exception, metadata)
-            VALUES ($level, $category, $message, $exception, $metadata);
-            """;
-        cmd.Parameters.AddWithValue("$level", level);
-        cmd.Parameters.AddWithValue("$category", category);
-        cmd.Parameters.AddWithValue("$message", message);
-        cmd.Parameters.AddWithValue("$exception", (object?)exception ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("$metadata", (object?)metadata ?? DBNull.Value);
-        cmd.ExecuteNonQuery();
+        db.ExecuteWrite(conn =>
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                INSERT INTO logs (level, category, message, exception, metadata)
+                VALUES ($level, $category, $message, $exception, $metadata);
+                """;
+            cmd.Parameters.AddWithValue("$level", level);
+            cmd.Parameters.AddWithValue("$category", category);
+            cmd.Parameters.AddWithValue("$message", message);
+            cmd.Parameters.AddWithValue("$exception", (object?)exception ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$metadata", (object?)metadata ?? DBNull.Value);
+            cmd.ExecuteNonQuery();
+        });
     }
 
     /// <summary>
@@ -39,32 +41,34 @@ public class LogsRepository(AppDatabase db)
     {
         if (entries.Count == 0) return;
 
-        var conn = db.GetWriteConnection();
-        using var transaction = conn.BeginTransaction();
-        try
+        db.ExecuteWrite(conn =>
         {
-            foreach (var entry in entries)
+            using var transaction = conn.BeginTransaction();
+            try
             {
-                using var cmd = conn.CreateCommand();
-                cmd.Transaction = transaction;
-                cmd.CommandText = """
-                    INSERT INTO logs (level, category, message, exception, metadata)
-                    VALUES ($level, $category, $message, $exception, $metadata);
-                    """;
-                cmd.Parameters.AddWithValue("$level", entry.Level);
-                cmd.Parameters.AddWithValue("$category", entry.Category);
-                cmd.Parameters.AddWithValue("$message", entry.Message);
-                cmd.Parameters.AddWithValue("$exception", (object?)entry.Exception ?? DBNull.Value);
-                cmd.Parameters.AddWithValue("$metadata", (object?)entry.Metadata ?? DBNull.Value);
-                cmd.ExecuteNonQuery();
+                foreach (var entry in entries)
+                {
+                    using var cmd = conn.CreateCommand();
+                    cmd.Transaction = transaction;
+                    cmd.CommandText = """
+                        INSERT INTO logs (level, category, message, exception, metadata)
+                        VALUES ($level, $category, $message, $exception, $metadata);
+                        """;
+                    cmd.Parameters.AddWithValue("$level", entry.Level);
+                    cmd.Parameters.AddWithValue("$category", entry.Category);
+                    cmd.Parameters.AddWithValue("$message", entry.Message);
+                    cmd.Parameters.AddWithValue("$exception", (object?)entry.Exception ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("$metadata", (object?)entry.Metadata ?? DBNull.Value);
+                    cmd.ExecuteNonQuery();
+                }
+                transaction.Commit();
             }
-            transaction.Commit();
-        }
-        catch
-        {
-            transaction.Rollback();
-            throw;
-        }
+            catch
+            {
+                transaction.Rollback();
+                throw;
+            }
+        });
     }
 
     /// <summary>
@@ -119,64 +123,66 @@ public class LogsRepository(AppDatabase db)
     /// </summary>
     public int Prune(int debugDays = 7, int infoDays = 30, int errorDays = 90)
     {
-        var conn = db.GetWriteConnection();
-        var total = 0;
-
-        // Debug logs
-        using (var cmd = conn.CreateCommand())
+        return db.ExecuteWrite(conn =>
         {
-            cmd.CommandText = """
-                DELETE FROM logs
-                WHERE level = 'Debug' AND created_at < datetime('now', $days);
-                """;
-            cmd.Parameters.AddWithValue("$days", $"-{debugDays} days");
-            total += cmd.ExecuteNonQuery();
-        }
+            var total = 0;
 
-        // Trace logs (same as debug)
-        using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = """
-                DELETE FROM logs
-                WHERE level = 'Trace' AND created_at < datetime('now', $days);
-                """;
-            cmd.Parameters.AddWithValue("$days", $"-{debugDays} days");
-            total += cmd.ExecuteNonQuery();
-        }
+            // Debug logs
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText = """
+                    DELETE FROM logs
+                    WHERE level = 'Debug' AND created_at < datetime('now', $days);
+                    """;
+                cmd.Parameters.AddWithValue("$days", $"-{debugDays} days");
+                total += cmd.ExecuteNonQuery();
+            }
 
-        // Info logs
-        using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = """
-                DELETE FROM logs
-                WHERE level = 'Information' AND created_at < datetime('now', $days);
-                """;
-            cmd.Parameters.AddWithValue("$days", $"-{infoDays} days");
-            total += cmd.ExecuteNonQuery();
-        }
+            // Trace logs (same as debug)
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText = """
+                    DELETE FROM logs
+                    WHERE level = 'Trace' AND created_at < datetime('now', $days);
+                    """;
+                cmd.Parameters.AddWithValue("$days", $"-{debugDays} days");
+                total += cmd.ExecuteNonQuery();
+            }
 
-        // Warning logs
-        using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = """
-                DELETE FROM logs
-                WHERE level = 'Warning' AND created_at < datetime('now', $days);
-                """;
-            cmd.Parameters.AddWithValue("$days", $"-{errorDays} days");
-            total += cmd.ExecuteNonQuery();
-        }
+            // Info logs
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText = """
+                    DELETE FROM logs
+                    WHERE level = 'Information' AND created_at < datetime('now', $days);
+                    """;
+                cmd.Parameters.AddWithValue("$days", $"-{infoDays} days");
+                total += cmd.ExecuteNonQuery();
+            }
 
-        // Error/Critical logs
-        using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = """
-                DELETE FROM logs
-                WHERE level IN ('Error', 'Critical') AND created_at < datetime('now', $days);
-                """;
-            cmd.Parameters.AddWithValue("$days", $"-{errorDays} days");
-            total += cmd.ExecuteNonQuery();
-        }
+            // Warning logs
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText = """
+                    DELETE FROM logs
+                    WHERE level = 'Warning' AND created_at < datetime('now', $days);
+                    """;
+                cmd.Parameters.AddWithValue("$days", $"-{errorDays} days");
+                total += cmd.ExecuteNonQuery();
+            }
 
-        return total;
+            // Error/Critical logs
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText = """
+                    DELETE FROM logs
+                    WHERE level IN ('Error', 'Critical') AND created_at < datetime('now', $days);
+                    """;
+                cmd.Parameters.AddWithValue("$days", $"-{errorDays} days");
+                total += cmd.ExecuteNonQuery();
+            }
+
+            return total;
+        });
     }
 }

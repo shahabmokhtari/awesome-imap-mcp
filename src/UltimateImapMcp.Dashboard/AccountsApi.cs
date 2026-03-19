@@ -60,7 +60,9 @@ public static class AccountsApi
             if (body is null)
                 return Results.BadRequest("Invalid request body");
 
-            // For now, return OK — full update logic deferred to later phase
+            repo.Update(id, body.Name, body.ImapHost, body.ImapPort,
+                body.SmtpHost, body.SmtpPort, body.SmtpUseSsl, body.Username);
+
             return Results.Ok(new { Id = id, Updated = true });
         });
 
@@ -70,8 +72,7 @@ public static class AccountsApi
             if (existing is null)
                 return Results.NotFound();
 
-            // Delete is handled via CASCADE in the database
-            // For now, return OK — full delete logic will use write connection
+            repo.Delete(id);
             return Results.Ok(new { Id = id, Deleted = true });
         });
 

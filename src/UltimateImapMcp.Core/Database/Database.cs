@@ -42,11 +42,58 @@ public sealed class AppDatabase : IDisposable
 
     /// <summary>
     /// Returns the single shared write connection.
+    /// Callers should prefer ExecuteWrite/ExecuteWriteAsync to ensure proper serialization.
     /// </summary>
     public SqliteConnection GetWriteConnection()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         return _writeConnection;
+    }
+
+    /// <summary>
+    /// Executes a write action on the shared write connection, serialized via the write lock.
+    /// </summary>
+    public void ExecuteWrite(Action<SqliteConnection> action)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        _writeLock.Wait();
+        try { action(_writeConnection); }
+        finally { _writeLock.Release(); }
+    }
+
+    /// <summary>
+    /// Executes a write action on the shared write connection, serialized via the write lock.
+    /// Returns a value from the action.
+    /// </summary>
+    public T ExecuteWrite<T>(Func<SqliteConnection, T> action)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        _writeLock.Wait();
+        try { return action(_writeConnection); }
+        finally { _writeLock.Release(); }
+    }
+
+    /// <summary>
+    /// Executes an async write action on the shared write connection, serialized via the write lock.
+    /// </summary>
+    public async Task ExecuteWriteAsync(Func<SqliteConnection, Task> action)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        await _writeLock.WaitAsync().ConfigureAwait(false);
+        try { await action(_writeConnection).ConfigureAwait(false); }
+        finally { _writeLock.Release(); }
+    }
+
+    /// <summary>
+    /// Executes an async write action on the shared write connection, serialized via the write lock.
+    /// Returns a value from the action.
+    /// </summary>
+    public async Task<T> ExecuteWriteAsync<T>(Func<SqliteConnection, Task<T>> action)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        await _writeLock.WaitAsync().ConfigureAwait(false);
+        try { return await action(_writeConnection).ConfigureAwait(false); }
+        finally { _writeLock.Release(); }
     }
 
     /// <summary>

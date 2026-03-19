@@ -63,9 +63,9 @@ public sealed class SqliteLoggerProvider : ILoggerProvider, IDisposable
             {
                 _logsRepo.WriteBatch(entries);
             }
-            catch
+            catch (Exception ex)
             {
-                // Best effort — don't let logging failures crash the application
+                Console.Error.WriteLine($"[SqliteLoggerProvider] Failed to flush {entries.Count} log entries: {ex.Message}");
             }
         }
     }
@@ -76,9 +76,9 @@ public sealed class SqliteLoggerProvider : ILoggerProvider, IDisposable
         {
             _logsRepo.Prune(debugDays: 7, infoDays: 30, errorDays: 90);
         }
-        catch
+        catch (Exception ex)
         {
-            // Best effort
+            Console.Error.WriteLine($"[SqliteLoggerProvider] Failed to prune logs: {ex.Message}");
         }
     }
 

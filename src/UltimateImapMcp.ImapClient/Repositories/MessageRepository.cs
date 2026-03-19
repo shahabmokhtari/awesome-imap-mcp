@@ -27,42 +27,44 @@ public class MessageRepository(AppDatabase db)
         bool hasAttachments, string? snippet,
         string? bodyText = null, string? bodyHtml = null, string? rawHeaders = null)
     {
-        var conn = db.GetWriteConnection();
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            INSERT OR IGNORE INTO messages (account_id, folder_id, uid, message_id,
-                in_reply_to, references_hdr, thread_id, subject, from_address, from_email,
-                to_addresses, cc_addresses, bcc_addresses, date, date_epoch, flags,
-                size_bytes, has_attachments, body_text, body_html, body_fetched, snippet, raw_headers)
-            VALUES ($accountId, $folderId, $uid, $messageId,
-                $inReplyTo, $referencesHdr, $threadId, $subject, $fromAddress, $fromEmail,
-                $toAddresses, $ccAddresses, $bccAddresses, $date, $dateEpoch, $flags,
-                $sizeBytes, $hasAttachments, $bodyText, $bodyHtml, $bodyFetched, $snippet, $rawHeaders);
-            """;
-        cmd.Parameters.AddWithValue("$accountId", accountId);
-        cmd.Parameters.AddWithValue("$folderId", folderId);
-        cmd.Parameters.AddWithValue("$uid", uid);
-        cmd.Parameters.AddWithValue("$messageId", (object?)messageId ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("$inReplyTo", (object?)inReplyTo ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("$referencesHdr", (object?)referencesHdr ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("$threadId", (object?)threadId ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("$subject", (object?)subject ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("$fromAddress", (object?)fromAddress ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("$fromEmail", (object?)fromEmail ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("$toAddresses", (object?)toAddresses ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("$ccAddresses", (object?)ccAddresses ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("$bccAddresses", (object?)bccAddresses ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("$date", date);
-        cmd.Parameters.AddWithValue("$dateEpoch", (object?)dateEpoch ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("$flags", (object?)flags ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("$sizeBytes", (object?)sizeBytes ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("$hasAttachments", hasAttachments ? 1 : 0);
-        cmd.Parameters.AddWithValue("$bodyText", (object?)bodyText ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("$bodyHtml", (object?)bodyHtml ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("$bodyFetched", (bodyText != null || bodyHtml != null) ? 1 : 0);
-        cmd.Parameters.AddWithValue("$snippet", (object?)snippet ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("$rawHeaders", (object?)rawHeaders ?? DBNull.Value);
-        cmd.ExecuteNonQuery();
+        db.ExecuteWrite(conn =>
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                INSERT OR IGNORE INTO messages (account_id, folder_id, uid, message_id,
+                    in_reply_to, references_hdr, thread_id, subject, from_address, from_email,
+                    to_addresses, cc_addresses, bcc_addresses, date, date_epoch, flags,
+                    size_bytes, has_attachments, body_text, body_html, body_fetched, snippet, raw_headers)
+                VALUES ($accountId, $folderId, $uid, $messageId,
+                    $inReplyTo, $referencesHdr, $threadId, $subject, $fromAddress, $fromEmail,
+                    $toAddresses, $ccAddresses, $bccAddresses, $date, $dateEpoch, $flags,
+                    $sizeBytes, $hasAttachments, $bodyText, $bodyHtml, $bodyFetched, $snippet, $rawHeaders);
+                """;
+            cmd.Parameters.AddWithValue("$accountId", accountId);
+            cmd.Parameters.AddWithValue("$folderId", folderId);
+            cmd.Parameters.AddWithValue("$uid", uid);
+            cmd.Parameters.AddWithValue("$messageId", (object?)messageId ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$inReplyTo", (object?)inReplyTo ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$referencesHdr", (object?)referencesHdr ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$threadId", (object?)threadId ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$subject", (object?)subject ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$fromAddress", (object?)fromAddress ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$fromEmail", (object?)fromEmail ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$toAddresses", (object?)toAddresses ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$ccAddresses", (object?)ccAddresses ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$bccAddresses", (object?)bccAddresses ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$date", date);
+            cmd.Parameters.AddWithValue("$dateEpoch", (object?)dateEpoch ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$flags", (object?)flags ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$sizeBytes", (object?)sizeBytes ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$hasAttachments", hasAttachments ? 1 : 0);
+            cmd.Parameters.AddWithValue("$bodyText", (object?)bodyText ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$bodyHtml", (object?)bodyHtml ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$bodyFetched", (bodyText != null || bodyHtml != null) ? 1 : 0);
+            cmd.Parameters.AddWithValue("$snippet", (object?)snippet ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$rawHeaders", (object?)rawHeaders ?? DBNull.Value);
+            cmd.ExecuteNonQuery();
+        });
     }
 
     public MessageRecord? GetByUid(string accountId, int folderId, int uid)
@@ -121,16 +123,18 @@ public class MessageRepository(AppDatabase db)
 
     public void UpdateBody(int messageId, string? bodyText, string? bodyHtml)
     {
-        var conn = db.GetWriteConnection();
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            UPDATE messages SET body_text = $bodyText, body_html = $bodyHtml,
-                body_fetched = 1 WHERE id = $id;
-            """;
-        cmd.Parameters.AddWithValue("$id", messageId);
-        cmd.Parameters.AddWithValue("$bodyText", (object?)bodyText ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("$bodyHtml", (object?)bodyHtml ?? DBNull.Value);
-        cmd.ExecuteNonQuery();
+        db.ExecuteWrite(conn =>
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                UPDATE messages SET body_text = $bodyText, body_html = $bodyHtml,
+                    body_fetched = 1 WHERE id = $id;
+                """;
+            cmd.Parameters.AddWithValue("$id", messageId);
+            cmd.Parameters.AddWithValue("$bodyText", (object?)bodyText ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$bodyHtml", (object?)bodyHtml ?? DBNull.Value);
+            cmd.ExecuteNonQuery();
+        });
     }
 
     public int GetMaxUid(string accountId, int folderId)
@@ -173,19 +177,21 @@ public class MessageRepository(AppDatabase db)
     /// </summary>
     public int EvictBodies(int batchSize)
     {
-        var conn = db.GetWriteConnection();
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            UPDATE messages SET body_text = NULL, body_html = NULL, body_fetched = 0
-            WHERE id IN (
-                SELECT id FROM messages
-                WHERE body_fetched = 1
-                ORDER BY cached_at ASC
-                LIMIT $batchSize
-            );
-            """;
-        cmd.Parameters.AddWithValue("$batchSize", batchSize);
-        return cmd.ExecuteNonQuery();
+        return db.ExecuteWrite(conn =>
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                UPDATE messages SET body_text = NULL, body_html = NULL, body_fetched = 0
+                WHERE id IN (
+                    SELECT id FROM messages
+                    WHERE body_fetched = 1
+                    ORDER BY cached_at ASC
+                    LIMIT $batchSize
+                );
+                """;
+            cmd.Parameters.AddWithValue("$batchSize", batchSize);
+            return cmd.ExecuteNonQuery();
+        });
     }
 
     /// <summary>
@@ -194,17 +200,19 @@ public class MessageRepository(AppDatabase db)
     /// </summary>
     public int EvictMessages(int batchSize)
     {
-        var conn = db.GetWriteConnection();
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            DELETE FROM messages WHERE id IN (
-                SELECT id FROM messages
-                ORDER BY cached_at ASC
-                LIMIT $batchSize
-            );
-            """;
-        cmd.Parameters.AddWithValue("$batchSize", batchSize);
-        return cmd.ExecuteNonQuery();
+        return db.ExecuteWrite(conn =>
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                DELETE FROM messages WHERE id IN (
+                    SELECT id FROM messages
+                    ORDER BY cached_at ASC
+                    LIMIT $batchSize
+                );
+                """;
+            cmd.Parameters.AddWithValue("$batchSize", batchSize);
+            return cmd.ExecuteNonQuery();
+        });
     }
 
     /// <summary>
@@ -213,15 +221,17 @@ public class MessageRepository(AppDatabase db)
     /// </summary>
     public int EvictBodiesOlderThan(int days)
     {
-        var conn = db.GetWriteConnection();
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            UPDATE messages SET body_text = NULL, body_html = NULL, body_fetched = 0
-            WHERE body_fetched = 1
-              AND cached_at < datetime('now', $days);
-            """;
-        cmd.Parameters.AddWithValue("$days", $"-{days} days");
-        return cmd.ExecuteNonQuery();
+        return db.ExecuteWrite(conn =>
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                UPDATE messages SET body_text = NULL, body_html = NULL, body_fetched = 0
+                WHERE body_fetched = 1
+                  AND cached_at < datetime('now', $days);
+                """;
+            cmd.Parameters.AddWithValue("$days", $"-{days} days");
+            return cmd.ExecuteNonQuery();
+        });
     }
 
     /// <summary>
@@ -230,14 +240,16 @@ public class MessageRepository(AppDatabase db)
     /// </summary>
     public int EvictMessagesOlderThan(int days)
     {
-        var conn = db.GetWriteConnection();
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            DELETE FROM messages
-            WHERE cached_at < datetime('now', $days);
-            """;
-        cmd.Parameters.AddWithValue("$days", $"-{days} days");
-        return cmd.ExecuteNonQuery();
+        return db.ExecuteWrite(conn =>
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                DELETE FROM messages
+                WHERE cached_at < datetime('now', $days);
+                """;
+            cmd.Parameters.AddWithValue("$days", $"-{days} days");
+            return cmd.ExecuteNonQuery();
+        });
     }
 
     /// <summary>

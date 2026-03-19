@@ -13,18 +13,20 @@ public class FolderRepository(AppDatabase db)
     public void Insert(string accountId, string path, string? displayName,
         string? role, string delimiter)
     {
-        var conn = db.GetWriteConnection();
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            INSERT OR IGNORE INTO folders (account_id, path, display_name, role, delimiter)
-            VALUES ($accountId, $path, $displayName, $role, $delimiter);
-            """;
-        cmd.Parameters.AddWithValue("$accountId", accountId);
-        cmd.Parameters.AddWithValue("$path", path);
-        cmd.Parameters.AddWithValue("$displayName", (object?)displayName ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("$role", (object?)role ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("$delimiter", delimiter);
-        cmd.ExecuteNonQuery();
+        db.ExecuteWrite(conn =>
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                INSERT OR IGNORE INTO folders (account_id, path, display_name, role, delimiter)
+                VALUES ($accountId, $path, $displayName, $role, $delimiter);
+                """;
+            cmd.Parameters.AddWithValue("$accountId", accountId);
+            cmd.Parameters.AddWithValue("$path", path);
+            cmd.Parameters.AddWithValue("$displayName", (object?)displayName ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$role", (object?)role ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$delimiter", delimiter);
+            cmd.ExecuteNonQuery();
+        });
     }
 
     public FolderRecord? GetByPath(string accountId, string path)
@@ -53,18 +55,20 @@ public class FolderRepository(AppDatabase db)
 
     public void UpdateSyncState(int folderId, int lastSyncedUid, int messageCount, int unreadCount)
     {
-        var conn = db.GetWriteConnection();
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            UPDATE folders SET last_synced_uid = $uid, message_count = $msgCount,
-                unread_count = $unreadCount, last_synced_at = datetime('now')
-            WHERE id = $id;
-            """;
-        cmd.Parameters.AddWithValue("$id", folderId);
-        cmd.Parameters.AddWithValue("$uid", lastSyncedUid);
-        cmd.Parameters.AddWithValue("$msgCount", messageCount);
-        cmd.Parameters.AddWithValue("$unreadCount", unreadCount);
-        cmd.ExecuteNonQuery();
+        db.ExecuteWrite(conn =>
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                UPDATE folders SET last_synced_uid = $uid, message_count = $msgCount,
+                    unread_count = $unreadCount, last_synced_at = datetime('now')
+                WHERE id = $id;
+                """;
+            cmd.Parameters.AddWithValue("$id", folderId);
+            cmd.Parameters.AddWithValue("$uid", lastSyncedUid);
+            cmd.Parameters.AddWithValue("$msgCount", messageCount);
+            cmd.Parameters.AddWithValue("$unreadCount", unreadCount);
+            cmd.ExecuteNonQuery();
+        });
     }
 
     private static FolderRecord ReadRecord(Microsoft.Data.Sqlite.SqliteDataReader r) => new(

@@ -12,19 +12,21 @@ public class AttachmentRepository(AppDatabase db)
     public void Insert(int messageId, string? filename, string? contentType,
         int? sizeBytes, string? contentId, bool isInline)
     {
-        var conn = db.GetWriteConnection();
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            INSERT INTO attachments (message_id, filename, content_type, size_bytes, content_id, is_inline)
-            VALUES ($messageId, $filename, $contentType, $sizeBytes, $contentId, $isInline);
-            """;
-        cmd.Parameters.AddWithValue("$messageId", messageId);
-        cmd.Parameters.AddWithValue("$filename", (object?)filename ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("$contentType", (object?)contentType ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("$sizeBytes", (object?)sizeBytes ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("$contentId", (object?)contentId ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("$isInline", isInline ? 1 : 0);
-        cmd.ExecuteNonQuery();
+        db.ExecuteWrite(conn =>
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                INSERT INTO attachments (message_id, filename, content_type, size_bytes, content_id, is_inline)
+                VALUES ($messageId, $filename, $contentType, $sizeBytes, $contentId, $isInline);
+                """;
+            cmd.Parameters.AddWithValue("$messageId", messageId);
+            cmd.Parameters.AddWithValue("$filename", (object?)filename ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$contentType", (object?)contentType ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$sizeBytes", (object?)sizeBytes ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$contentId", (object?)contentId ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$isInline", isInline ? 1 : 0);
+            cmd.ExecuteNonQuery();
+        });
     }
 
     public List<AttachmentRecord> GetByMessageId(int messageId)

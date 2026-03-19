@@ -30,22 +30,33 @@ public class QueueWorker(
 
         while (!ct.IsCancellationRequested)
         {
-            var now = DateTime.UtcNow;
+            try
+            {
+                var now = DateTime.UtcNow;
 
-            if (now - lastP0 >= p0Interval)
-            {
-                await FlushPriorityAsync(repo, _executors, 0, ct);
-                lastP0 = now;
+                if (now - lastP0 >= p0Interval)
+                {
+                    await FlushPriorityAsync(repo, _executors, 0, logger, ct);
+                    lastP0 = now;
+                }
+                if (now - lastP1 >= p1Interval)
+                {
+                    await FlushPriorityAsync(repo, _executors, 1, logger, ct);
+                    lastP1 = now;
+                }
+                if (now - lastP2 >= p2Interval)
+                {
+                    await FlushPriorityAsync(repo, _executors, 2, logger, ct);
+                    lastP2 = now;
+                }
             }
-            if (now - lastP1 >= p1Interval)
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
-                await FlushPriorityAsync(repo, _executors, 1, ct);
-                lastP1 = now;
+                break;
             }
-            if (now - lastP2 >= p2Interval)
+            catch (Exception ex)
             {
-                await FlushPriorityAsync(repo, _executors, 2, ct);
-                lastP2 = now;
+                logger.LogError(ex, "QueueWorker flush cycle failed");
             }
 
             await Task.Delay(TimeSpan.FromSeconds(1), ct);
@@ -56,6 +67,7 @@ public class QueueWorker(
         QueueRepository repo,
         Dictionary<string, IOperationExecutor> executors,
         int priority,
+        ILogger? logger,
         CancellationToken ct)
     {
         var operations = repo.GetConfirmedByPriority(priority);
@@ -72,7 +84,9 @@ public class QueueWorker(
                 continue;
             }
 
-            repo.UpdateStatus(op.Id, "processing");
+            // Atomically claim the operation to prevent double-execution
+            if (!repo.TryClaimForProcessing(op.Id))
+                continue;
 
             try
             {
@@ -81,6 +95,9 @@ public class QueueWorker(
             }
             catch (Exception ex)
             {
+                logger?.LogError(ex, "Operation {Id} ({Type}) failed on attempt {Attempt}/{Max}",
+                    op.Id, op.Operation, op.RetryCount + 1, op.MaxRetries);
+
                 if (op.RetryCount + 1 >= op.MaxRetries)
                 {
                     repo.MarkFailed(op.Id, ex.Message, incrementRetry: true);

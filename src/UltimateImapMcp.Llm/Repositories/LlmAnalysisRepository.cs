@@ -22,27 +22,29 @@ public class LlmAnalysisRepository(AppDatabase db)
     public void Upsert(int messageId, string analysisType, string result,
         string? modelUsed, int? tokensInput, int? tokensOutput, double? costUsd)
     {
-        var conn = db.GetWriteConnection();
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            INSERT INTO llm_analysis (message_id, analysis_type, result, model_used, tokens_input, tokens_output, cost_usd)
-            VALUES ($messageId, $analysisType, $result, $modelUsed, $tokensInput, $tokensOutput, $costUsd)
-            ON CONFLICT(message_id, analysis_type) DO UPDATE SET
-                result = $result,
-                model_used = $modelUsed,
-                tokens_input = $tokensInput,
-                tokens_output = $tokensOutput,
-                cost_usd = $costUsd,
-                analyzed_at = datetime('now');
-            """;
-        cmd.Parameters.AddWithValue("$messageId", messageId);
-        cmd.Parameters.AddWithValue("$analysisType", analysisType);
-        cmd.Parameters.AddWithValue("$result", result);
-        cmd.Parameters.AddWithValue("$modelUsed", (object?)modelUsed ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("$tokensInput", (object?)tokensInput ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("$tokensOutput", (object?)tokensOutput ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("$costUsd", (object?)costUsd ?? DBNull.Value);
-        cmd.ExecuteNonQuery();
+        db.ExecuteWrite(conn =>
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                INSERT INTO llm_analysis (message_id, analysis_type, result, model_used, tokens_input, tokens_output, cost_usd)
+                VALUES ($messageId, $analysisType, $result, $modelUsed, $tokensInput, $tokensOutput, $costUsd)
+                ON CONFLICT(message_id, analysis_type) DO UPDATE SET
+                    result = $result,
+                    model_used = $modelUsed,
+                    tokens_input = $tokensInput,
+                    tokens_output = $tokensOutput,
+                    cost_usd = $costUsd,
+                    analyzed_at = datetime('now');
+                """;
+            cmd.Parameters.AddWithValue("$messageId", messageId);
+            cmd.Parameters.AddWithValue("$analysisType", analysisType);
+            cmd.Parameters.AddWithValue("$result", result);
+            cmd.Parameters.AddWithValue("$modelUsed", (object?)modelUsed ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$tokensInput", (object?)tokensInput ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$tokensOutput", (object?)tokensOutput ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$costUsd", (object?)costUsd ?? DBNull.Value);
+            cmd.ExecuteNonQuery();
+        });
     }
 
     /// <summary>
@@ -150,11 +152,13 @@ public class LlmAnalysisRepository(AppDatabase db)
     /// </summary>
     public int DeleteByMessageId(int messageId)
     {
-        var conn = db.GetWriteConnection();
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = "DELETE FROM llm_analysis WHERE message_id = $messageId;";
-        cmd.Parameters.AddWithValue("$messageId", messageId);
-        return cmd.ExecuteNonQuery();
+        return db.ExecuteWrite(conn =>
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "DELETE FROM llm_analysis WHERE message_id = $messageId;";
+            cmd.Parameters.AddWithValue("$messageId", messageId);
+            return cmd.ExecuteNonQuery();
+        });
     }
 
     private static List<LlmAnalysisRecord> ReadRecords(Microsoft.Data.Sqlite.SqliteCommand cmd)
