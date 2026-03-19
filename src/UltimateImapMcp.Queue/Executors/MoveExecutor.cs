@@ -20,8 +20,9 @@ public class MoveExecutor(AppConfig config) : IOperationExecutor
         var fromPath = payload.GetProperty("from_folder").GetString()!;
         var toPath = payload.GetProperty("to_folder").GetString()!;
 
-        var accountConfig = config.Accounts.First(a =>
-            a.Name.Equals(operation.AccountId, StringComparison.OrdinalIgnoreCase));
+        var accountConfig = config.Accounts.FirstOrDefault(a =>
+            a.Name.Equals(operation.AccountId, StringComparison.OrdinalIgnoreCase))
+            ?? throw new InvalidOperationException($"Account '{operation.AccountId}' not found in configuration.");
         var encryptor = Core.Encryption.CredentialEncryptor.FromMachineId();
         using var connMgr = new ImapConnectionManager(accountConfig, encryptor);
         var client = await connMgr.GetConnectedClientAsync(ct);

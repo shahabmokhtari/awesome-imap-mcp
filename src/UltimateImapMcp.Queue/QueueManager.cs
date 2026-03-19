@@ -11,8 +11,10 @@ public class QueueManager(QueueRepository repo, AppConfig config)
     {
         var account = config.Accounts.FirstOrDefault(a =>
             a.Name.Equals(accountId, StringComparison.OrdinalIgnoreCase));
-        var confirmMode = account?.ConfirmMode ?? "implicit";
-        var undoSeconds = account?.UndoWindowSeconds ?? 10;
+        if (account is null)
+            throw new InvalidOperationException($"Account '{accountId}' not found.");
+        var confirmMode = account.ConfirmMode ?? "implicit";
+        var undoSeconds = account.UndoWindowSeconds;
 
         string? sendsAt = null;
         bool requiresConfirm;

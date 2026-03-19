@@ -37,6 +37,10 @@ public static class SyncApi
             {
                 return Results.BadRequest(new { Error = ex.Message });
             }
+            catch (Exception ex)
+            {
+                return Results.Json(new { Error = ex.Message }, statusCode: 500);
+            }
         });
 
         return app;

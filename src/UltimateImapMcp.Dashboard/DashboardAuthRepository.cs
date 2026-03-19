@@ -26,11 +26,8 @@ public class DashboardAuthRepository(AppDatabase db)
         {
             using var cmd = conn.CreateCommand();
             cmd.CommandText = """
-                INSERT INTO dashboard_auth (auth_type, hash)
-                SELECT 'pin', $hash
-                WHERE NOT EXISTS (SELECT 1 FROM dashboard_auth WHERE auth_type = 'pin');
-                UPDATE dashboard_auth SET hash = $hash, updated_at = datetime('now')
-                WHERE auth_type = 'pin';
+                DELETE FROM dashboard_auth WHERE auth_type = 'pin';
+                INSERT INTO dashboard_auth (auth_type, hash) VALUES ('pin', $hash);
                 """;
             cmd.Parameters.AddWithValue("$hash", bcryptHash);
             cmd.ExecuteNonQuery();

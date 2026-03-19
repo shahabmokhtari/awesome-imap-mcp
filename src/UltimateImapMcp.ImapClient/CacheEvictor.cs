@@ -30,13 +30,25 @@ public class CacheEvictor(
             try
             {
                 RunEviction();
+                await Task.Delay(Interval, ct).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                break;
             }
             catch (Exception ex)
             {
                 logger.LogError(ex, "CacheEvictor encountered an error during eviction");
-            }
 
-            await Task.Delay(Interval, ct).ConfigureAwait(false);
+                try
+                {
+                    await Task.Delay(Interval, ct).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    break;
+                }
+            }
         }
     }
 

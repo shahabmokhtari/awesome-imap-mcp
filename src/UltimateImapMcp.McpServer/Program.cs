@@ -30,7 +30,16 @@ var configPath = args.FirstOrDefault(a => a.StartsWith("--config="))?.Split('=',
     ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
         ".ultimate-imap-mcp", "config.json");
 
-AppConfig config = File.Exists(configPath) ? ConfigLoader.LoadFromFile(configPath) : new AppConfig();
+AppConfig config;
+if (File.Exists(configPath))
+{
+    config = ConfigLoader.LoadFromFile(configPath);
+}
+else
+{
+    Console.Error.WriteLine($"Warning: Config file not found at {configPath}. Starting with defaults.");
+    config = new AppConfig();
+}
 
 var dbPath = ConfigLoader.ResolveDbPath(config.Cache.DbPath);
 var database = new AppDatabase(dbPath);

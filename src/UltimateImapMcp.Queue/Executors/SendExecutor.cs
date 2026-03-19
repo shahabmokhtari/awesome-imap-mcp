@@ -13,8 +13,9 @@ public class SendExecutor(AppConfig config) : IOperationExecutor
     public async Task ExecuteAsync(QueuedOperation operation, CancellationToken ct)
     {
         var payload = JsonSerializer.Deserialize<JsonElement>(operation.Payload);
-        var accountConfig = config.Accounts.First(a =>
-            a.Name.Equals(operation.AccountId, StringComparison.OrdinalIgnoreCase));
+        var accountConfig = config.Accounts.FirstOrDefault(a =>
+            a.Name.Equals(operation.AccountId, StringComparison.OrdinalIgnoreCase))
+            ?? throw new InvalidOperationException($"Account '{operation.AccountId}' not found in configuration.");
 
         var message = new MimeMessage();
         message.From.Add(MailboxAddress.Parse(accountConfig.Username));

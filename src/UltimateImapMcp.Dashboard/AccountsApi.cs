@@ -97,7 +97,7 @@ public static class AccountsApi
             }
             catch (Exception ex)
             {
-                return Results.Ok(new { Success = false, Message = ex.Message });
+                return Results.Json(new { Success = false, Message = ex.Message }, statusCode: 502);
             }
         });
 

@@ -29,7 +29,7 @@ public static partial class ConfigLoader
         var substituted = SubstituteEnvVars(raw);
 
         var config = JsonSerializer.Deserialize<AppConfig>(substituted, JsonOptions)
-                     ?? new AppConfig();
+                     ?? throw new InvalidOperationException($"Failed to deserialize config from {path}");
 
         return config;
     }

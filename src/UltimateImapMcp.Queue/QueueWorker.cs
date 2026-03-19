@@ -75,7 +75,7 @@ public class QueueWorker(
         foreach (var op in operations)
         {
             // For P0 sends with sends_at: check if undo window has passed
-            if (op.SendsAt != null && DateTime.Parse(op.SendsAt) > DateTime.UtcNow)
+            if (op.SendsAt != null && DateTime.Parse(op.SendsAt, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind) > DateTime.UtcNow)
                 continue;
 
             if (!executors.TryGetValue(op.Operation, out var executor))
