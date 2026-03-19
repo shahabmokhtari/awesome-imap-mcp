@@ -1,0 +1,314 @@
+using System.Text.Json;
+using MailKit;
+using MailKit.Search;
+using MimeKit;
+using UltimateImapMcp.ImapClient.Repositories;
+using ImapClientLib = MailKit.Net.Imap.ImapClient;
+
+namespace UltimateImapMcp.ImapClient;
+
+/// <summary>
+/// Synchronises IMAP folder metadata and messages into the local SQLite cache.
+/// Phase 1: full UID-range sync. Incremental delta sync deferred to Phase 3.
+/// </summary>
+public sealed class ImapSyncService
+{
+    private readonly FolderRepository _folderRepo;
+    private readonly MessageRepository _messageRepo;
+    private readonly AttachmentRepository _attachmentRepo;
+
+    public ImapSyncService(
+        FolderRepository folderRepo,
+        MessageRepository messageRepo,
+        AttachmentRepository attachmentRepo)
+    {
+        ArgumentNullException.ThrowIfNull(folderRepo);
+        ArgumentNullException.ThrowIfNull(messageRepo);
+        ArgumentNullException.ThrowIfNull(attachmentRepo);
+
+        _folderRepo = folderRepo;
+        _messageRepo = messageRepo;
+        _attachmentRepo = attachmentRepo;
+    }
+
+    // ------------------------------------------------------------------
+    // Folder sync
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// Discovers all folders in the personal namespace and upserts them
+    /// into the FolderRepository. INBOX is always ensured.
+    /// </summary>
+    public async Task SyncFoldersAsync(
+        ImapClientLib client,
+        string accountId,
+        FolderMapper mapper,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(client);
+        ArgumentNullException.ThrowIfNull(mapper);
+
+        // Retrieve all folders in the personal namespace.
+        var personalNs = client.PersonalNamespaces.FirstOrDefault();
+        IEnumerable<IMailFolder> allFolders;
+
+        if (personalNs is not null)
+        {
+            // GetFolders with subscribedOnly=false returns the full tree.
+            allFolders = await client.GetFoldersAsync(personalNs, false, ct)
+                .ConfigureAwait(false);
+        }
+        else
+        {
+            // Fallback: start from INBOX and recurse subfolders.
+            allFolders = await GetAllSubfoldersAsync(client.Inbox, ct)
+                .ConfigureAwait(false);
+        }
+
+        // Ensure INBOX is always present.
+        var delimiter = personalNs?.DirectorySeparator.ToString() ?? "/";
+        _folderRepo.Insert(accountId, "INBOX", "Inbox", "inbox", delimiter);
+
+        foreach (var imapFolder in allFolders)
+        {
+            var path = imapFolder.FullName;
+            if (string.IsNullOrWhiteSpace(path)) continue;
+
+            var role = mapper.DetectRole(path);
+            var displayName = mapper.GetDisplayName(path, role);
+            var folderDelimiter = imapFolder.DirectorySeparator.ToString();
+
+            _folderRepo.Insert(
+                accountId,
+                path,
+                displayName,
+                role?.ToString().ToLowerInvariant(),
+                folderDelimiter);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Message sync
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// Fetches all messages with UID > <see cref="FolderRecord.LastSyncedUid"/> and
+    /// stores metadata plus attachment stubs in the repository.
+    /// </summary>
+    public async Task SyncFolderMessagesAsync(
+        ImapClientLib client,
+        string accountId,
+        FolderRecord folder,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(client);
+        ArgumentNullException.ThrowIfNull(folder);
+
+        // Open the folder read-only.
+        var imapFolder = await client.GetFolderAsync(folder.Path, ct).ConfigureAwait(false);
+        await imapFolder.OpenAsync(FolderAccess.ReadOnly, ct).ConfigureAwait(false);
+
+        try
+        {
+            // Build a UID range starting just above the last synced UID.
+            var startUid = new UniqueId((uint)(folder.LastSyncedUid + 1));
+            var range = new UniqueIdRange(startUid, UniqueId.MaxValue);
+
+            IList<UniqueId> uids = await imapFolder
+                .SearchAsync(SearchQuery.Uids(range), ct)
+                .ConfigureAwait(false);
+
+            if (uids.Count == 0)
+            {
+                // Nothing new. Update counts from folder status.
+                _folderRepo.UpdateSyncState(
+                    folder.Id,
+                    folder.LastSyncedUid,
+                    imapFolder.Count,
+                    imapFolder.Unread);
+                return;
+            }
+
+            // Fetch summaries with all fields we need.
+            var fetchRequest = new FetchRequest(
+                MessageSummaryItems.UniqueId |
+                MessageSummaryItems.Envelope |
+                MessageSummaryItems.Flags |
+                MessageSummaryItems.Size |
+                MessageSummaryItems.BodyStructure,
+                new[] { "References" });
+
+            IList<IMessageSummary> summaries = await imapFolder
+                .FetchAsync(uids, fetchRequest, ct)
+                .ConfigureAwait(false);
+
+            var maxUid = folder.LastSyncedUid;
+            var unreadDelta = 0;
+
+            foreach (var summary in summaries)
+            {
+                ct.ThrowIfCancellationRequested();
+
+                var uid = (int)summary.UniqueId.Id;
+                if (uid > maxUid) maxUid = uid;
+
+                // Envelope data.
+                var envelope = summary.Envelope;
+                var messageId = envelope?.MessageId;
+                var inReplyTo = envelope?.InReplyTo;
+                var subject = envelope?.Subject;
+                var date = envelope?.Date?.ToString("o") ?? DateTimeOffset.UtcNow.ToString("o");
+                var dateEpoch = envelope?.Date?.ToUnixTimeSeconds();
+
+                var fromAddress = envelope?.From.FirstOrDefault()?.ToString();
+                var fromEmail = fromAddress is not null
+                    ? MessageParser.ExtractEmailFromAddress(fromAddress)
+                    : null;
+
+                var toJson = SerializeAddressList(envelope?.To);
+                var ccJson = SerializeAddressList(envelope?.Cc);
+
+                // References header (already on summary.References or fallback to Headers).
+                var referencesHdr = summary.References?.Count > 0
+                    ? string.Join(" ", summary.References)
+                    : summary.Headers?["References"];
+
+                // Thread ID.
+                var threadId = ThreadBuilder.ComputeThreadId(messageId, referencesHdr);
+
+                // Flags.
+                var flags = BuildFlagsString(summary.Flags, summary.Keywords);
+                var isUnread = summary.Flags.HasValue &&
+                               (summary.Flags.Value & MessageFlags.Seen) == 0;
+                if (isUnread) unreadDelta++;
+
+                // Attachments detection.
+                var attachments = summary.Attachments?.ToList() ?? [];
+                var hasAttachments = attachments.Count > 0;
+
+                // Snippet: try fetching the plain-text body part; fall back to subject.
+                string? snippet = null;
+                try
+                {
+                    var textBodyPart = summary.TextBody;
+                    if (textBodyPart is not null)
+                    {
+                        var mimeEntity = await imapFolder
+                            .GetBodyPartAsync(summary.UniqueId, textBodyPart, ct)
+                            .ConfigureAwait(false);
+
+                        if (mimeEntity is TextPart textPart)
+                            snippet = MessageParser.GenerateSnippet(textPart.Text);
+                    }
+                }
+                catch
+                {
+                    // Non-critical – fall back to subject.
+                    snippet = subject is not null
+                        ? MessageParser.GenerateSnippet(subject)
+                        : null;
+                }
+
+                // Insert message record.
+                _messageRepo.Insert(
+                    accountId,
+                    folder.Id,
+                    uid,
+                    messageId,
+                    inReplyTo,
+                    referencesHdr,
+                    threadId,
+                    subject,
+                    fromAddress,
+                    fromEmail,
+                    toJson,
+                    ccJson,
+                    bccAddresses: null,
+                    date,
+                    dateEpoch,
+                    flags,
+                    sizeBytes: summary.Size.HasValue ? (int?)summary.Size.Value : null,
+                    hasAttachments,
+                    snippet);
+
+                // Attachment metadata stubs.
+                if (hasAttachments)
+                {
+                    // Retrieve the DB record we just inserted to get its ID.
+                    var dbMsg = _messageRepo.GetByUid(accountId, folder.Id, uid);
+                    if (dbMsg is not null)
+                    {
+                        foreach (var att in attachments)
+                        {
+                            _attachmentRepo.Insert(
+                                dbMsg.Id,
+                                att.FileName,
+                                att.ContentType?.MimeType,
+                                sizeBytes: att.Octets > 0 ? (int?)att.Octets : null,
+                                att.ContentId,
+                                isInline: att.ContentDisposition?.Disposition
+                                    ?.Equals("inline", StringComparison.OrdinalIgnoreCase) ?? false);
+                        }
+                    }
+                }
+            }
+
+            // Update folder sync state.
+            _folderRepo.UpdateSyncState(
+                folder.Id,
+                maxUid,
+                imapFolder.Count,
+                imapFolder.Unread);
+        }
+        finally
+        {
+            await imapFolder.CloseAsync(false, ct).ConfigureAwait(false);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Private helpers
+    // ------------------------------------------------------------------
+
+    private static async Task<IEnumerable<IMailFolder>> GetAllSubfoldersAsync(
+        IMailFolder root, CancellationToken ct)
+    {
+        var result = new List<IMailFolder>();
+        var subs = await root.GetSubfoldersAsync(false, ct).ConfigureAwait(false);
+        foreach (var sub in subs)
+        {
+            result.Add(sub);
+            result.AddRange(await GetAllSubfoldersAsync(sub, ct).ConfigureAwait(false));
+        }
+        return result;
+    }
+
+    private static string? SerializeAddressList(InternetAddressList? list)
+    {
+        if (list is null || list.Count == 0) return null;
+
+        var addresses = list.Select(a => a.ToString()).ToArray();
+        return JsonSerializer.Serialize(addresses);
+    }
+
+    private static string? BuildFlagsString(MessageFlags? flags, IReadOnlySet<string>? keywords)
+    {
+        if (flags is null && (keywords is null || keywords.Count == 0)) return null;
+
+        var parts = new List<string>();
+
+        if (flags.HasValue)
+        {
+            if ((flags.Value & MessageFlags.Seen) != 0) parts.Add("\\Seen");
+            if ((flags.Value & MessageFlags.Answered) != 0) parts.Add("\\Answered");
+            if ((flags.Value & MessageFlags.Flagged) != 0) parts.Add("\\Flagged");
+            if ((flags.Value & MessageFlags.Deleted) != 0) parts.Add("\\Deleted");
+            if ((flags.Value & MessageFlags.Draft) != 0) parts.Add("\\Draft");
+        }
+
+        if (keywords is not null)
+            parts.AddRange(keywords);
+
+        return parts.Count > 0 ? string.Join(" ", parts) : null;
+    }
+}
