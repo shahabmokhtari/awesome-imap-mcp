@@ -12,6 +12,7 @@ public class AcpEmailAnalyzer : IEmailAnalyzer, IAsyncDisposable
 {
     private readonly AcpClient _client;
     private readonly ILogger<AcpEmailAnalyzer> _logger;
+    private readonly SemaphoreSlim _sessionLock = new(1, 1);
     private AcpSession? _session;
 
     public AcpEmailAnalyzer(AcpClient client, ILogger<AcpEmailAnalyzer> logger)
@@ -68,9 +69,20 @@ public class AcpEmailAnalyzer : IEmailAnalyzer, IAsyncDisposable
         if (_session is not null)
             return;
 
-        await _client.InitializeAsync(ct).ConfigureAwait(false);
-        _session = await _client.CreateSessionAsync(
-            Path.GetTempPath(), ct).ConfigureAwait(false);
+        await _sessionLock.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            if (_session is not null)
+                return;
+
+            await _client.InitializeAsync(ct).ConfigureAwait(false);
+            _session = await _client.CreateSessionAsync(
+                Path.GetTempPath(), ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            _sessionLock.Release();
+        }
     }
 
     private static string BuildAcpPrompt(EmailContent email, AnalysisType type)

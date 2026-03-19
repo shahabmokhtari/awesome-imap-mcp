@@ -88,7 +88,10 @@ public static class MachineId
         };
         process.Start();
         var output = process.StandardOutput.ReadToEnd();
-        process.WaitForExit();
+        if (!process.WaitForExit(5000))
+        {
+            try { process.Kill(); } catch { /* best-effort */ }
+        }
         return output;
     }
 }

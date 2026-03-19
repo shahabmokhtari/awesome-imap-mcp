@@ -296,7 +296,7 @@ public class SyncManager(
                 ? updatedFolder.LastSyncedUid - folder.LastSyncedUid
                 : 0;
 
-            syncLogRepo.LogComplete(logId, Math.Max(0, messagesSynced), sw.ElapsedMilliseconds);
+            syncLogRepo.LogComplete(logId, (int)Math.Max(0, messagesSynced), sw.ElapsedMilliseconds);
 
             // Update status
             _folderStatus[$"{accountId}:{folder.Path}"] = new FolderSyncStatus(
@@ -323,7 +323,7 @@ public class SyncManager(
                 folder.UnreadCount,
                 "failed");
 
-            logger.LogWarning(ex, "Sync failed for {Account}/{Folder}", accountId, folder.Path);
+            logger.LogError(ex, "Sync failed for {Account}/{Folder}", accountId, folder.Path);
         }
     }
 

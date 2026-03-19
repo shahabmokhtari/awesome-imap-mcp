@@ -28,8 +28,9 @@ public class FlagExecutor(AppConfig config) : IOperationExecutor
             _ => throw new InvalidOperationException($"Unknown flag operation: {operation.Operation}")
         };
 
-        var accountConfig = config.Accounts.First(a =>
-            a.Name.Equals(operation.AccountId, StringComparison.OrdinalIgnoreCase));
+        var accountConfig = config.Accounts.FirstOrDefault(a =>
+            a.Name.Equals(operation.AccountId, StringComparison.OrdinalIgnoreCase))
+            ?? throw new InvalidOperationException($"Account '{operation.AccountId}' not found in configuration.");
         var encryptor = Core.Encryption.CredentialEncryptor.FromMachineId();
         using var connMgr = new ImapConnectionManager(accountConfig, encryptor);
         var client = await connMgr.GetConnectedClientAsync(ct);

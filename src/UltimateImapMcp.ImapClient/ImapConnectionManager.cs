@@ -68,20 +68,23 @@ public sealed class ImapConnectionManager : IDisposable
             }
 
             // Retry loop with exponential backoff.
+            var password = _config.Password
+                ?? throw new InvalidOperationException(
+                    $"No password configured for account '{_config.Username}'. Set password in config or via environment variable.");
+
             var delaySeconds = 1;
             for (var attempt = 1; attempt <= MaxRetries; attempt++)
             {
+                ImapClientLib? client = null;
                 try
                 {
-                    var client = new ImapClientLib();
+                    client = new ImapClientLib();
 
                     await client.ConnectAsync(
                         _config.ImapHost,
                         _config.ImapPort,
                         SecureSocketOptions.SslOnConnect,
                         ct).ConfigureAwait(false);
-
-                    var password = _config.Password ?? string.Empty;
 
                     await client.AuthenticateAsync(
                         _config.Username,
@@ -102,6 +105,8 @@ public sealed class ImapConnectionManager : IDisposable
                     ex is ImapProtocolException or IOException or SocketException
                     && attempt < MaxRetries)
                 {
+                    try { client?.Dispose(); } catch { /* best-effort */ }
+
                     var delay = TimeSpan.FromSeconds(Math.Min(delaySeconds, MaxBackoff.TotalSeconds));
                     _logger.LogWarning(
                         "Connection attempt {Attempt}/{MaxRetries} to {Host}:{Port} failed ({Error}). Retrying in {Delay}s...",
@@ -111,26 +116,16 @@ public sealed class ImapConnectionManager : IDisposable
                     await Task.Delay(delay, ct).ConfigureAwait(false);
                     delaySeconds *= 2;
                 }
+                catch
+                {
+                    try { client?.Dispose(); } catch { /* best-effort */ }
+                    throw;
+                }
             }
 
-            // Final attempt — let exception propagate.
-            var finalClient = new ImapClientLib();
-
-            await finalClient.ConnectAsync(
-                _config.ImapHost,
-                _config.ImapPort,
-                SecureSocketOptions.SslOnConnect,
-                ct).ConfigureAwait(false);
-
-            var finalPassword = _config.Password ?? string.Empty;
-
-            await finalClient.AuthenticateAsync(
-                _config.Username,
-                finalPassword,
-                ct).ConfigureAwait(false);
-
-            _client = finalClient;
-            return _client;
+            // Should not be reached (loop covers MaxRetries attempts), but satisfies compiler.
+            throw new IOException(
+                $"Failed to connect to {_config.ImapHost}:{_config.ImapPort} after {MaxRetries} attempts.");
         }
         finally
         {

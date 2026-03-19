@@ -139,11 +139,13 @@ public class QueueRepository(AppDatabase db)
 
     public bool Cancel(string id)
     {
-        var op = GetById(id);
-        if (op == null || op.Status is "completed" or "cancelled" or "processing")
-            return false;
-        UpdateStatus(id, "cancelled");
-        return true;
+        return db.ExecuteWrite(conn =>
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "UPDATE operation_queue SET status = 'cancelled', cancelled_at = datetime('now') WHERE id = $id AND status IN ('pending', 'confirmed');";
+            cmd.Parameters.AddWithValue("$id", id);
+            return cmd.ExecuteNonQuery() == 1;
+        });
     }
 
     public void MarkFailed(string id, string errorMessage, bool incrementRetry = false)

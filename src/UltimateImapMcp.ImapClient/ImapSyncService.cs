@@ -149,7 +149,7 @@ public sealed class ImapSyncService
             {
                 ct.ThrowIfCancellationRequested();
 
-                var uid = (int)summary.UniqueId.Id;
+                var uid = (long)summary.UniqueId.Id;
                 if (uid > maxUid) maxUid = uid;
 
                 // Envelope data.
@@ -201,7 +201,8 @@ public sealed class ImapSyncService
                             snippet = MessageParser.GenerateSnippet(textPart.Text);
                     }
                 }
-                catch
+                catch (Exception ex) when (ex is MailKit.Net.Imap.ImapProtocolException
+                    or IOException or OperationCanceledException or InvalidOperationException)
                 {
                     // Non-critical – fall back to subject.
                     snippet = subject is not null

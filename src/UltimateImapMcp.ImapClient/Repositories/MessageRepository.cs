@@ -3,7 +3,7 @@ using UltimateImapMcp.Core.Database;
 namespace UltimateImapMcp.ImapClient.Repositories;
 
 public record MessageRecord(
-    int Id, string AccountId, int FolderId, int Uid,
+    int Id, string AccountId, int FolderId, long Uid,
     string? MessageId, string? InReplyTo, string? ReferencesHdr, string? ThreadId,
     string? Subject, string? FromAddress, string? FromEmail,
     string? ToAddresses, string? CcAddresses, string? BccAddresses,
@@ -19,7 +19,7 @@ public record TopSenderRecord(string FromEmail, int MessageCount, long TotalSize
 
 public class MessageRepository(AppDatabase db)
 {
-    public void Insert(string accountId, int folderId, int uid, string? messageId,
+    public void Insert(string accountId, int folderId, long uid, string? messageId,
         string? inReplyTo, string? referencesHdr, string? threadId,
         string? subject, string? fromAddress, string? fromEmail,
         string? toAddresses, string? ccAddresses, string? bccAddresses,
@@ -67,7 +67,7 @@ public class MessageRepository(AppDatabase db)
         });
     }
 
-    public MessageRecord? GetByUid(string accountId, int folderId, int uid)
+    public MessageRecord? GetByUid(string accountId, int folderId, long uid)
     {
         using var conn = db.GetReadConnection();
         using var cmd = conn.CreateCommand();
@@ -137,7 +137,7 @@ public class MessageRepository(AppDatabase db)
         });
     }
 
-    public int GetMaxUid(string accountId, int folderId)
+    public long GetMaxUid(string accountId, int folderId)
     {
         using var conn = db.GetReadConnection();
         using var cmd = conn.CreateCommand();
@@ -147,7 +147,7 @@ public class MessageRepository(AppDatabase db)
             """;
         cmd.Parameters.AddWithValue("$a", accountId);
         cmd.Parameters.AddWithValue("$f", folderId);
-        return Convert.ToInt32(cmd.ExecuteScalar());
+        return Convert.ToInt64(cmd.ExecuteScalar());
     }
 
     /// <summary>
@@ -325,7 +325,7 @@ public class MessageRepository(AppDatabase db)
         Id: r.GetInt32(r.GetOrdinal("id")),
         AccountId: r.GetString(r.GetOrdinal("account_id")),
         FolderId: r.GetInt32(r.GetOrdinal("folder_id")),
-        Uid: r.GetInt32(r.GetOrdinal("uid")),
+        Uid: r.GetInt64(r.GetOrdinal("uid")),
         MessageId: r.IsDBNull(r.GetOrdinal("message_id")) ? null : r.GetString(r.GetOrdinal("message_id")),
         InReplyTo: r.IsDBNull(r.GetOrdinal("in_reply_to")) ? null : r.GetString(r.GetOrdinal("in_reply_to")),
         ReferencesHdr: r.IsDBNull(r.GetOrdinal("references_hdr")) ? null : r.GetString(r.GetOrdinal("references_hdr")),
