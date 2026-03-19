@@ -48,6 +48,7 @@ public class ReportTools(MessageRepository messageRepo, LlmAnalysisRepository an
         }
         catch (Exception ex)
         {
+            Console.Error.WriteLine($"[ReportTools.MailboxReport] {ex}");
             return JsonSerializer.Serialize(new { error = $"Report generation failed: {ex.Message}" }, JsonOptions);
         }
     }
@@ -80,6 +81,7 @@ public class ReportTools(MessageRepository messageRepo, LlmAnalysisRepository an
         }
         catch (Exception ex)
         {
+            Console.Error.WriteLine($"[ReportTools.TopSenders] {ex}");
             return JsonSerializer.Serialize(new { error = $"Top senders query failed: {ex.Message}" }, JsonOptions);
         }
     }
@@ -106,6 +108,7 @@ public class ReportTools(MessageRepository messageRepo, LlmAnalysisRepository an
         }
         catch (Exception ex)
         {
+            Console.Error.WriteLine($"[ReportTools.CategoryBreakdown] {ex}");
             return JsonSerializer.Serialize(new { error = $"Category breakdown failed: {ex.Message}" }, JsonOptions);
         }
     }

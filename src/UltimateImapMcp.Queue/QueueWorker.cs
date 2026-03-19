@@ -67,7 +67,7 @@ public class QueueWorker(
         QueueRepository repo,
         Dictionary<string, IOperationExecutor> executors,
         int priority,
-        ILogger? logger,
+        ILogger logger,
         CancellationToken ct)
     {
         var operations = repo.GetConfirmedByPriority(priority);
@@ -95,7 +95,7 @@ public class QueueWorker(
             }
             catch (Exception ex)
             {
-                logger?.LogError(ex, "Operation {Id} ({Type}) failed on attempt {Attempt}/{Max}",
+                logger.LogError(ex, "Operation {Id} ({Type}) failed on attempt {Attempt}/{Max}",
                     op.Id, op.Operation, op.RetryCount + 1, op.MaxRetries);
 
                 if (op.RetryCount + 1 >= op.MaxRetries)

@@ -37,9 +37,11 @@ public static class MachineId
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
                 return GetLinuxMachineId();
         }
-        catch
+        catch (Exception ex)
         {
-            // fall through to fallback
+            Console.Error.WriteLine(
+                $"[MachineId] Failed to get platform-specific machine identifier ({ex.GetType().Name}: {ex.Message}). "
+                + "Falling back to MachineName. Credential encryption keys may differ if this changes.");
         }
 
         return Environment.MachineName;
@@ -90,7 +92,7 @@ public static class MachineId
         var output = process.StandardOutput.ReadToEnd();
         if (!process.WaitForExit(5000))
         {
-            try { process.Kill(); } catch { /* best-effort */ }
+            try { process.Kill(); } catch (Exception ex) { Console.Error.WriteLine($"[MachineId] Failed to kill process: {ex.Message}"); }
         }
         return output;
     }

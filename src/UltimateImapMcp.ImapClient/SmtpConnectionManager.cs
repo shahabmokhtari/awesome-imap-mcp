@@ -38,7 +38,7 @@ public sealed class SmtpConnectionManager : IDisposable
         var smtpHost = _config.SmtpHost ?? _config.ImapHost.Replace("imap.", "smtp.");
         var smtpPort = _config.SmtpPort;
         var options = _config.SmtpUseSsl ? SecureSocketOptions.SslOnConnect : SecureSocketOptions.StartTls;
-        var password = _config.Password ?? "";
+        var password = _config.Password ?? throw new InvalidOperationException($"No password configured for SMTP account '{_config.Username}'.");
 
         const int maxRetries = 2;
         for (var attempt = 1; attempt <= maxRetries; attempt++)
@@ -68,7 +68,7 @@ public sealed class SmtpConnectionManager : IDisposable
                 ex is IOException or SocketException or SmtpProtocolException
                 && attempt < maxRetries)
             {
-                try { client?.Dispose(); } catch { /* best-effort */ }
+                try { client?.Dispose(); } catch (Exception disposeEx) { Console.Error.WriteLine($"[SmtpConnectionManager] Cleanup failed: {disposeEx.Message}"); }
 
                 _logger.LogWarning(
                     "SMTP connection attempt {Attempt}/{MaxRetries} to {Host}:{Port} failed ({Error}). Retrying...",
@@ -79,7 +79,7 @@ public sealed class SmtpConnectionManager : IDisposable
             }
             catch
             {
-                try { client?.Dispose(); } catch { /* best-effort */ }
+                try { client?.Dispose(); } catch (Exception disposeEx) { Console.Error.WriteLine($"[SmtpConnectionManager] Cleanup failed: {disposeEx.Message}"); }
                 throw;
             }
         }

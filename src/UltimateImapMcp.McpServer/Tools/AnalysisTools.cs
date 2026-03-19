@@ -79,6 +79,7 @@ public class AnalysisTools(
         }
         catch (Exception ex)
         {
+            Console.Error.WriteLine($"[AnalysisTools.AnalyzeEmail] {ex}");
             return Error($"Analysis failed: {ex.Message}");
         }
     }
@@ -167,6 +168,7 @@ public class AnalysisTools(
         }
         catch (Exception ex)
         {
+            Console.Error.WriteLine($"[AnalysisTools.AnalyzeFolder] {ex}");
             return Error($"Folder analysis failed: {ex.Message}");
         }
     }
@@ -202,6 +204,7 @@ public class AnalysisTools(
         }
         catch (Exception ex)
         {
+            Console.Error.WriteLine($"[AnalysisTools.GetAnalysis] {ex}");
             return Error($"Failed to get analysis results: {ex.Message}");
         }
     }
