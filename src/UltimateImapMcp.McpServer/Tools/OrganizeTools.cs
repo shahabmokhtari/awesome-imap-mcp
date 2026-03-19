@@ -42,6 +42,7 @@ public class OrganizeTools(QueueManager queueManager)
         }
         catch (Exception ex)
         {
+            Console.Error.WriteLine($"[OrganizeTools.DeleteMessages] {ex}");
             return JsonSerializer.Serialize(new { error = ex.Message }, JsonOptions);
         }
     }
@@ -64,6 +65,7 @@ public class OrganizeTools(QueueManager queueManager)
         }
         catch (Exception ex)
         {
+            Console.Error.WriteLine($"[OrganizeTools.MoveMessages] {ex}");
             return JsonSerializer.Serialize(new { error = ex.Message }, JsonOptions);
         }
     }
@@ -84,6 +86,7 @@ public class OrganizeTools(QueueManager queueManager)
         }
         catch (Exception ex)
         {
+            Console.Error.WriteLine($"[OrganizeTools.MarkRead] {ex}");
             return JsonSerializer.Serialize(new { error = ex.Message }, JsonOptions);
         }
     }
@@ -104,6 +107,7 @@ public class OrganizeTools(QueueManager queueManager)
         }
         catch (Exception ex)
         {
+            Console.Error.WriteLine($"[OrganizeTools.MarkUnread] {ex}");
             return JsonSerializer.Serialize(new { error = ex.Message }, JsonOptions);
         }
     }
@@ -126,6 +130,7 @@ public class OrganizeTools(QueueManager queueManager)
         }
         catch (Exception ex)
         {
+            Console.Error.WriteLine($"[OrganizeTools.FlagMessages] {ex}");
             return JsonSerializer.Serialize(new { error = ex.Message }, JsonOptions);
         }
     }
@@ -150,6 +155,7 @@ public class OrganizeTools(QueueManager queueManager)
         }
         catch (Exception ex)
         {
+            Console.Error.WriteLine($"[OrganizeTools.LabelMessages] {ex}");
             return JsonSerializer.Serialize(new { error = ex.Message }, JsonOptions);
         }
     }

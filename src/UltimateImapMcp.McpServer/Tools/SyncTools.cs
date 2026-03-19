@@ -31,6 +31,7 @@ public class SyncTools(SyncManager syncManager)
         }
         catch (Exception ex)
         {
+            Console.Error.WriteLine($"[SyncTools] SyncNow failed: {ex}");
             return JsonSerializer.Serialize(new
             {
                 account_id = accountId,

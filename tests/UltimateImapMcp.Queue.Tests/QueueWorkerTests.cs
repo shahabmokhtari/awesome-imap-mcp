@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using UltimateImapMcp.Core.Configuration;
 using UltimateImapMcp.Core.Database;
 using UltimateImapMcp.Queue;
@@ -51,7 +52,7 @@ public class QueueWorkerTests : IDisposable
         var ops = _repo.GetByAccount("test");
         _repo.UpdateStatus(ops[0].Id, "confirmed");
 
-        await QueueWorker.FlushPriorityAsync(_repo, executors, 1, null, CancellationToken.None);
+        await QueueWorker.FlushPriorityAsync(_repo, executors, 1, NullLogger.Instance, CancellationToken.None);
 
         Assert.Equal(1, executor.ExecuteCount);
         var op = _repo.GetById(ops[0].Id);
@@ -68,7 +69,7 @@ public class QueueWorkerTests : IDisposable
         var ops = _repo.GetByAccount("test");
         _repo.UpdateStatus(ops[0].Id, "confirmed");
 
-        await QueueWorker.FlushPriorityAsync(_repo, executors, 1, null, CancellationToken.None);
+        await QueueWorker.FlushPriorityAsync(_repo, executors, 1, NullLogger.Instance, CancellationToken.None);
 
         var op = _repo.GetById(ops[0].Id);
         Assert.Equal("confirmed", op!.Status);  // still confirmed for retry
@@ -86,7 +87,7 @@ public class QueueWorkerTests : IDisposable
         // Simulate already at max retries
         _repo.MarkRetryable(id, "previous error");  // retry_count = 1, but max is 1
 
-        await QueueWorker.FlushPriorityAsync(_repo, executors, 1, null, CancellationToken.None);
+        await QueueWorker.FlushPriorityAsync(_repo, executors, 1, NullLogger.Instance, CancellationToken.None);
 
         var op = _repo.GetById(id);
         Assert.Equal("failed", op!.Status);
@@ -110,7 +111,7 @@ public class QueueWorkerTests : IDisposable
         });
         _repo.UpdateStatus(id, "confirmed");
 
-        await QueueWorker.FlushPriorityAsync(_repo, executors, 0, null, CancellationToken.None);
+        await QueueWorker.FlushPriorityAsync(_repo, executors, 0, NullLogger.Instance, CancellationToken.None);
 
         // Should NOT have been executed because sends_at is in the future
         Assert.Equal(0, executor.ExecuteCount);
@@ -138,7 +139,7 @@ public class QueueWorkerTests : IDisposable
         });
         _repo.UpdateStatus(id, "confirmed");
 
-        await QueueWorker.FlushPriorityAsync(_repo, executors, 0, null, CancellationToken.None);
+        await QueueWorker.FlushPriorityAsync(_repo, executors, 0, NullLogger.Instance, CancellationToken.None);
 
         Assert.Equal(1, executor.ExecuteCount);
         var op = _repo.GetById(id);
@@ -160,7 +161,7 @@ public class QueueWorkerTests : IDisposable
         });
         _repo.UpdateStatus(id, "confirmed");
 
-        await QueueWorker.FlushPriorityAsync(_repo, executors, 1, null, CancellationToken.None);
+        await QueueWorker.FlushPriorityAsync(_repo, executors, 1, NullLogger.Instance, CancellationToken.None);
 
         var op = _repo.GetById(id);
         Assert.Equal("failed", op!.Status);

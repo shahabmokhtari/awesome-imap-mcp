@@ -80,7 +80,7 @@ public class SyncManager(
         foreach (var (_, connMgr) in _connections)
         {
             try { await connMgr.DisconnectAsync(ct).ConfigureAwait(false); }
-            catch { /* best-effort */ }
+            catch (Exception ex) { Console.Error.WriteLine($"[SyncManager] Cleanup failed: {ex.Message}"); }
             connMgr.Dispose();
         }
         _connections.Clear();
@@ -113,8 +113,9 @@ public class SyncManager(
                     MailKit.Security.SecureSocketOptions.SslOnConnect,
                     idleCts.Token).ConfigureAwait(false);
 
+                var password = account.Password ?? throw new InvalidOperationException($"No password configured for IDLE connection to account '{account.Username}'.");
                 await idleClient.AuthenticateAsync(
-                    account.Username, account.Password ?? string.Empty,
+                    account.Username, password,
                     idleCts.Token).ConfigureAwait(false);
 
                 var imapFolder = await idleClient.GetFolderAsync(folderPath, idleCts.Token)
@@ -180,7 +181,7 @@ public class SyncManager(
             }
             finally
             {
-                try { idleClient?.Dispose(); } catch { /* best-effort */ }
+                try { idleClient?.Dispose(); } catch (Exception ex) { Console.Error.WriteLine($"[SyncManager] Cleanup failed: {ex.Message}"); }
             }
         }
     }

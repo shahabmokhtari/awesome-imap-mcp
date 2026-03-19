@@ -39,8 +39,10 @@ public static class AccountsApi
             if (body is null)
                 return Results.BadRequest("Invalid request body");
 
+            if (string.IsNullOrEmpty(body.Password))
+                return Results.BadRequest(new { Error = "Password is required" });
             var id = Guid.NewGuid().ToString();
-            var credentialsEnc = encryptor.Encrypt(body.Password ?? "");
+            var credentialsEnc = encryptor.Encrypt(body.Password);
 
             repo.Insert(id, body.Name, body.ImapHost, body.ImapPort,
                 body.SmtpHost, body.SmtpPort, body.SmtpUseSsl,

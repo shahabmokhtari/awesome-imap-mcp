@@ -63,7 +63,7 @@ public sealed class ImapConnectionManager : IDisposable
             // Tear down stale client.
             if (_client is not null)
             {
-                try { _client.Dispose(); } catch { /* best-effort */ }
+                try { _client.Dispose(); } catch (Exception ex) { Console.Error.WriteLine($"[ImapConnectionManager] Cleanup failed: {ex.Message}"); }
                 _client = null;
             }
 
@@ -105,7 +105,7 @@ public sealed class ImapConnectionManager : IDisposable
                     ex is ImapProtocolException or IOException or SocketException
                     && attempt < MaxRetries)
                 {
-                    try { client?.Dispose(); } catch { /* best-effort */ }
+                    try { client?.Dispose(); } catch (Exception disposeEx) { Console.Error.WriteLine($"[ImapConnectionManager] Cleanup failed: {disposeEx.Message}"); }
 
                     var delay = TimeSpan.FromSeconds(Math.Min(delaySeconds, MaxBackoff.TotalSeconds));
                     _logger.LogWarning(
@@ -118,7 +118,7 @@ public sealed class ImapConnectionManager : IDisposable
                 }
                 catch
                 {
-                    try { client?.Dispose(); } catch { /* best-effort */ }
+                    try { client?.Dispose(); } catch (Exception disposeEx) { Console.Error.WriteLine($"[ImapConnectionManager] Cleanup failed: {disposeEx.Message}"); }
                     throw;
                 }
             }
@@ -155,7 +155,7 @@ public sealed class ImapConnectionManager : IDisposable
         if (_disposed) return;
         _disposed = true;
 
-        try { _client?.Dispose(); } catch { /* best-effort */ }
+        try { _client?.Dispose(); } catch (Exception ex) { Console.Error.WriteLine($"[ImapConnectionManager] Cleanup failed: {ex.Message}"); }
         _semaphore.Dispose();
     }
 }
