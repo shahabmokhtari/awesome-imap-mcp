@@ -88,6 +88,9 @@ public class AccountConfig
     [JsonPropertyName("smtp_port")]
     public int SmtpPort { get; set; } = 587;
 
+    [JsonPropertyName("smtp_use_ssl")]
+    public bool SmtpUseSsl { get; set; } = false;
+
     [JsonPropertyName("confirm_mode")]
     public string ConfirmMode { get; set; } = "implicit";
 
