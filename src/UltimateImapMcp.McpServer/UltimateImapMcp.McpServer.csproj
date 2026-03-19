@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\UltimateImapMcp.Core\UltimateImapMcp.Core.csproj" />
+    <ProjectReference Include="..\UltimateImapMcp.Dashboard\UltimateImapMcp.Dashboard.csproj" />
     <ProjectReference Include="..\UltimateImapMcp.ImapClient\UltimateImapMcp.ImapClient.csproj" />
     <ProjectReference Include="..\UltimateImapMcp.Queue\UltimateImapMcp.Queue.csproj" />
   </ItemGroup>
