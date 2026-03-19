@@ -141,6 +141,27 @@ public class MessageRepository(AppDatabase db)
     }
 
     /// <summary>
+    /// Gets the most recent messages in a folder, ordered by date descending.
+    /// </summary>
+    public List<MessageRecord> GetByFolder(string accountId, int folderId, int limit = 50)
+    {
+        using var conn = db.GetReadConnection();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT * FROM messages WHERE account_id = $a AND folder_id = $f
+            ORDER BY date_epoch DESC LIMIT $limit;
+            """;
+        cmd.Parameters.AddWithValue("$a", accountId);
+        cmd.Parameters.AddWithValue("$f", folderId);
+        cmd.Parameters.AddWithValue("$limit", limit);
+        using var reader = cmd.ExecuteReader();
+        var list = new List<MessageRecord>();
+        while (reader.Read())
+            list.Add(ReadRecord(reader));
+        return list;
+    }
+
+    /// <summary>
     /// Null out body_text and body_html on the oldest messages (by cached_at)
     /// that have bodies fetched. Returns the number of rows affected.
     /// </summary>
