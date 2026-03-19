@@ -30,11 +30,17 @@ public class ServerConfig
     [JsonPropertyName("transport")]
     public string Transport { get; set; } = "stdio";
 
+    [JsonPropertyName("http_port")]
+    public int HttpPort { get; set; } = 3846;
+
     [JsonPropertyName("dashboard_port")]
     public int DashboardPort { get; set; } = 3847;
 
     [JsonPropertyName("dashboard_enabled")]
-    public bool DashboardEnabled { get; set; } = true;
+    public bool DashboardEnabled { get; set; } = false;
+
+    [JsonPropertyName("dashboard_auth")]
+    public string? DashboardAuth { get; set; }
 
     [JsonPropertyName("log_level")]
     public string LogLevel { get; set; } = "Information";
@@ -95,6 +101,12 @@ public class AccountConfig
 /// <summary>Sync behaviour for an account.</summary>
 public class SyncConfig
 {
+    [JsonPropertyName("idle_folders")]
+    public List<string> IdleFolders { get; set; } = [];
+
+    [JsonPropertyName("poll_interval")]
+    public int PollInterval { get; set; } = 300;
+
     [JsonPropertyName("interval_minutes")]
     public int IntervalMinutes { get; set; } = 5;
 
@@ -108,8 +120,11 @@ public class SyncConfig
 /// <summary>Per-folder sync configuration.</summary>
 public class FolderSyncConfig
 {
-    [JsonPropertyName("name")]
-    public string Name { get; set; } = string.Empty;
+    [JsonPropertyName("path")]
+    public required string Path { get; set; }
+
+    [JsonPropertyName("cache_window_days")]
+    public int CacheWindowDays { get; set; } = 0;
 
     [JsonPropertyName("enabled")]
     public bool Enabled { get; set; } = true;
@@ -127,6 +142,15 @@ public class CacheConfig
     [JsonPropertyName("max_size_mb")]
     public int MaxSizeMb { get; set; } = 500;
 
+    [JsonPropertyName("default_window_days")]
+    public int DefaultWindowDays { get; set; } = 0;
+
+    [JsonPropertyName("max_body_age_days")]
+    public int MaxBodyAgeDays { get; set; } = 0;
+
+    [JsonPropertyName("imap_fallback_ttl_hours")]
+    public int ImapFallbackTtlHours { get; set; } = 1;
+
     [JsonPropertyName("vacuum_on_startup")]
     public bool VacuumOnStartup { get; set; } = false;
 }
@@ -134,6 +158,21 @@ public class CacheConfig
 /// <summary>Async operation queue settings.</summary>
 public class QueueConfig
 {
+    [JsonPropertyName("p0_flush_interval")]
+    public int P0FlushInterval { get; set; } = 2;
+
+    [JsonPropertyName("p1_flush_interval")]
+    public int P1FlushInterval { get; set; } = 30;
+
+    [JsonPropertyName("p2_flush_interval")]
+    public int P2FlushInterval { get; set; } = 300;
+
+    [JsonPropertyName("send_undo_window")]
+    public int SendUndoWindow { get; set; } = 10;
+
+    [JsonPropertyName("max_retries")]
+    public int MaxRetries { get; set; } = 3;
+
     [JsonPropertyName("max_concurrent_operations")]
     public int MaxConcurrentOperations { get; set; } = 3;
 
@@ -156,8 +195,20 @@ public class LlmConfig
     [JsonPropertyName("api_key")]
     public string? ApiKey { get; set; }
 
+    [JsonPropertyName("api_key_env")]
+    public string? ApiKeyEnv { get; set; }
+
     [JsonPropertyName("model")]
     public string Model { get; set; } = "gpt-4o-mini";
+
+    [JsonPropertyName("daily_token_budget")]
+    public int DailyTokenBudget { get; set; } = 0;
+
+    [JsonPropertyName("monthly_cost_limit")]
+    public double MonthlyCostLimit { get; set; } = 0;
+
+    [JsonPropertyName("auto_analyze_new")]
+    public bool AutoAnalyzeNew { get; set; } = false;
 }
 
 /// <summary>Prometheus/metrics endpoint settings.</summary>
@@ -171,4 +222,16 @@ public class MetricsConfig
 
     [JsonPropertyName("path")]
     public string Path { get; set; } = "/metrics";
+
+    [JsonPropertyName("internal_retention_days")]
+    public int InternalRetentionDays { get; set; } = 7;
+
+    [JsonPropertyName("otlp_endpoint")]
+    public string? OtlpEndpoint { get; set; }
+
+    [JsonPropertyName("otlp_protocol")]
+    public string OtlpProtocol { get; set; } = "grpc";
+
+    [JsonPropertyName("export_interval_seconds")]
+    public int ExportIntervalSeconds { get; set; } = 15;
 }

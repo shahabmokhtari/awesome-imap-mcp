@@ -69,30 +69,41 @@ public class MessageTools(MessageRepository messageRepo, AttachmentRepository at
         "Get all messages in a conversation thread, ordered by date.")]
     public string GetThread(
         [Description("Thread ID (hash)")] string threadId,
-        [Description("Summary only (default: false)")] bool summaryOnly = false)
+        [Description("Summary only (default: false)")] bool summaryOnly = false,
+        [Description("Max body length in characters (0=unlimited, default: 0). Applied when summary_only=false.")] int maxBodyLength = 0)
     {
         var messages = messageRepo.GetByThreadId(threadId);
 
-        var mapped = messages.Select(m => summaryOnly
-            ? (object)new
+        var mapped = messages.Select(m =>
+        {
+            if (summaryOnly)
             {
-                uid = m.Uid,
-                subject = m.Subject,
-                from = m.FromAddress,
-                date = m.Date,
-                snippet = m.Snippet
+                return (object)new
+                {
+                    uid = m.Uid,
+                    subject = m.Subject,
+                    from = m.FromAddress,
+                    date = m.Date,
+                    snippet = m.Snippet
+                };
             }
-            : (object)new
+
+            var body = m.BodyText;
+            if (maxBodyLength > 0 && body != null && body.Length > maxBodyLength)
+                body = body[..maxBodyLength] + "... [truncated]";
+
+            return (object)new
             {
                 uid = m.Uid,
                 subject = m.Subject,
                 from = m.FromAddress,
                 to = m.ToAddresses,
                 date = m.Date,
-                body = m.BodyText,
+                body,
                 body_fetched = m.BodyFetched,
                 snippet = m.Snippet
-            }).ToList();
+            };
+        }).ToList();
 
         return JsonSerializer.Serialize(new
         {

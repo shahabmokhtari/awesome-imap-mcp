@@ -13,7 +13,16 @@ public class AccountTools(AccountRepository accountRepo)
     [McpServerTool, Description("List all configured email accounts and their status.")]
     public string ListAccounts()
     {
-        var accounts = accountRepo.GetAll();
+        var accounts = accountRepo.GetAll()
+            .Select(a => new
+            {
+                id = a.Id,
+                name = a.Name,
+                imap_host = a.ImapHost,
+                username = a.Username,
+                provider = a.Provider
+            })
+            .ToList();
         return JsonSerializer.Serialize(accounts, JsonOptions);
     }
 
@@ -24,6 +33,16 @@ public class AccountTools(AccountRepository accountRepo)
         if (account is null)
             return JsonSerializer.Serialize(new { error = $"Account '{accountId}' not found." }, JsonOptions);
 
-        return JsonSerializer.Serialize(account, JsonOptions);
+        return JsonSerializer.Serialize(new
+        {
+            id = account.Id,
+            name = account.Name,
+            imap_host = account.ImapHost,
+            imap_port = account.ImapPort,
+            username = account.Username,
+            provider = account.Provider,
+            auth_type = account.AuthType,
+            created_at = account.CreatedAt
+        }, JsonOptions);
     }
 }
