@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using MimeKit;
 using UltimateImapMcp.Core.Configuration;
 using UltimateImapMcp.ImapClient;
@@ -6,7 +7,7 @@ using UltimateImapMcp.Queue.Models;
 
 namespace UltimateImapMcp.Queue.Executors;
 
-public class SendExecutor(AppConfig config) : IOperationExecutor
+public class SendExecutor(AppConfig config, ILogger<SendExecutor> logger) : IOperationExecutor
 {
     public IReadOnlyList<string> SupportedOperations { get; } = ["send", "reply", "forward"];
 
@@ -36,7 +37,7 @@ public class SendExecutor(AppConfig config) : IOperationExecutor
             foreach (var r in refs.GetString()!.Split(' ', StringSplitOptions.RemoveEmptyEntries))
                 message.References.Add(r);
 
-        using var smtp = new SmtpConnectionManager(accountConfig);
+        using var smtp = new SmtpConnectionManager(accountConfig, logger);
         await smtp.SendAsync(message, ct);
     }
 }
