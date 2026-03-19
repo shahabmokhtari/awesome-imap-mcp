@@ -116,11 +116,22 @@ if (config.Server.DashboardEnabled)
     builder.Services.AddDashboard(config);
 }
 
-builder.Services.AddMcpServer(options =>
+var transport = config.Server.Transport;
+
+if (transport is "stdio" or "both")
 {
-    options.ServerInfo = new() { Name = "ultimate-imap-mcp", Version = "0.1.0" };
-})
-.WithStdioServerTransport()
-.WithToolsFromAssembly();
+    builder.Services.AddMcpServer(options =>
+    {
+        options.ServerInfo = new() { Name = "ultimate-imap-mcp", Version = "0.1.0" };
+    })
+    .WithStdioServerTransport()
+    .WithToolsFromAssembly();
+}
+
+if (transport is "http" or "both")
+{
+    builder.Services.AddSingleton<UltimateImapMcp.McpServer.HttpMcpTransportHost>();
+    builder.Services.AddHostedService(sp => sp.GetRequiredService<UltimateImapMcp.McpServer.HttpMcpTransportHost>());
+}
 
 await builder.Build().RunAsync();
