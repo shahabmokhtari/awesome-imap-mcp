@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/UltimateImapMcp.Core/UltimateImapMcp.Core.csproj" />
+    <Project Path="src/UltimateImapMcp.Dashboard/UltimateImapMcp.Dashboard.csproj" />
     <Project Path="src/UltimateImapMcp.ImapClient/UltimateImapMcp.ImapClient.csproj" />
     <Project Path="src/UltimateImapMcp.McpServer/UltimateImapMcp.McpServer.csproj" />
     <Project Path="src/UltimateImapMcp.Queue/UltimateImapMcp.Queue.csproj" />
