@@ -1,0 +1,19 @@
+services:
+  app:
+    build: .
+    volumes:
+      - ./config.json:/app/config.json
+      - imap-cache:/data
+    ports:
+      - "3847:3847"
+    environment:
+      - UIMAP_CONFIG_PATH=/app/config.json
+
+  dovecot:
+    image: dovecot/dovecot:latest
+    ports:
+      - "1143:143"
+      - "1993:993"
+
+volumes:
+  imap-cache:
