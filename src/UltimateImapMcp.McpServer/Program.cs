@@ -7,6 +7,8 @@ using UltimateImapMcp.Core.Database;
 using UltimateImapMcp.Core.Encryption;
 using UltimateImapMcp.Core.Providers;
 using UltimateImapMcp.ImapClient.Repositories;
+using UltimateImapMcp.Queue;
+using UltimateImapMcp.Queue.Executors;
 
 var builder = Host.CreateApplicationBuilder(args);
 builder.Logging.AddConsole(options =>
@@ -37,6 +39,16 @@ builder.Services.AddSingleton<AccountRepository>();
 builder.Services.AddSingleton<FolderRepository>();
 builder.Services.AddSingleton<MessageRepository>();
 builder.Services.AddSingleton<AttachmentRepository>();
+
+// Queue
+builder.Services.AddSingleton<QueueRepository>();
+builder.Services.AddSingleton<QueueManager>();
+builder.Services.AddSingleton(config.Queue);
+builder.Services.AddSingleton<IOperationExecutor, SendExecutor>();
+builder.Services.AddSingleton<IOperationExecutor, DeleteExecutor>();
+builder.Services.AddSingleton<IOperationExecutor, MoveExecutor>();
+builder.Services.AddSingleton<IOperationExecutor, FlagExecutor>();
+builder.Services.AddHostedService<QueueWorker>();
 
 builder.Services.AddMcpServer(options =>
 {
