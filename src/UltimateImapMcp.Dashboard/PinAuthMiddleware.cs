@@ -74,10 +74,13 @@ public static class PinAuthMiddleware
 
             var authRepo = ctx.RequestServices.GetRequiredService<DashboardAuthRepository>();
 
-            // If no PIN set yet, allow all API access (first-run experience)
+            // If no PIN set yet, block all API access except auth endpoints
             if (!authRepo.HasPinSet())
             {
-                await next().ConfigureAwait(false);
+                ctx.Response.StatusCode = 403;
+                ctx.Response.ContentType = "application/json";
+                await ctx.Response.WriteAsync(
+                    JsonSerializer.Serialize(new { Error = "Dashboard not configured. Set a PIN via /api/auth/setup first." })).ConfigureAwait(false);
                 return;
             }
 

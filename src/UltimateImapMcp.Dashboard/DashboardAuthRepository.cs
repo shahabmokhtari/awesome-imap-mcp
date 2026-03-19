@@ -22,17 +22,19 @@ public class DashboardAuthRepository(AppDatabase db)
 
     public void UpsertPin(string bcryptHash)
     {
-        var conn = db.GetWriteConnection();
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            INSERT INTO dashboard_auth (auth_type, hash)
-            SELECT 'pin', $hash
-            WHERE NOT EXISTS (SELECT 1 FROM dashboard_auth WHERE auth_type = 'pin');
-            UPDATE dashboard_auth SET hash = $hash, updated_at = datetime('now')
-            WHERE auth_type = 'pin';
-            """;
-        cmd.Parameters.AddWithValue("$hash", bcryptHash);
-        cmd.ExecuteNonQuery();
+        db.ExecuteWrite(conn =>
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                INSERT INTO dashboard_auth (auth_type, hash)
+                SELECT 'pin', $hash
+                WHERE NOT EXISTS (SELECT 1 FROM dashboard_auth WHERE auth_type = 'pin');
+                UPDATE dashboard_auth SET hash = $hash, updated_at = datetime('now')
+                WHERE auth_type = 'pin';
+                """;
+            cmd.Parameters.AddWithValue("$hash", bcryptHash);
+            cmd.ExecuteNonQuery();
+        });
     }
 
     public bool HasPinSet()
@@ -48,15 +50,17 @@ public class DashboardAuthRepository(AppDatabase db)
             + Convert.ToBase64String(Guid.NewGuid().ToByteArray());
         var expiresAt = DateTime.UtcNow.Add(expiry).ToString("O");
 
-        var conn = db.GetWriteConnection();
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            INSERT INTO dashboard_sessions (token, expires_at)
-            VALUES ($token, $expiresAt);
-            """;
-        cmd.Parameters.AddWithValue("$token", token);
-        cmd.Parameters.AddWithValue("$expiresAt", expiresAt);
-        cmd.ExecuteNonQuery();
+        db.ExecuteWrite(conn =>
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                INSERT INTO dashboard_sessions (token, expires_at)
+                VALUES ($token, $expiresAt);
+                """;
+            cmd.Parameters.AddWithValue("$token", token);
+            cmd.Parameters.AddWithValue("$expiresAt", expiresAt);
+            cmd.ExecuteNonQuery();
+        });
 
         return token;
     }
@@ -75,10 +79,12 @@ public class DashboardAuthRepository(AppDatabase db)
 
     public void CleanExpiredSessions()
     {
-        var conn = db.GetWriteConnection();
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = "DELETE FROM dashboard_sessions WHERE expires_at <= datetime('now');";
-        cmd.ExecuteNonQuery();
+        db.ExecuteWrite(conn =>
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "DELETE FROM dashboard_sessions WHERE expires_at <= datetime('now');";
+            cmd.ExecuteNonQuery();
+        });
     }
 
     private static DashboardAuthRecord ReadAuth(Microsoft.Data.Sqlite.SqliteDataReader r) => new(

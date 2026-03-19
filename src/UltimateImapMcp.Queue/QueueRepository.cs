@@ -8,23 +8,25 @@ public class QueueRepository(AppDatabase db)
     public string Insert(EnqueueRequest request)
     {
         var id = Guid.NewGuid().ToString();
-        var conn = db.GetWriteConnection();
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            INSERT INTO operation_queue (id, account_id, operation, priority, status, payload,
-                requires_confirm, max_retries, sends_at)
-            VALUES ($id, $accountId, $op, $priority, 'pending', $payload,
-                $requiresConfirm, $maxRetries, $sendsAt);
-            """;
-        cmd.Parameters.AddWithValue("$id", id);
-        cmd.Parameters.AddWithValue("$accountId", request.AccountId);
-        cmd.Parameters.AddWithValue("$op", request.Operation.ToString().ToLowerInvariant());
-        cmd.Parameters.AddWithValue("$priority", (int)request.Priority);
-        cmd.Parameters.AddWithValue("$payload", request.Payload);
-        cmd.Parameters.AddWithValue("$requiresConfirm", request.RequiresConfirm ? 1 : 0);
-        cmd.Parameters.AddWithValue("$maxRetries", request.MaxRetries);
-        cmd.Parameters.AddWithValue("$sendsAt", (object?)request.SendsAt ?? DBNull.Value);
-        cmd.ExecuteNonQuery();
+        db.ExecuteWrite(conn =>
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                INSERT INTO operation_queue (id, account_id, operation, priority, status, payload,
+                    requires_confirm, max_retries, sends_at)
+                VALUES ($id, $accountId, $op, $priority, 'pending', $payload,
+                    $requiresConfirm, $maxRetries, $sendsAt);
+                """;
+            cmd.Parameters.AddWithValue("$id", id);
+            cmd.Parameters.AddWithValue("$accountId", request.AccountId);
+            cmd.Parameters.AddWithValue("$op", request.Operation.ToString().ToLowerInvariant());
+            cmd.Parameters.AddWithValue("$priority", (int)request.Priority);
+            cmd.Parameters.AddWithValue("$payload", request.Payload);
+            cmd.Parameters.AddWithValue("$requiresConfirm", request.RequiresConfirm ? 1 : 0);
+            cmd.Parameters.AddWithValue("$maxRetries", request.MaxRetries);
+            cmd.Parameters.AddWithValue("$sendsAt", (object?)request.SendsAt ?? DBNull.Value);
+            cmd.ExecuteNonQuery();
+        });
         return id;
     }
 
@@ -101,20 +103,38 @@ public class QueueRepository(AppDatabase db)
 
     public void UpdateStatus(string id, string status)
     {
-        var conn = db.GetWriteConnection();
-        using var cmd = conn.CreateCommand();
-        var timeCol = status switch
+        db.ExecuteWrite(conn =>
         {
-            "confirmed" => ", confirmed_at = datetime('now')",
-            "processing" => ", started_at = datetime('now')",
-            "completed" => ", completed_at = datetime('now')",
-            "cancelled" => ", cancelled_at = datetime('now')",
-            _ => ""
-        };
-        cmd.CommandText = $"UPDATE operation_queue SET status = $status{timeCol} WHERE id = $id;";
-        cmd.Parameters.AddWithValue("$id", id);
-        cmd.Parameters.AddWithValue("$status", status);
-        cmd.ExecuteNonQuery();
+            using var cmd = conn.CreateCommand();
+            var timeCol = status switch
+            {
+                "confirmed" => ", confirmed_at = datetime('now')",
+                "processing" => ", started_at = datetime('now')",
+                "completed" => ", completed_at = datetime('now')",
+                "cancelled" => ", cancelled_at = datetime('now')",
+                _ => ""
+            };
+            cmd.CommandText = $"UPDATE operation_queue SET status = $status{timeCol} WHERE id = $id;";
+            cmd.Parameters.AddWithValue("$id", id);
+            cmd.Parameters.AddWithValue("$status", status);
+            cmd.ExecuteNonQuery();
+        });
+    }
+
+    /// <summary>
+    /// Atomically claims a confirmed operation for processing.
+    /// Returns true only if the row was actually updated (i.e., it was still in 'confirmed' status).
+    /// Prevents double-execution race conditions.
+    /// </summary>
+    public bool TryClaimForProcessing(string id)
+    {
+        return db.ExecuteWrite(conn =>
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "UPDATE operation_queue SET status = 'processing', started_at = datetime('now') WHERE id = $id AND status = 'confirmed';";
+            cmd.Parameters.AddWithValue("$id", id);
+            return cmd.ExecuteNonQuery() == 1;
+        });
     }
 
     public bool Cancel(string id)
@@ -128,27 +148,31 @@ public class QueueRepository(AppDatabase db)
 
     public void MarkFailed(string id, string errorMessage, bool incrementRetry = false)
     {
-        var conn = db.GetWriteConnection();
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = incrementRetry
-            ? "UPDATE operation_queue SET status = 'failed', error_message = $error, retry_count = retry_count + 1 WHERE id = $id;"
-            : "UPDATE operation_queue SET status = 'failed', error_message = $error WHERE id = $id;";
-        cmd.Parameters.AddWithValue("$id", id);
-        cmd.Parameters.AddWithValue("$error", errorMessage);
-        cmd.ExecuteNonQuery();
+        db.ExecuteWrite(conn =>
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = incrementRetry
+                ? "UPDATE operation_queue SET status = 'failed', error_message = $error, retry_count = retry_count + 1 WHERE id = $id;"
+                : "UPDATE operation_queue SET status = 'failed', error_message = $error WHERE id = $id;";
+            cmd.Parameters.AddWithValue("$id", id);
+            cmd.Parameters.AddWithValue("$error", errorMessage);
+            cmd.ExecuteNonQuery();
+        });
     }
 
     public void MarkRetryable(string id, string errorMessage)
     {
-        var conn = db.GetWriteConnection();
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            UPDATE operation_queue SET status = 'confirmed', error_message = $error, retry_count = retry_count + 1
-            WHERE id = $id;
-            """;
-        cmd.Parameters.AddWithValue("$id", id);
-        cmd.Parameters.AddWithValue("$error", errorMessage);
-        cmd.ExecuteNonQuery();
+        db.ExecuteWrite(conn =>
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                UPDATE operation_queue SET status = 'confirmed', error_message = $error, retry_count = retry_count + 1
+                WHERE id = $id;
+                """;
+            cmd.Parameters.AddWithValue("$id", id);
+            cmd.Parameters.AddWithValue("$error", errorMessage);
+            cmd.ExecuteNonQuery();
+        });
     }
 
     private static QueuedOperation ReadRecord(Microsoft.Data.Sqlite.SqliteDataReader r) => new()

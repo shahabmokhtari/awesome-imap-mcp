@@ -14,17 +14,19 @@ public class SyncLogRepository(AppDatabase db)
     /// </summary>
     public int LogStart(string accountId, int? folderId, string syncType)
     {
-        var conn = db.GetWriteConnection();
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            INSERT INTO sync_log (account_id, folder_id, sync_type, status)
-            VALUES ($accountId, $folderId, $syncType, 'started');
-            SELECT last_insert_rowid();
-            """;
-        cmd.Parameters.AddWithValue("$accountId", accountId);
-        cmd.Parameters.AddWithValue("$folderId", (object?)folderId ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("$syncType", syncType);
-        return Convert.ToInt32(cmd.ExecuteScalar());
+        return db.ExecuteWrite(conn =>
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                INSERT INTO sync_log (account_id, folder_id, sync_type, status)
+                VALUES ($accountId, $folderId, $syncType, 'started');
+                SELECT last_insert_rowid();
+                """;
+            cmd.Parameters.AddWithValue("$accountId", accountId);
+            cmd.Parameters.AddWithValue("$folderId", (object?)folderId ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$syncType", syncType);
+            return Convert.ToInt32(cmd.ExecuteScalar());
+        });
     }
 
     /// <summary>
@@ -32,20 +34,22 @@ public class SyncLogRepository(AppDatabase db)
     /// </summary>
     public void LogComplete(int id, int messagesSynced, long durationMs)
     {
-        var conn = db.GetWriteConnection();
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            UPDATE sync_log
-            SET status = 'completed',
-                messages_synced = $messagesSynced,
-                completed_at = datetime('now'),
-                duration_ms = $durationMs
-            WHERE id = $id;
-            """;
-        cmd.Parameters.AddWithValue("$id", id);
-        cmd.Parameters.AddWithValue("$messagesSynced", messagesSynced);
-        cmd.Parameters.AddWithValue("$durationMs", durationMs);
-        cmd.ExecuteNonQuery();
+        db.ExecuteWrite(conn =>
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                UPDATE sync_log
+                SET status = 'completed',
+                    messages_synced = $messagesSynced,
+                    completed_at = datetime('now'),
+                    duration_ms = $durationMs
+                WHERE id = $id;
+                """;
+            cmd.Parameters.AddWithValue("$id", id);
+            cmd.Parameters.AddWithValue("$messagesSynced", messagesSynced);
+            cmd.Parameters.AddWithValue("$durationMs", durationMs);
+            cmd.ExecuteNonQuery();
+        });
     }
 
     /// <summary>
@@ -53,20 +57,22 @@ public class SyncLogRepository(AppDatabase db)
     /// </summary>
     public void LogError(int id, string errorMessage, long durationMs)
     {
-        var conn = db.GetWriteConnection();
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            UPDATE sync_log
-            SET status = 'failed',
-                error_message = $errorMessage,
-                completed_at = datetime('now'),
-                duration_ms = $durationMs
-            WHERE id = $id;
-            """;
-        cmd.Parameters.AddWithValue("$id", id);
-        cmd.Parameters.AddWithValue("$errorMessage", errorMessage);
-        cmd.Parameters.AddWithValue("$durationMs", durationMs);
-        cmd.ExecuteNonQuery();
+        db.ExecuteWrite(conn =>
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                UPDATE sync_log
+                SET status = 'failed',
+                    error_message = $errorMessage,
+                    completed_at = datetime('now'),
+                    duration_ms = $durationMs
+                WHERE id = $id;
+                """;
+            cmd.Parameters.AddWithValue("$id", id);
+            cmd.Parameters.AddWithValue("$errorMessage", errorMessage);
+            cmd.Parameters.AddWithValue("$durationMs", durationMs);
+            cmd.ExecuteNonQuery();
+        });
     }
 
     /// <summary>

@@ -15,16 +15,18 @@ public class MetricsRepository(AppDatabase db)
     /// </summary>
     public void Record(string name, double value, string? tags = null)
     {
-        var conn = db.GetWriteConnection();
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            INSERT INTO metrics (name, value, tags)
-            VALUES ($name, $value, $tags);
-            """;
-        cmd.Parameters.AddWithValue("$name", name);
-        cmd.Parameters.AddWithValue("$value", value);
-        cmd.Parameters.AddWithValue("$tags", (object?)tags ?? DBNull.Value);
-        cmd.ExecuteNonQuery();
+        db.ExecuteWrite(conn =>
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                INSERT INTO metrics (name, value, tags)
+                VALUES ($name, $value, $tags);
+                """;
+            cmd.Parameters.AddWithValue("$name", name);
+            cmd.Parameters.AddWithValue("$value", value);
+            cmd.Parameters.AddWithValue("$tags", (object?)tags ?? DBNull.Value);
+            cmd.ExecuteNonQuery();
+        });
     }
 
     /// <summary>
@@ -110,13 +112,15 @@ public class MetricsRepository(AppDatabase db)
     /// </summary>
     public int Prune(int retentionDays)
     {
-        var conn = db.GetWriteConnection();
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            DELETE FROM metrics
-            WHERE recorded_at < datetime('now', $days);
-            """;
-        cmd.Parameters.AddWithValue("$days", $"-{retentionDays} days");
-        return cmd.ExecuteNonQuery();
+        return db.ExecuteWrite(conn =>
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                DELETE FROM metrics
+                WHERE recorded_at < datetime('now', $days);
+                """;
+            cmd.Parameters.AddWithValue("$days", $"-{retentionDays} days");
+            return cmd.ExecuteNonQuery();
+        });
     }
 }

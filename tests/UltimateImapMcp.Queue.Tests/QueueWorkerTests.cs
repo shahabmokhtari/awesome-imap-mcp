@@ -51,7 +51,7 @@ public class QueueWorkerTests : IDisposable
         var ops = _repo.GetByAccount("test");
         _repo.UpdateStatus(ops[0].Id, "confirmed");
 
-        await QueueWorker.FlushPriorityAsync(_repo, executors, 1, CancellationToken.None);
+        await QueueWorker.FlushPriorityAsync(_repo, executors, 1, null, CancellationToken.None);
 
         Assert.Equal(1, executor.ExecuteCount);
         var op = _repo.GetById(ops[0].Id);
@@ -68,7 +68,7 @@ public class QueueWorkerTests : IDisposable
         var ops = _repo.GetByAccount("test");
         _repo.UpdateStatus(ops[0].Id, "confirmed");
 
-        await QueueWorker.FlushPriorityAsync(_repo, executors, 1, CancellationToken.None);
+        await QueueWorker.FlushPriorityAsync(_repo, executors, 1, null, CancellationToken.None);
 
         var op = _repo.GetById(ops[0].Id);
         Assert.Equal("confirmed", op!.Status);  // still confirmed for retry
@@ -86,7 +86,7 @@ public class QueueWorkerTests : IDisposable
         // Simulate already at max retries
         _repo.MarkRetryable(id, "previous error");  // retry_count = 1, but max is 1
 
-        await QueueWorker.FlushPriorityAsync(_repo, executors, 1, CancellationToken.None);
+        await QueueWorker.FlushPriorityAsync(_repo, executors, 1, null, CancellationToken.None);
 
         var op = _repo.GetById(id);
         Assert.Equal("failed", op!.Status);

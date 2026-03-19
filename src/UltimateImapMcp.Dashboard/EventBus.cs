@@ -43,9 +43,9 @@ public sealed class EventBus : IEventBus
             {
                 ((Action<T>)handler)(@event);
             }
-            catch
+            catch (Exception ex)
             {
-                // Best-effort delivery — don't let one subscriber break others
+                Console.Error.WriteLine($"[EventBus] Subscriber failed for {typeof(T).Name}: {ex.Message}");
             }
         }
     }

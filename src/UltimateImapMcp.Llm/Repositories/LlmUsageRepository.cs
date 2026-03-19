@@ -23,23 +23,25 @@ public class LlmUsageRepository(AppDatabase db)
     /// </summary>
     public void RecordUsage(string date, string model, int tokensInput, int tokensOutput, double costUsd)
     {
-        var conn = db.GetWriteConnection();
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            INSERT INTO llm_usage (date, model, tokens_input, tokens_output, cost_usd, request_count)
-            VALUES ($date, $model, $tokensInput, $tokensOutput, $costUsd, 1)
-            ON CONFLICT(date, model) DO UPDATE SET
-                tokens_input = tokens_input + $tokensInput,
-                tokens_output = tokens_output + $tokensOutput,
-                cost_usd = cost_usd + $costUsd,
-                request_count = request_count + 1;
-            """;
-        cmd.Parameters.AddWithValue("$date", date);
-        cmd.Parameters.AddWithValue("$model", model);
-        cmd.Parameters.AddWithValue("$tokensInput", tokensInput);
-        cmd.Parameters.AddWithValue("$tokensOutput", tokensOutput);
-        cmd.Parameters.AddWithValue("$costUsd", costUsd);
-        cmd.ExecuteNonQuery();
+        db.ExecuteWrite(conn =>
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                INSERT INTO llm_usage (date, model, tokens_input, tokens_output, cost_usd, request_count)
+                VALUES ($date, $model, $tokensInput, $tokensOutput, $costUsd, 1)
+                ON CONFLICT(date, model) DO UPDATE SET
+                    tokens_input = tokens_input + $tokensInput,
+                    tokens_output = tokens_output + $tokensOutput,
+                    cost_usd = cost_usd + $costUsd,
+                    request_count = request_count + 1;
+                """;
+            cmd.Parameters.AddWithValue("$date", date);
+            cmd.Parameters.AddWithValue("$model", model);
+            cmd.Parameters.AddWithValue("$tokensInput", tokensInput);
+            cmd.Parameters.AddWithValue("$tokensOutput", tokensOutput);
+            cmd.Parameters.AddWithValue("$costUsd", costUsd);
+            cmd.ExecuteNonQuery();
+        });
     }
 
     /// <summary>
