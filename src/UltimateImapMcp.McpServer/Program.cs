@@ -9,6 +9,9 @@ using UltimateImapMcp.Core.Providers;
 using UltimateImapMcp.ImapClient;
 using UltimateImapMcp.ImapClient.Repositories;
 using UltimateImapMcp.Dashboard;
+using UltimateImapMcp.Llm;
+using UltimateImapMcp.Llm.Acp;
+using UltimateImapMcp.Llm.Repositories;
 using UltimateImapMcp.Queue;
 using UltimateImapMcp.Queue.Executors;
 
@@ -59,6 +62,40 @@ builder.Services.AddSingleton<IOperationExecutor, DeleteExecutor>();
 builder.Services.AddSingleton<IOperationExecutor, MoveExecutor>();
 builder.Services.AddSingleton<IOperationExecutor, FlagExecutor>();
 builder.Services.AddHostedService<QueueWorker>();
+
+// LLM Analysis
+builder.Services.AddSingleton(config.Llm);
+builder.Services.AddSingleton<LlmUsageRepository>();
+builder.Services.AddSingleton<LlmAnalysisRepository>();
+builder.Services.AddSingleton<BudgetTracker>();
+
+// Register IEmailAnalyzer based on config
+builder.Services.AddSingleton<IEmailAnalyzer>(sp =>
+{
+    var llmConfig = sp.GetRequiredService<LlmConfig>();
+    var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
+
+    return llmConfig.Provider.ToLowerInvariant() switch
+    {
+        "anthropic" or "openai" when llmConfig.Enabled =>
+            new ApiEmailAnalyzer(
+                ChatClientFactory.Create(llmConfig),
+                llmConfig.Model,
+                loggerFactory.CreateLogger<ApiEmailAnalyzer>()),
+
+        "acp_claude" or "acp_copilot" when llmConfig.Enabled =>
+            new AcpEmailAnalyzer(
+                new AcpClient(
+                    llmConfig.Acp.Command,
+                    llmConfig.Acp.Args.ToArray(),
+                    loggerFactory.CreateLogger<AcpClient>()),
+                loggerFactory.CreateLogger<AcpEmailAnalyzer>()),
+
+        "in_context" => new InContextAnalyzer(),
+
+        _ => new InContextAnalyzer()
+    };
+});
 
 // Dashboard (conditional)
 if (config.Server.DashboardEnabled)
