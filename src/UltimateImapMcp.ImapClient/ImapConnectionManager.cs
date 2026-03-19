@@ -1,4 +1,8 @@
+using System.Net.Sockets;
+using MailKit.Net.Imap;
 using MailKit.Security;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using UltimateImapMcp.Core.Configuration;
 using UltimateImapMcp.Core.Encryption;
 using ImapClientLib = MailKit.Net.Imap.ImapClient;
@@ -7,17 +11,25 @@ namespace UltimateImapMcp.ImapClient;
 
 /// <summary>
 /// Manages a single authenticated IMAP connection for an account.
-/// Phase 1: one connection per manager. Pooling + backoff deferred to Phase 3.
+/// Includes reconnection with exponential backoff on transient failures.
 /// </summary>
 public sealed class ImapConnectionManager : IDisposable
 {
     private readonly AccountConfig _config;
     private readonly CredentialEncryptor _encryptor;
+    private readonly ILogger _logger;
     private readonly SemaphoreSlim _semaphore = new(1, 1);
     private ImapClientLib? _client;
     private bool _disposed;
 
-    public ImapConnectionManager(AccountConfig config, CredentialEncryptor encryptor)
+    /// <summary>Maximum number of reconnection attempts before giving up.</summary>
+    public int MaxRetries { get; set; } = 5;
+
+    /// <summary>Maximum backoff delay between retries.</summary>
+    public TimeSpan MaxBackoff { get; set; } = TimeSpan.FromSeconds(60);
+
+    public ImapConnectionManager(AccountConfig config, CredentialEncryptor encryptor,
+        ILogger<ImapConnectionManager>? logger = null)
     {
         ArgumentNullException.ThrowIfNull(config);
         ArgumentNullException.ThrowIfNull(encryptor);
@@ -29,11 +41,13 @@ public sealed class ImapConnectionManager : IDisposable
         // credentials_enc column from the database — will be wired up in Phase 4
         // when the Dashboard's account-management UI is implemented.
         _encryptor = encryptor;
+        _logger = logger ?? NullLogger<ImapConnectionManager>.Instance;
     }
 
     /// <summary>
     /// Returns an authenticated ImapClient, creating or reconnecting as needed.
     /// Thread-safe: serialised through a semaphore.
+    /// Retries with exponential backoff (1s, 2s, 4s, 8s, ...) on transient failures.
     /// </summary>
     public async Task<ImapClientLib> GetConnectedClientAsync(CancellationToken ct = default)
     {
@@ -53,22 +67,69 @@ public sealed class ImapConnectionManager : IDisposable
                 _client = null;
             }
 
-            var client = new ImapClientLib();
+            // Retry loop with exponential backoff.
+            var delaySeconds = 1;
+            for (var attempt = 1; attempt <= MaxRetries; attempt++)
+            {
+                try
+                {
+                    var client = new ImapClientLib();
 
-            await client.ConnectAsync(
+                    await client.ConnectAsync(
+                        _config.ImapHost,
+                        _config.ImapPort,
+                        SecureSocketOptions.SslOnConnect,
+                        ct).ConfigureAwait(false);
+
+                    var password = _config.Password ?? string.Empty;
+
+                    await client.AuthenticateAsync(
+                        _config.Username,
+                        password,
+                        ct).ConfigureAwait(false);
+
+                    if (attempt > 1)
+                    {
+                        _logger.LogInformation(
+                            "Reconnected to {Host}:{Port} for {Account} on attempt {Attempt}",
+                            _config.ImapHost, _config.ImapPort, _config.Username, attempt);
+                    }
+
+                    _client = client;
+                    return _client;
+                }
+                catch (Exception ex) when (
+                    ex is ImapProtocolException or IOException or SocketException
+                    && attempt < MaxRetries)
+                {
+                    var delay = TimeSpan.FromSeconds(Math.Min(delaySeconds, MaxBackoff.TotalSeconds));
+                    _logger.LogWarning(
+                        "Connection attempt {Attempt}/{MaxRetries} to {Host}:{Port} failed ({Error}). Retrying in {Delay}s...",
+                        attempt, MaxRetries, _config.ImapHost, _config.ImapPort,
+                        ex.GetType().Name + ": " + ex.Message, delay.TotalSeconds);
+
+                    await Task.Delay(delay, ct).ConfigureAwait(false);
+                    delaySeconds *= 2;
+                }
+            }
+
+            // Final attempt — let exception propagate.
+            var finalClient = new ImapClientLib();
+
+            await finalClient.ConnectAsync(
                 _config.ImapHost,
                 _config.ImapPort,
                 SecureSocketOptions.SslOnConnect,
                 ct).ConfigureAwait(false);
 
-            var password = _config.Password ?? string.Empty;
+            var finalPassword = _config.Password ?? string.Empty;
 
-            await client.AuthenticateAsync(
+            await finalClient.AuthenticateAsync(
                 _config.Username,
-                password,
+                finalPassword,
                 ct).ConfigureAwait(false);
 
-            _client = client;
+            _client = finalClient;
             return _client;
         }
         finally
