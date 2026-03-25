@@ -85,8 +85,8 @@ export function useLogs(params: { levels?: string; search?: string; page?: numbe
   const qs = new URLSearchParams()
   if (params.levels) qs.set('level', params.levels)
   if (params.search) qs.set('search', params.search)
-  if (params.page) qs.set('page', String(params.page))
-  if (params.page_size) qs.set('page_size', String(params.page_size))
+  if (params.page != null) qs.set('page', String(params.page))
+  if (params.page_size != null) qs.set('page_size', String(params.page_size))
   if (params.scope) qs.set('scope', params.scope)
   if (params.instance_id) qs.set('instance_id', params.instance_id)
   return useQuery({
@@ -384,7 +384,7 @@ export function useTools() {
 export function useExecuteTool() {
   return useMutation({
     mutationFn: (params: { name: string; args: Record<string, unknown> }) =>
-      apiFetch<unknown>(`/api/tools/${params.name}/execute`, {
+      apiFetch<unknown>(`/api/tools/${encodeURIComponent(params.name)}/execute`, {
         method: 'POST',
         body: JSON.stringify(params.args),
       }),

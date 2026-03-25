@@ -205,13 +205,13 @@ builder.Services.AddSingleton<IEmailAnalyzer>(sp =>
 
 // Observability
 builder.Services.AddSingleton<MetricsRepository>();
-builder.Services.AddSingleton<LogsRepository>();
+var logsRepository = new LogsRepository(database);
+builder.Services.AddSingleton(logsRepository);
 builder.Services.AddSingleton(config.Metrics);
 builder.Services.AddHostedService<MetricsCollector>();
 
-// SQLite log sink — writes logs to DB for dashboard viewing
-builder.Logging.AddProvider(new SqliteLoggerProvider(
-    new LogsRepository(database), instanceId));
+// SQLite log sink — shares the same LogsRepository instance registered in DI
+builder.Logging.AddProvider(new SqliteLoggerProvider(logsRepository, instanceId));
 
 // File log sink — writes logs to files organized by scope
 {

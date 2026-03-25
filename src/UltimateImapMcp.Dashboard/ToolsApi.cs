@@ -57,7 +57,7 @@ public static class ToolsApi
 
             try
             {
-                var result = InvokeTool(tool, body, sp);
+                var result = await InvokeToolAsync(tool, body, sp).ConfigureAwait(false);
                 // The tool methods return JSON strings — parse and return as proper JSON
                 try
                 {
@@ -160,8 +160,9 @@ public static class ToolsApi
 
     /// <summary>
     /// Invokes a tool method by constructing the tool class via DI and calling the method.
+    /// Handles both sync and async (Task&lt;string&gt;) tool methods.
     /// </summary>
-    private static string InvokeTool(
+    private static async Task<string> InvokeToolAsync(
         ToolMetadata tool, Dictionary<string, JsonElement> body, IServiceProvider sp)
     {
         // Resolve constructor dependencies from DI to create the tool instance
@@ -177,34 +178,52 @@ public static class ToolsApi
             .ToArray();
 
         var instance = ctor.Invoke(ctorParams);
-
-        // Build method arguments from the request body
-        var methodParams = tool.Method.GetParameters();
-        var args = new object?[methodParams.Length];
-
-        for (var i = 0; i < methodParams.Length; i++)
+        try
         {
-            var param = methodParams[i];
-            var paramName = param.Name!;
+            // Build method arguments from the request body
+            var methodParams = tool.Method.GetParameters();
+            var args = new object?[methodParams.Length];
 
-            if (body.TryGetValue(paramName, out var jsonValue) &&
-                jsonValue.ValueKind != JsonValueKind.Null &&
-                jsonValue.ValueKind != JsonValueKind.Undefined)
+            for (var i = 0; i < methodParams.Length; i++)
             {
-                args[i] = DeserializeParam(jsonValue, param.ParameterType);
+                var param = methodParams[i];
+                var paramName = param.Name!;
+
+                if (body.TryGetValue(paramName, out var jsonValue) &&
+                    jsonValue.ValueKind != JsonValueKind.Null &&
+                    jsonValue.ValueKind != JsonValueKind.Undefined)
+                {
+                    args[i] = DeserializeParam(jsonValue, param.ParameterType);
+                }
+                else if (param.HasDefaultValue)
+                {
+                    args[i] = param.DefaultValue;
+                }
+                else
+                {
+                    throw new ArgumentException($"Required parameter '{paramName}' is missing.");
+                }
             }
-            else if (param.HasDefaultValue)
+
+            var result = tool.Method.Invoke(instance, args);
+
+            // Handle async methods (Task<T>)
+            if (result is Task task)
             {
-                args[i] = param.DefaultValue;
+                await task.ConfigureAwait(false);
+                var resultProp = task.GetType().GetProperty("Result");
+                return resultProp?.GetValue(task)?.ToString() ?? "null";
             }
-            else
-            {
-                throw new ArgumentException($"Required parameter '{paramName}' is missing.");
-            }
+
+            return result?.ToString() ?? "null";
         }
-
-        var result = tool.Method.Invoke(instance, args);
-        return result?.ToString() ?? "null";
+        finally
+        {
+            if (instance is IAsyncDisposable asyncDisposable)
+                await asyncDisposable.DisposeAsync().ConfigureAwait(false);
+            else
+                (instance as IDisposable)?.Dispose();
+        }
     }
 
     private static object? DeserializeParam(JsonElement element, Type targetType)
@@ -224,14 +243,22 @@ public static class ToolsApi
 
     private static string ToSnakeCase(string name)
     {
-        // PascalCase -> snake_case: "ListEmails" -> "list_emails"
+        // PascalCase -> snake_case: "ListEmails" -> "list_emails", "GetHTTPStatus" -> "get_http_status"
         var chars = new List<char>();
         for (var i = 0; i < name.Length; i++)
         {
             var c = name[i];
             if (char.IsUpper(c))
             {
-                if (i > 0) chars.Add('_');
+                if (i > 0)
+                {
+                    var prevIsUpper = char.IsUpper(name[i - 1]);
+                    var nextIsLower = i + 1 < name.Length && char.IsLower(name[i + 1]);
+                    // Insert underscore before: a new word (prev is lowercase), or
+                    // the last letter of an acronym followed by a lowercase letter
+                    if (!prevIsUpper || nextIsLower)
+                        chars.Add('_');
+                }
                 chars.Add(char.ToLowerInvariant(c));
             }
             else

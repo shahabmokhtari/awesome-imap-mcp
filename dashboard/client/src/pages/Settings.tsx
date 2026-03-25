@@ -4,7 +4,7 @@ import { useSettings, useUpdateSettings, useAuthStatus, useChangePin, useSetupPi
 
 /** Fields that require a server restart when changed. */
 const RESTART_FIELDS = new Set([
-  'port', 'transport', 'host', 'listenAddress', 'dashboardPort',
+  'httpPort', 'transport', 'dashboardPort',
 ])
 
 /** Fields that should be skipped in the SectionCard (handled separately). */

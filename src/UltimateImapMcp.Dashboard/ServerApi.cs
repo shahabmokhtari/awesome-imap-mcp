@@ -65,8 +65,15 @@ public static class ServerApi
             // Schedule shutdown after delay so the HTTP response reaches the browser
             _ = Task.Run(async () =>
             {
-                await Task.Delay(TimeSpan.FromSeconds(delaySeconds)).ConfigureAwait(false);
-                rootLifetime.StopApplication();
+                try
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(delaySeconds)).ConfigureAwait(false);
+                    rootLifetime.StopApplication();
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Error during scheduled shutdown");
+                }
             });
 
             return Results.Ok(new

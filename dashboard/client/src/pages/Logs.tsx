@@ -101,7 +101,7 @@ function LogRow({ log, expanded, onToggle }: { log: LogEntry; expanded: boolean;
           {log.metadata && (
             <div>
               <span className="text-xs text-gray-500 font-medium">Metadata</span>
-              <pre className="mt-1 text-xs font-mono text-gray-700 bg-white/60 rounded p-2 whitespace-pre-wrap break-words border border-gray-200">
+              <pre className="mt-1 text-xs font-mono text-gray-700 bg-white/60 rounded p-2 whitespace-pre-wrap break-words border border-gray-200 max-h-64 overflow-auto">
                 {log.metadata}
               </pre>
             </div>

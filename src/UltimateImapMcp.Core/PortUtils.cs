@@ -9,8 +9,6 @@ namespace UltimateImapMcp.Core;
 /// </summary>
 public static class PortUtils
 {
-    private static readonly TimeSpan DefaultPollInterval = TimeSpan.FromSeconds(5);
-
     /// <summary>Returns true if a TCP listener is already bound to the given port on loopback.</summary>
     public static bool IsPortInUse(int port)
     {
@@ -25,36 +23,6 @@ public static class PortUtils
         {
             // Any bind failure (address in use, permission denied, etc.) means we can't use this port
             return true;
-        }
-    }
-
-    /// <summary>
-    /// Waits until the given port becomes available, polling at a fixed interval.
-    /// Returns immediately if the port is already free.
-    /// </summary>
-    public static async Task WaitForPortAsync(int port, ILogger logger, string serviceName,
-        CancellationToken cancellationToken, TimeSpan? pollInterval = null)
-    {
-        if (!IsPortInUse(port))
-            return;
-
-        var interval = pollInterval ?? DefaultPollInterval;
-        logger.LogWarning(
-            "{Service}: port {Port} is in use (another instance may be running). " +
-            "Running in standby — will take over when the port is released",
-            serviceName, port);
-
-        while (!cancellationToken.IsCancellationRequested)
-        {
-            await Task.Delay(interval, cancellationToken).ConfigureAwait(false);
-
-            if (!IsPortInUse(port))
-            {
-                logger.LogInformation(
-                    "{Service}: port {Port} is now available — taking over",
-                    serviceName, port);
-                return;
-            }
         }
     }
 
