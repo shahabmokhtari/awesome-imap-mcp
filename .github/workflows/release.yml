@@ -1,0 +1,128 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+        working-directory: dashboard/client
+      - run: npm run build
+        working-directory: dashboard/client
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dashboard-spa
+          path: src/UltimateImapMcp.Dashboard/wwwroot/
+
+  build-binaries:
+    needs: build-frontend
+    strategy:
+      matrix:
+        include:
+          - rid: linux-x64
+            os: ubuntu-latest
+            artifact: ultimate-imap-mcp-linux-x64
+          - rid: linux-arm64
+            os: ubuntu-latest
+            artifact: ultimate-imap-mcp-linux-arm64
+          - rid: osx-x64
+            os: macos-latest
+            artifact: ultimate-imap-mcp-osx-x64
+          - rid: osx-arm64
+            os: macos-latest
+            artifact: ultimate-imap-mcp-osx-arm64
+          - rid: win-x64
+            os: windows-latest
+            artifact: ultimate-imap-mcp-win-x64.exe
+          - rid: win-arm64
+            os: windows-latest
+            artifact: ultimate-imap-mcp-win-arm64.exe
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/download-artifact@v4
+        with:
+          name: dashboard-spa
+          path: src/UltimateImapMcp.Dashboard/wwwroot/
+      - name: Publish single-file binary
+        run: >
+          dotnet publish src/UltimateImapMcp.McpServer
+          -c Release
+          -r ${{ matrix.rid }}
+          -o publish/
+          -p:PublishSingleFile=true
+          -p:SelfContained=true
+          -p:IncludeAllContentForSelfExtract=true
+          -p:EnableCompressionInSingleFile=true
+          -p:DebugType=none
+          -p:DebugSymbols=false
+      - name: Rename binary
+        shell: bash
+        run: |
+          if [[ "${{ matrix.rid }}" == win-* ]]; then
+            mv publish/UltimateImapMcp.McpServer.exe "publish/${{ matrix.artifact }}"
+          else
+            mv publish/UltimateImapMcp.McpServer "publish/${{ matrix.artifact }}"
+            chmod +x "publish/${{ matrix.artifact }}"
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: publish/${{ matrix.artifact }}
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build-binaries
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+          merge-multiple: true
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: artifacts/*
+
+  # Always upload latest binaries as a snapshot (even without a tag)
+  snapshot:
+    if: github.ref == 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/')
+    needs: build-binaries
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+          merge-multiple: true
+      - name: Update snapshot release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: snapshot
+          name: Latest Build (snapshot)
+          prerelease: true
+          generate_release_notes: false
+          body: |
+            Automated build from the latest commit on `main`.
+            These binaries are updated on every push — not a stable release.
+
+            Download the binary for your platform and run it directly:
+            ```bash
+            chmod +x ultimate-imap-mcp-*
+            ./ultimate-imap-mcp-osx-arm64 --config ./config.json
+            ```
+          files: artifacts/*

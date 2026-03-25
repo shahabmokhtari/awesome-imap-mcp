@@ -1,5 +1,7 @@
 using UltimateImapMcp.Core.Configuration;
 using UltimateImapMcp.Core.Database;
+using UltimateImapMcp.Core.Encryption;
+using UltimateImapMcp.ImapClient.Repositories;
 using UltimateImapMcp.Queue;
 using UltimateImapMcp.Queue.Models;
 
@@ -9,6 +11,8 @@ public class QueueManagerTests : IDisposable
 {
     private readonly string _dbPath;
     private readonly AppDatabase _db;
+    private readonly AccountRepository _accountRepo;
+    private readonly CredentialEncryptor _encryptor;
     private readonly QueueManager _manager;
 
     public QueueManagerTests()
@@ -16,16 +20,18 @@ public class QueueManagerTests : IDisposable
         _dbPath = Path.Combine(Path.GetTempPath(), $"test_{Guid.NewGuid()}.db");
         _db = new AppDatabase(_dbPath);
         MigrationRunner.Migrate(_db);
+        _encryptor = new CredentialEncryptor("test-passphrase");
+
+        // Insert a test account with implicit confirm (default)
         var conn = _db.GetWriteConnection();
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = "INSERT INTO accounts (id, name, imap_host, username, auth_type, credentials_enc) VALUES ('test', 'Test', 'imap.test.com', 'u@test.com', 'password', 'enc');";
+        cmd.CommandText = "INSERT INTO accounts (id, name, imap_host, username, auth_type, credentials_enc) VALUES ('test', 'Test', 'imap.test.com', 'u@test.com', 'password', $cred);";
+        cmd.Parameters.AddWithValue("$cred", _encryptor.Encrypt("testpass"));
         cmd.ExecuteNonQuery();
+
         var repo = new QueueRepository(_db);
-        var config = new AppConfig
-        {
-            Accounts = [new AccountConfig { Name = "test", ImapHost = "imap.test.com", Username = "u@test.com", AuthType = "password", ConfirmMode = "implicit", UndoWindowSeconds = 10 }]
-        };
-        _manager = new QueueManager(repo, config);
+        _accountRepo = new AccountRepository(_db);
+        _manager = new QueueManager(repo, _accountRepo, _encryptor);
     }
 
     [Fact]
@@ -40,13 +46,17 @@ public class QueueManagerTests : IDisposable
     [Fact]
     public void EnqueueSend_ExplicitConfirm_NoSendsAt()
     {
-        var config = new AppConfig
-        {
-            Accounts = [new AccountConfig { Name = "test", ImapHost = "imap.test.com", Username = "u@test.com", AuthType = "password", ConfirmMode = "explicit" }]
-        };
-        var manager = new QueueManager(new QueueRepository(_db), config);
+        // Insert a second account with explicit confirm in config_json
+        var conn = _db.GetWriteConnection();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"INSERT OR IGNORE INTO accounts (id, name, imap_host, username, auth_type, credentials_enc, config_json)
+            VALUES ('explicit-acct', 'Explicit', 'imap.test.com', 'u@test.com', 'password', $cred, '{""confirm_mode"":""explicit""}');";
+        cmd.Parameters.AddWithValue("$cred", _encryptor.Encrypt("testpass"));
+        cmd.ExecuteNonQuery();
 
-        var result = manager.EnqueueSend("test", """{"to":"bob@test.com"}""");
+        var manager = new QueueManager(new QueueRepository(_db), _accountRepo, _encryptor);
+
+        var result = manager.EnqueueSend("explicit-acct", """{"to":"bob@test.com"}""");
         Assert.Equal("explicit", result.ConfirmMode);
         Assert.Null(result.SendsAt);
         Assert.Equal("pending", result.Status);
@@ -63,13 +73,17 @@ public class QueueManagerTests : IDisposable
     [Fact]
     public void Confirm_PendingSend_ChangesToConfirmed()
     {
-        var config = new AppConfig
-        {
-            Accounts = [new AccountConfig { Name = "test", ImapHost = "imap.test.com", Username = "u@test.com", AuthType = "password", ConfirmMode = "explicit" }]
-        };
-        var manager = new QueueManager(new QueueRepository(_db), config);
+        // Insert a second account with explicit confirm
+        var conn = _db.GetWriteConnection();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"INSERT OR IGNORE INTO accounts (id, name, imap_host, username, auth_type, credentials_enc, config_json)
+            VALUES ('explicit-acct2', 'Explicit2', 'imap.test.com', 'u@test.com', 'password', $cred, '{""confirm_mode"":""explicit""}');";
+        cmd.Parameters.AddWithValue("$cred", _encryptor.Encrypt("testpass"));
+        cmd.ExecuteNonQuery();
 
-        var result = manager.EnqueueSend("test", """{"to":"bob@test.com"}""");
+        var manager = new QueueManager(new QueueRepository(_db), _accountRepo, _encryptor);
+
+        var result = manager.EnqueueSend("explicit-acct2", """{"to":"bob@test.com"}""");
         var confirmed = manager.Confirm(result.PendingId);
         Assert.True(confirmed);
 

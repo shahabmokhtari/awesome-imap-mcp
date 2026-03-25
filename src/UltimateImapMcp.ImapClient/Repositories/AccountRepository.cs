@@ -7,7 +7,8 @@ public record AccountRecord(
     string? SmtpHost, int SmtpPort, bool SmtpUseSsl,
     string Username, string AuthType, string CredentialsEnc,
     string Provider, string? ConfigJson,
-    string CreatedAt, string UpdatedAt);
+    string CreatedAt, string UpdatedAt,
+    string BackendType = "imap");
 
 public class AccountRepository(AppDatabase db)
 {
@@ -83,6 +84,25 @@ public class AccountRepository(AppDatabase db)
         return reader.Read() ? ReadRecord(reader) : null;
     }
 
+    public AccountRecord? GetByName(string name)
+    {
+        using var conn = db.GetReadConnection();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT * FROM accounts WHERE name = $name COLLATE NOCASE LIMIT 1;";
+        cmd.Parameters.AddWithValue("$name", name);
+        using var reader = cmd.ExecuteReader();
+        return reader.Read() ? ReadRecord(reader) : null;
+    }
+
+    /// <summary>
+    /// Resolves an account by ID first, then falls back to name-based lookup for
+    /// backwards compatibility with config-derived account names.
+    /// </summary>
+    public AccountRecord? ResolveAccount(string idOrName)
+    {
+        return GetById(idOrName) ?? GetByName(idOrName);
+    }
+
     public List<AccountRecord> GetAll()
     {
         using var conn = db.GetReadConnection();
@@ -109,6 +129,7 @@ public class AccountRepository(AppDatabase db)
         Provider: r.GetString(r.GetOrdinal("provider")),
         ConfigJson: r.IsDBNull(r.GetOrdinal("config_json")) ? null : r.GetString(r.GetOrdinal("config_json")),
         CreatedAt: r.GetString(r.GetOrdinal("created_at")),
-        UpdatedAt: r.GetString(r.GetOrdinal("updated_at"))
+        UpdatedAt: r.GetString(r.GetOrdinal("updated_at")),
+        BackendType: r.GetString(r.GetOrdinal("backend_type"))
     );
 }

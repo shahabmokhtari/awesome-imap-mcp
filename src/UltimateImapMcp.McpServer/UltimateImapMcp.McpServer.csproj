@@ -15,6 +15,12 @@
     <RepositoryUrl>https://github.com/shahab1363/ultimate-imap-mcp</RepositoryUrl>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+
+    <!-- Single-file publish settings (activated via dotnet publish -p:PublishSingleFile=true) -->
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
   </PropertyGroup>
 
   <ItemGroup>
@@ -23,6 +29,7 @@
     <ProjectReference Include="..\UltimateImapMcp.ImapClient\UltimateImapMcp.ImapClient.csproj" />
     <ProjectReference Include="..\UltimateImapMcp.Queue\UltimateImapMcp.Queue.csproj" />
     <ProjectReference Include="..\UltimateImapMcp.Llm\UltimateImapMcp.Llm.csproj" />
+    <ProjectReference Include="..\UltimateImapMcp.RestBackend\UltimateImapMcp.RestBackend.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -34,5 +41,26 @@
   <ItemGroup>
     <None Include="../../README.md" Pack="true" PackagePath="/" />
   </ItemGroup>
+
+  <!-- Copy dashboard SPA from the Dashboard project's wwwroot into our output -->
+  <Target Name="CopyDashboardWwwroot" AfterTargets="Build"
+          Condition="Exists('$(MSBuildThisFileDirectory)../UltimateImapMcp.Dashboard/wwwroot')">
+    <ItemGroup>
+      <DashboardFiles Include="$(MSBuildThisFileDirectory)../UltimateImapMcp.Dashboard/wwwroot/**/*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(DashboardFiles)"
+          DestinationFolder="$(OutputPath)/wwwroot/%(RecursiveDir)"
+          SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="CopyDashboardWwwrootPublish" AfterTargets="Publish"
+          Condition="Exists('$(MSBuildThisFileDirectory)../UltimateImapMcp.Dashboard/wwwroot')">
+    <ItemGroup>
+      <DashboardFilesPublish Include="$(MSBuildThisFileDirectory)../UltimateImapMcp.Dashboard/wwwroot/**/*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(DashboardFilesPublish)"
+          DestinationFolder="$(PublishDir)/wwwroot/%(RecursiveDir)"
+          SkipUnchangedFiles="true" />
+  </Target>
 
 </Project>

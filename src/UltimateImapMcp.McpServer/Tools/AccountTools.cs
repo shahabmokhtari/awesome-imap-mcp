@@ -27,9 +27,9 @@ public class AccountTools(AccountRepository accountRepo)
     }
 
     [McpServerTool, Description("Get detailed status for a specific email account.")]
-    public string GetAccountStatus([Description("Account ID")] string accountId)
+    public string GetAccountStatus([Description("Account ID or name")] string accountId)
     {
-        var account = accountRepo.GetById(accountId);
+        var account = accountRepo.ResolveAccount(accountId);
         if (account is null)
             return JsonSerializer.Serialize(new { error = $"Account '{accountId}' not found." }, JsonOptions);
 

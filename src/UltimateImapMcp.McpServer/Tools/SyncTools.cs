@@ -2,11 +2,12 @@ using System.ComponentModel;
 using System.Text.Json;
 using ModelContextProtocol.Server;
 using UltimateImapMcp.ImapClient;
+using UltimateImapMcp.ImapClient.Repositories;
 
 namespace UltimateImapMcp.McpServer.Tools;
 
 [McpServerToolType]
-public class SyncTools(SyncManager syncManager)
+public class SyncTools(SyncManager syncManager, AccountRepository accountRepo)
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
@@ -17,11 +18,13 @@ public class SyncTools(SyncManager syncManager)
     {
         try
         {
-            await syncManager.TriggerSyncAsync(accountId, folderPath).ConfigureAwait(false);
+            var resolvedId = ResolveAccountId(accountId);
+
+            await syncManager.TriggerSyncAsync(resolvedId, folderPath).ConfigureAwait(false);
 
             return JsonSerializer.Serialize(new
             {
-                account_id = accountId,
+                account_id = resolvedId,
                 folder = folderPath ?? "(all folders)",
                 status = "completed",
                 message = folderPath is not null
@@ -45,7 +48,8 @@ public class SyncTools(SyncManager syncManager)
     [McpServerTool, Description("Get sync status for all folders of an account.")]
     public string GetSyncStatus([Description("Account ID")] string accountId)
     {
-        var statuses = syncManager.GetSyncStatus(accountId);
+        var resolvedId = ResolveAccountId(accountId);
+        var statuses = syncManager.GetSyncStatus(resolvedId);
 
         var mapped = statuses.Select(s => new
         {
@@ -60,9 +64,19 @@ public class SyncTools(SyncManager syncManager)
 
         return JsonSerializer.Serialize(new
         {
-            account_id = accountId,
+            account_id = resolvedId,
             folder_count = mapped.Count,
             folders = mapped
         }, JsonOptions);
+    }
+
+    /// <summary>
+    /// Resolves an account identifier (ID or name) to the canonical DB ID.
+    /// Returns the input unchanged if no match is found (caller handles the error).
+    /// </summary>
+    private string ResolveAccountId(string idOrName)
+    {
+        var record = accountRepo.ResolveAccount(idOrName);
+        return record?.Id ?? idOrName;
     }
 }

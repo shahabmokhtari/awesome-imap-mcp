@@ -4,7 +4,8 @@
     "http_port": 3846,
     "dashboard_port": 3847,
     "dashboard_enabled": false,
-    "dashboard_auth": "pin"
+    "dashboard_auth": null,
+    "dashboard_auto_open": false
   },
   "accounts": [
     {

@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using MimeKit;
 using UltimateImapMcp.Core.Configuration;
+using UltimateImapMcp.Core.OAuth;
 
 namespace UltimateImapMcp.ImapClient;
 
@@ -12,14 +13,19 @@ public sealed class SmtpConnectionManager : IDisposable
 {
     private readonly AccountConfig _config;
     private readonly ILogger _logger;
+    private readonly IOAuthAccessTokenProvider? _oauthProvider;
+    private readonly string? _accountId;
     private readonly SemaphoreSlim _semaphore = new(1, 1);
     private SmtpClient? _client;
     private bool _disposed;
 
-    public SmtpConnectionManager(AccountConfig config, ILogger? logger = null)
+    public SmtpConnectionManager(AccountConfig config, ILogger? logger = null,
+        IOAuthAccessTokenProvider? oauthProvider = null, string? accountId = null)
     {
         _config = config;
         _logger = logger ?? NullLogger.Instance;
+        _oauthProvider = oauthProvider;
+        _accountId = accountId;
     }
 
     public async Task SendAsync(MimeMessage message, CancellationToken ct = default)
@@ -47,7 +53,6 @@ public sealed class SmtpConnectionManager : IDisposable
         var smtpHost = _config.SmtpHost ?? _config.ImapHost.Replace("imap.", "smtp.");
         var smtpPort = _config.SmtpPort;
         var options = _config.SmtpUseSsl ? SecureSocketOptions.SslOnConnect : SecureSocketOptions.StartTls;
-        var password = _config.Password ?? throw new InvalidOperationException($"No password configured for SMTP account '{_config.Username}'.");
 
         const int maxRetries = 2;
         for (var attempt = 1; attempt <= maxRetries; attempt++)
@@ -57,7 +62,22 @@ public sealed class SmtpConnectionManager : IDisposable
             {
                 client = new SmtpClient();
                 await client.ConnectAsync(smtpHost, smtpPort, options, ct);
-                await client.AuthenticateAsync(_config.Username, password, ct);
+
+                if (_config.AuthType.Equals("oauth2", StringComparison.OrdinalIgnoreCase)
+                    && _oauthProvider is not null && _accountId is not null)
+                {
+                    var accessToken = await _oauthProvider.GetAccessTokenAsync(_accountId, ct)
+                        .ConfigureAwait(false)
+                        ?? throw new InvalidOperationException(
+                            $"No OAuth access token available for SMTP account '{_config.Username}'.");
+                    var oauth2 = new SaslMechanismOAuth2(_config.Username, accessToken);
+                    await client.AuthenticateAsync(oauth2, ct);
+                }
+                else
+                {
+                    var password = _config.Password ?? throw new InvalidOperationException($"No password configured for SMTP account '{_config.Username}'.");
+                    await client.AuthenticateAsync(_config.Username, password, ct);
+                }
 
                 if (!client.IsAuthenticated)
                 {

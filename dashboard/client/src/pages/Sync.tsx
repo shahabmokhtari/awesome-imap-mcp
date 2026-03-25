@@ -1,16 +1,30 @@
-import { useSyncStatus } from '../hooks/useApi'
+import { useState } from 'react'
+import { useSyncStatus, useTriggerSync } from '../hooks/useApi'
 
 export default function Sync() {
   const { data: syncStatus, isLoading, error } = useSyncStatus()
+  const triggerSync = useTriggerSync()
+  const [triggerResult, setTriggerResult] = useState<{ accountId: string; message: string; success: boolean } | null>(null)
+
+  const handleTriggerAll = (accountId: string) => {
+    setTriggerResult(null)
+    triggerSync.mutate({ accountId }, {
+      onSuccess: () => setTriggerResult({ accountId, message: 'Sync triggered', success: true }),
+      onError: (err) => setTriggerResult({ accountId, message: err.message, success: false }),
+    })
+  }
+
+  const handleTriggerFolder = (accountId: string, folderPath: string) => {
+    setTriggerResult(null)
+    triggerSync.mutate({ accountId, folderPath }, {
+      onSuccess: () => setTriggerResult({ accountId, message: `Syncing ${folderPath}...`, success: true }),
+      onError: (err) => setTriggerResult({ accountId, message: err.message, success: false }),
+    })
+  }
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-semibold text-gray-900">Sync Status</h2>
-        <button className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors">
-          Trigger Sync
-        </button>
-      </div>
+      <h2 className="text-2xl font-semibold text-gray-900 mb-6">Sync Status</h2>
 
       {isLoading && (
         <div className="text-center py-8 text-gray-500">Loading sync status...</div>
@@ -22,16 +36,37 @@ export default function Sync() {
         </div>
       )}
 
+      {triggerResult && (
+        <div className={`rounded-lg p-3 mb-4 text-sm ${
+          triggerResult.success
+            ? 'bg-green-50 border border-green-200 text-green-700'
+            : 'bg-red-50 border border-red-200 text-red-700'
+        }`}>
+          {triggerResult.message}
+        </div>
+      )}
+
       {syncStatus && Object.keys(syncStatus).length === 0 && (
         <div className="text-center py-12 bg-white rounded-lg shadow">
-          <p className="text-gray-500">No sync data available yet.</p>
+          <p className="text-gray-500">No sync data available yet. Add an account and sync will start automatically.</p>
         </div>
       )}
 
       {syncStatus &&
-        Object.entries(syncStatus).map(([accountId, folders]) => (
-          <div key={accountId} className="mb-6">
-            <h3 className="text-lg font-medium text-gray-800 mb-3">{accountId}</h3>
+        Object.entries(syncStatus).map(([accountLabel, data]) => {
+          const { accountId, folders } = data as { accountId: string; folders: unknown }
+          return (
+          <div key={accountLabel} className="mb-6">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-lg font-medium text-gray-800">{accountLabel}</h3>
+              <button
+                onClick={() => handleTriggerAll(accountId)}
+                disabled={triggerSync.isPending}
+                className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs hover:bg-blue-700 transition-colors disabled:opacity-50"
+              >
+                {triggerSync.isPending ? 'Syncing...' : 'Sync All Folders'}
+              </button>
+            </div>
             <div className="bg-white rounded-lg shadow overflow-hidden">
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 border-b">
@@ -41,44 +76,59 @@ export default function Sync() {
                     <th className="text-left px-4 py-3 font-medium text-gray-500">Messages</th>
                     <th className="text-left px-4 py-3 font-medium text-gray-500">Unread</th>
                     <th className="text-left px-4 py-3 font-medium text-gray-500">Last Synced</th>
+                    <th className="text-left px-4 py-3 font-medium text-gray-500">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {Array.isArray(folders) &&
-                    (folders as Array<Record<string, unknown>>).map((folder, idx) => (
-                      <tr key={idx} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 font-medium text-gray-900">
-                          {(folder.displayName as string) || (folder.folderPath as string)}
-                        </td>
-                        <td className="px-4 py-3">
-                          <span
-                            className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
-                              folder.status === 'completed'
-                                ? 'bg-green-100 text-green-700'
-                                : folder.status === 'failed'
-                                  ? 'bg-red-100 text-red-700'
-                                  : 'bg-yellow-100 text-yellow-700'
-                            }`}
-                          >
-                            {folder.status as string}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-gray-600">
-                          {folder.messageCount as number}
-                        </td>
-                        <td className="px-4 py-3 text-gray-600">
-                          {folder.unreadCount as number}
-                        </td>
-                        <td className="px-4 py-3 text-gray-500 text-xs">
-                          {folder.lastSyncedAt as string}
-                        </td>
-                      </tr>
-                    ))}
+                    (folders as Array<Record<string, unknown>>).map((folder, idx) => {
+                      const folderPath = (folder.folderPath as string) || ''
+                      return (
+                        <tr key={idx} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 font-medium text-gray-900">
+                            {(folder.displayName as string) || folderPath}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span
+                              className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
+                                folder.status === 'idle' || folder.status === 'completed'
+                                  ? 'bg-green-100 text-green-700'
+                                  : folder.status === 'syncing'
+                                    ? 'bg-blue-100 text-blue-700'
+                                    : folder.status === 'failed' || folder.status === 'error'
+                                      ? 'bg-red-100 text-red-700'
+                                      : 'bg-yellow-100 text-yellow-700'
+                              }`}
+                            >
+                              {folder.status as string}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-gray-600">
+                            {folder.messageCount as number}
+                          </td>
+                          <td className="px-4 py-3 text-gray-600">
+                            {folder.unreadCount as number}
+                          </td>
+                          <td className="px-4 py-3 text-gray-500 text-xs">
+                            {folder.lastSyncedAt as string}
+                          </td>
+                          <td className="px-4 py-3">
+                            <button
+                              onClick={() => handleTriggerFolder(accountId, folderPath)}
+                              disabled={triggerSync.isPending}
+                              className="text-blue-600 hover:text-blue-800 text-xs disabled:opacity-50"
+                            >
+                              Sync
+                            </button>
+                          </td>
+                        </tr>
+                      )
+                    })}
                 </tbody>
               </table>
             </div>
           </div>
-        ))}
+        )})}
     </div>
   )
 }
