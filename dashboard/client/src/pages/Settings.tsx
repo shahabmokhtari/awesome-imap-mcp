@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useSettings, useUpdateSettings, useAuthStatus, useChangePin, useSetupPin, useLlmModels, useTestLlm } from '../hooks/useApi'
+import { useSettings, useUpdateSettings, useAuthStatus, useChangePin, useSetupPin, useLlmModels, useTestLlm, useServerInfo, useShutdownServer } from '../hooks/useApi'
 
 /** Fields that require a server restart when changed. */
 const RESTART_FIELDS = new Set([
@@ -168,6 +168,101 @@ function SectionCard({
           </div>
         )}
       </form>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Server Controls card
+// ---------------------------------------------------------------------------
+
+function formatUptime(seconds: number): string {
+  const h = Math.floor(seconds / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  return h > 0 ? `${h}h ${m}m` : `${m}m`
+}
+
+function ServerControlsCard() {
+  const { data: serverInfo } = useServerInfo()
+  const shutdownMutation = useShutdownServer()
+  const [confirming, setConfirming] = useState(false)
+  const [shutdownSent, setShutdownSent] = useState(false)
+  const [disconnected, setDisconnected] = useState(false)
+
+  const handleShutdown = () => {
+    shutdownMutation.mutate(undefined, {
+      onSuccess: () => {
+        setShutdownSent(true)
+        setConfirming(false)
+        setTimeout(() => setDisconnected(true), 3000)
+      },
+    })
+  }
+
+  return (
+    <div className="bg-white rounded-lg shadow p-5">
+      <h3 className="text-lg font-medium text-gray-800 mb-4">Server Controls</h3>
+
+      {serverInfo && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+          <div>
+            <span className="block text-xs text-gray-500">Instance ID</span>
+            <span className="text-sm font-mono text-gray-900 break-all">{serverInfo.instance_id}</span>
+          </div>
+          <div>
+            <span className="block text-xs text-gray-500">Uptime</span>
+            <span className="text-sm text-gray-900">{formatUptime(serverInfo.uptime_seconds)}</span>
+          </div>
+          <div>
+            <span className="block text-xs text-gray-500">PID</span>
+            <span className="text-sm font-mono text-gray-900">{serverInfo.process_id}</span>
+          </div>
+          <div>
+            <span className="block text-xs text-gray-500">Version</span>
+            <span className="text-sm text-gray-900">{serverInfo.version}</span>
+          </div>
+        </div>
+      )}
+
+      {disconnected && (
+        <div className="bg-gray-100 border border-gray-300 rounded-lg p-3 mb-4 text-sm text-gray-700">
+          Server has been shut down. Refresh to reconnect.
+        </div>
+      )}
+
+      {shutdownSent && !disconnected && (
+        <div className="bg-amber-50 border border-amber-300 rounded-lg p-3 mb-4 text-sm text-amber-800">
+          Shutting down...
+        </div>
+      )}
+
+      {!shutdownSent && !confirming && (
+        <button
+          onClick={() => setConfirming(true)}
+          className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700 transition-colors"
+        >
+          Shutdown Server
+        </button>
+      )}
+
+      {!shutdownSent && confirming && (
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-gray-700">Are you sure? The dashboard will disconnect.</span>
+          <button
+            onClick={handleShutdown}
+            disabled={shutdownMutation.isPending}
+            className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700 transition-colors disabled:opacity-50"
+          >
+            {shutdownMutation.isPending ? 'Shutting down...' : 'Confirm Shutdown'}
+          </button>
+          <button
+            onClick={() => setConfirming(false)}
+            className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm hover:bg-gray-300 transition-colors"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
     </div>
   )
 }
@@ -548,6 +643,9 @@ export default function Settings() {
       )}
 
       <div className="space-y-6">
+        {/* Server controls card - always shown */}
+        <ServerControlsCard />
+
         {/* Dashboard PIN card - always shown */}
         <DashboardPinCard />
 

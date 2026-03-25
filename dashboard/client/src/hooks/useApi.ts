@@ -73,16 +73,25 @@ export interface LogEntry {
   instance_id: string
 }
 
-export function useLogs(params: { level?: string; search?: string; limit?: number; scope?: string; instance_id?: string }) {
+export interface LogsResponse {
+  count: number
+  total_count: number
+  page: number
+  page_size: number
+  logs: LogEntry[]
+}
+
+export function useLogs(params: { levels?: string; search?: string; page?: number; page_size?: number; scope?: string; instance_id?: string }) {
   const qs = new URLSearchParams()
-  if (params.level) qs.set('level', params.level)
+  if (params.levels) qs.set('level', params.levels)
   if (params.search) qs.set('search', params.search)
-  if (params.limit) qs.set('limit', String(params.limit))
+  if (params.page) qs.set('page', String(params.page))
+  if (params.page_size) qs.set('page_size', String(params.page_size))
   if (params.scope) qs.set('scope', params.scope)
   if (params.instance_id) qs.set('instance_id', params.instance_id)
   return useQuery({
-    queryKey: ['logs', params.level, params.search, params.limit, params.scope, params.instance_id],
-    queryFn: () => apiFetch<{ count: number; logs: LogEntry[] }>(`/api/logs?${qs}`),
+    queryKey: ['logs', params.levels, params.search, params.page, params.page_size, params.scope, params.instance_id],
+    queryFn: () => apiFetch<LogsResponse>(`/api/logs?${qs}`),
     refetchInterval: 5000,
   })
 }
@@ -99,6 +108,37 @@ export function useAuthStatus() {
   return useQuery({
     queryKey: ['auth-status'],
     queryFn: () => apiFetch<{ hasPinSet: boolean }>('/api/auth/status'),
+  })
+}
+
+// ---------- Server hooks ----------
+
+export interface ServerInfo {
+  instance_id: string
+  uptime_seconds: number
+  process_id: number
+  version: string
+  started_at: string
+  transport: string
+  dashboard_port: number
+  http_port: number
+}
+
+export function useServerInfo() {
+  return useQuery({
+    queryKey: ['server-info'],
+    queryFn: () => apiFetch<ServerInfo>('/api/server/info'),
+    refetchInterval: 30000,
+  })
+}
+
+export function useShutdownServer() {
+  return useMutation({
+    mutationFn: (data?: { delay_seconds?: number }) =>
+      apiFetch<{ message: string; shutting_down: boolean }>('/api/server/shutdown', {
+        method: 'POST',
+        body: JSON.stringify(data ?? {}),
+      }),
   })
 }
 
