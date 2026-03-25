@@ -8,6 +8,8 @@ using UltimateImapMcp.Core;
 using UltimateImapMcp.Core.Configuration;
 using UltimateImapMcp.Core.OAuth;
 using UltimateImapMcp.Core.Repositories;
+using UltimateImapMcp.Llm;
+using UltimateImapMcp.Llm.Repositories;
 
 namespace UltimateImapMcp.Dashboard;
 
@@ -114,6 +116,11 @@ public sealed class DashboardHost : BackgroundService
         builder.Services.AddSingleton(_rootServices.GetRequiredService<UltimateImapMcp.ImapClient.SyncManager>());
         builder.Services.AddSingleton(_rootServices.GetRequiredService<UltimateImapMcp.Queue.QueueRepository>());
         builder.Services.AddSingleton(_rootServices.GetRequiredService<UltimateImapMcp.Queue.QueueManager>());
+
+        // Tool execution dependencies (for ToolsApi to construct MCP tool classes)
+        builder.Services.AddSingleton(_rootServices.GetRequiredService<UltimateImapMcp.ImapClient.Repositories.AttachmentRepository>());
+        builder.Services.AddSingleton(_rootServices.GetRequiredService<UltimateImapMcp.Llm.Repositories.LlmAnalysisRepository>());
+        builder.Services.AddSingleton(_rootServices.GetRequiredService<UltimateImapMcp.Llm.IEmailAnalyzer>());
 
         // Observability repositories
         builder.Services.AddSingleton(_rootServices.GetRequiredService<MetricsRepository>());

@@ -226,6 +226,7 @@ public class LogsRepository(AppDatabase db)
 
     /// <summary>
     /// Prunes old log entries by level with different retention periods.
+    /// Warning logs use the same retention as Info logs.
     /// </summary>
     public int Prune(int debugDays = 7, int infoDays = 30, int errorDays = 90)
     {
