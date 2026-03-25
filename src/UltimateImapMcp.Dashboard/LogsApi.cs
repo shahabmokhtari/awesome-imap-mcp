@@ -18,14 +18,20 @@ public static class LogsApi
             var search = ctx.Request.Query["search"].FirstOrDefault();
             var scope = ctx.Request.Query["scope"].FirstOrDefault();
             var instanceId = ctx.Request.Query["instance_id"].FirstOrDefault();
-            var limitStr = ctx.Request.Query["limit"].FirstOrDefault();
-            var limit = int.TryParse(limitStr, out var l) ? l : 100;
 
-            var results = logsRepo.Query(level, category, from, to, search, limit, scope, instanceId);
+            var page = int.TryParse(ctx.Request.Query["page"].FirstOrDefault(), out var p) && p >= 1 ? p : 1;
+            var pageSize = int.TryParse(ctx.Request.Query["page_size"].FirstOrDefault(), out var ps) && ps >= 1 ? Math.Min(ps, 500) : 100;
+            var offset = (page - 1) * pageSize;
+
+            var totalCount = logsRepo.QueryCount(level, category, from, to, search, scope, instanceId);
+            var results = logsRepo.Query(level, category, from, to, search, pageSize, scope, instanceId, offset);
 
             return Results.Ok(new
             {
                 count = results.Count,
+                total_count = totalCount,
+                page,
+                page_size = pageSize,
                 logs = results.Select(log => new
                 {
                     id = log.Id,

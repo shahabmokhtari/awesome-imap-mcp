@@ -78,39 +78,28 @@ public class LogsRepository(AppDatabase db)
 
     /// <summary>
     /// Queries log entries with optional filters.
+    /// <paramref name="levels"/> accepts a comma-separated list (e.g. "Error,Warning").
     /// </summary>
-    public List<LogRecord> Query(string? level = null, string? category = null,
+    public List<LogRecord> Query(string? levels = null, string? category = null,
         string? fromTime = null, string? toTime = null, string? search = null,
-        int limit = 100, string? scope = null, string? instanceId = null)
+        int limit = 100, string? scope = null, string? instanceId = null,
+        int offset = 0)
     {
         using var conn = db.GetReadConnection();
         using var cmd = conn.CreateCommand();
 
-        var where = "WHERE 1=1";
-        if (level is not null) where += " AND level = $level";
-        if (category is not null) where += " AND category = $category";
-        if (fromTime is not null) where += " AND created_at >= $from";
-        if (toTime is not null) where += " AND created_at <= $to";
-        if (search is not null) where += " AND message LIKE $search";
-        if (scope is not null) where += " AND scope = $scope";
-        if (instanceId is not null) where += " AND instance_id = $instance_id";
+        var where = BuildWhereClause(levels, category, fromTime, toTime, search, scope, instanceId, cmd);
 
         cmd.CommandText = $"""
             SELECT id, level, category, message, exception, metadata, created_at, scope, instance_id
             FROM logs
             {where}
             ORDER BY created_at DESC
-            LIMIT $limit;
+            LIMIT $limit OFFSET $offset;
             """;
 
-        if (level is not null) cmd.Parameters.AddWithValue("$level", level);
-        if (category is not null) cmd.Parameters.AddWithValue("$category", category);
-        if (fromTime is not null) cmd.Parameters.AddWithValue("$from", fromTime);
-        if (toTime is not null) cmd.Parameters.AddWithValue("$to", toTime);
-        if (search is not null) cmd.Parameters.AddWithValue("$search", $"%{search}%");
-        if (scope is not null) cmd.Parameters.AddWithValue("$scope", scope);
-        if (instanceId is not null) cmd.Parameters.AddWithValue("$instance_id", instanceId);
         cmd.Parameters.AddWithValue("$limit", limit);
+        cmd.Parameters.AddWithValue("$offset", offset);
 
         using var reader = cmd.ExecuteReader();
         var list = new List<LogRecord>();
@@ -128,6 +117,87 @@ public class LogsRepository(AppDatabase db)
                 reader.GetString(8)));
         }
         return list;
+    }
+
+    /// <summary>
+    /// Returns total count of log entries matching the given filters.
+    /// </summary>
+    public int QueryCount(string? levels = null, string? category = null,
+        string? fromTime = null, string? toTime = null, string? search = null,
+        string? scope = null, string? instanceId = null)
+    {
+        using var conn = db.GetReadConnection();
+        using var cmd = conn.CreateCommand();
+
+        var where = BuildWhereClause(levels, category, fromTime, toTime, search, scope, instanceId, cmd);
+
+        cmd.CommandText = $"SELECT COUNT(*) FROM logs {where};";
+
+        return Convert.ToInt32(cmd.ExecuteScalar());
+    }
+
+    /// <summary>
+    /// Builds the WHERE clause and adds parameters to the command.
+    /// </summary>
+    private static string BuildWhereClause(string? levels, string? category,
+        string? fromTime, string? toTime, string? search,
+        string? scope, string? instanceId,
+        Microsoft.Data.Sqlite.SqliteCommand cmd)
+    {
+        var where = "WHERE 1=1";
+
+        if (levels is not null)
+        {
+            var levelList = levels.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (levelList.Length == 1)
+            {
+                where += " AND level = $level0";
+                cmd.Parameters.AddWithValue("$level0", levelList[0]);
+            }
+            else if (levelList.Length > 1)
+            {
+                var paramNames = new string[levelList.Length];
+                for (var i = 0; i < levelList.Length; i++)
+                {
+                    paramNames[i] = $"$level{i}";
+                    cmd.Parameters.AddWithValue(paramNames[i], levelList[i]);
+                }
+                where += $" AND level IN ({string.Join(", ", paramNames)})";
+            }
+        }
+
+        if (category is not null)
+        {
+            where += " AND category = $category";
+            cmd.Parameters.AddWithValue("$category", category);
+        }
+        if (fromTime is not null)
+        {
+            where += " AND created_at >= $from";
+            cmd.Parameters.AddWithValue("$from", fromTime);
+        }
+        if (toTime is not null)
+        {
+            where += " AND created_at <= $to";
+            cmd.Parameters.AddWithValue("$to", toTime);
+        }
+        if (search is not null)
+        {
+            where += " AND message LIKE $search";
+            cmd.Parameters.AddWithValue("$search", $"%{search}%");
+        }
+        if (scope is not null)
+        {
+            where += " AND scope = $scope";
+            cmd.Parameters.AddWithValue("$scope", scope);
+        }
+        if (instanceId is not null)
+        {
+            where += " AND instance_id = $instance_id";
+            cmd.Parameters.AddWithValue("$instance_id", instanceId);
+        }
+
+        return where;
     }
 
     /// <summary>
