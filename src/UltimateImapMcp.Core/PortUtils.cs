@@ -57,4 +57,46 @@ public static class PortUtils
             }
         }
     }
+
+    /// <summary>
+    /// Waits until the given port becomes available using exponential backoff.
+    /// Logs the first "port in use" at Warning level, subsequent polls at Debug level.
+    /// Returns immediately if the port is already free.
+    /// </summary>
+    public static async Task WaitForPortWithBackoffAsync(
+        int port, ILogger logger, string serviceName,
+        CancellationToken cancellationToken,
+        TimeSpan? initialDelay = null,
+        TimeSpan? maxDelay = null)
+    {
+        if (!IsPortInUse(port))
+            return;
+
+        var delay = initialDelay ?? TimeSpan.FromSeconds(2);
+        var cap = maxDelay ?? TimeSpan.FromSeconds(60);
+
+        logger.LogWarning(
+            "{Service}: port {Port} is in use (another instance may be running). " +
+            "Running in standby — will take over when the port is released",
+            serviceName, port);
+
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
+
+            if (!IsPortInUse(port))
+            {
+                logger.LogInformation(
+                    "{Service}: port {Port} is now available — taking over",
+                    serviceName, port);
+                return;
+            }
+
+            delay = TimeSpan.FromTicks(Math.Min(delay.Ticks * 2, cap.Ticks));
+
+            logger.LogDebug(
+                "{Service}: port {Port} still in use — next check in {Delay}s",
+                serviceName, port, delay.TotalSeconds);
+        }
+    }
 }

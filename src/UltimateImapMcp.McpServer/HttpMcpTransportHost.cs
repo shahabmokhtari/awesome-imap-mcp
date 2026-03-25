@@ -27,6 +27,7 @@ public sealed class HttpMcpTransportHost : BackgroundService
     private readonly IServiceProvider _rootServices;
     private readonly ILogger<HttpMcpTransportHost> _logger;
     private WebApplication? _webApp;
+    private int _consecutiveFailures;
 
     public HttpMcpTransportHost(AppConfig config, IServiceProvider rootServices,
         ILogger<HttpMcpTransportHost> logger)
@@ -41,13 +42,14 @@ public sealed class HttpMcpTransportHost : BackgroundService
         var port = _config.Server.HttpPort;
 
         // Wait in standby if another instance owns the port
-        await PortUtils.WaitForPortAsync(port, _logger, "MCP HTTP", stoppingToken).ConfigureAwait(false);
+        await PortUtils.WaitForPortWithBackoffAsync(port, _logger, "MCP HTTP", stoppingToken).ConfigureAwait(false);
 
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
                 await StartHttpServer(port, stoppingToken).ConfigureAwait(false);
+                _consecutiveFailures = 0;
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -55,11 +57,15 @@ public sealed class HttpMcpTransportHost : BackgroundService
             }
             catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
             {
-                _logger.LogError(ex, "MCP HTTP transport failed — will retry when port {Port} is available", port);
+                _consecutiveFailures++;
+                if (_consecutiveFailures == 1)
+                    _logger.LogWarning(ex, "MCP HTTP transport failed on port {Port} — entering standby mode", port);
+                else
+                    _logger.LogDebug(ex, "MCP HTTP transport retry #{Count} for port {Port}", _consecutiveFailures, port);
                 _webApp = null;
 
                 // Wait for port to become available again before retrying
-                await PortUtils.WaitForPortAsync(port, _logger, "MCP HTTP", stoppingToken).ConfigureAwait(false);
+                await PortUtils.WaitForPortWithBackoffAsync(port, _logger, "MCP HTTP", stoppingToken).ConfigureAwait(false);
             }
         }
     }

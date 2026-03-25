@@ -23,6 +23,7 @@ public sealed class DashboardHost : BackgroundService
     private readonly IServiceProvider _rootServices;
     private readonly ILogger<DashboardHost> _logger;
     private WebApplication? _webApp;
+    private int _consecutiveFailures;
 
     public DashboardHost(AppConfig config, IServiceProvider rootServices,
         ILogger<DashboardHost> logger)
@@ -44,7 +45,7 @@ public sealed class DashboardHost : BackgroundService
         var isInitialLaunch = !PortUtils.IsPortInUse(port);
 
         // Wait in standby if another instance owns the port
-        await PortUtils.WaitForPortAsync(port, _logger, "Dashboard", stoppingToken).ConfigureAwait(false);
+        await PortUtils.WaitForPortWithBackoffAsync(port, _logger, "Dashboard", stoppingToken).ConfigureAwait(false);
 
         // Clear sessions once on startup — force re-auth after server restart.
         // This runs once in ExecuteAsync, not inside StartDashboard which retries on failure.
@@ -58,6 +59,7 @@ public sealed class DashboardHost : BackgroundService
             try
             {
                 await StartDashboard(port, isInitialLaunch, stoppingToken).ConfigureAwait(false);
+                _consecutiveFailures = 0;
                 isInitialLaunch = false; // subsequent starts after crashes are not initial
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -66,11 +68,15 @@ public sealed class DashboardHost : BackgroundService
             }
             catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
             {
-                _logger.LogError(ex, "Dashboard failed — will retry when port {Port} is available", port);
+                _consecutiveFailures++;
+                if (_consecutiveFailures == 1)
+                    _logger.LogWarning(ex, "Dashboard failed on port {Port} — entering standby mode", port);
+                else
+                    _logger.LogDebug(ex, "Dashboard retry #{Count} for port {Port}", _consecutiveFailures, port);
                 _webApp = null;
 
                 // Wait for port to become available again before retrying
-                await PortUtils.WaitForPortAsync(port, _logger, "Dashboard", stoppingToken).ConfigureAwait(false);
+                await PortUtils.WaitForPortWithBackoffAsync(port, _logger, "Dashboard", stoppingToken).ConfigureAwait(false);
             }
         }
     }
