@@ -119,6 +119,11 @@ public sealed class DashboardHost : BackgroundService
         builder.Services.AddSingleton(_rootServices.GetRequiredService<OAuthStateStore>());
         builder.Services.AddSingleton(_rootServices.GetRequiredService<IOAuthAccessTokenProvider>());
 
+        // Instance info + root lifetime (for shutdown endpoint)
+        builder.Services.AddSingleton(_rootServices.GetRequiredService<InstanceInfo>());
+        builder.Services.AddSingleton(new RootLifetime(
+            _rootServices.GetRequiredService<IHostApplicationLifetime>()));
+
         // Dashboard-own services
         builder.Services.AddSingleton(_rootServices.GetRequiredService<IEventBus>());
         builder.Services.AddSingleton<DashboardAuthRepository>();
@@ -152,6 +157,7 @@ public sealed class DashboardHost : BackgroundService
         app.MapOAuthApi();
         app.MapMetricsApi();
         app.MapLogsApi();
+        app.MapServerApi();
 
         // Map SignalR hub
         app.MapHub<DashboardHub>("/hub");
