@@ -37,7 +37,7 @@ public class LogsRepositoryTests : IDisposable
         _repo.Write("Error", "System", "Something failed",
             exception: "System.Exception: oops", metadata: "{\"key\":\"value\"}");
 
-        var results = _repo.Query(level: "Error");
+        var results = _repo.Query(levels: "Error");
         Assert.Single(results);
         Assert.Equal("System.Exception: oops", results[0].Exception);
         Assert.Equal("{\"key\":\"value\"}", results[0].Metadata);
@@ -78,7 +78,7 @@ public class LogsRepositoryTests : IDisposable
         _repo.Write("Error", "Cat", "Error msg");
         _repo.Write("Debug", "Cat", "Debug msg");
 
-        var errors = _repo.Query(level: "Error");
+        var errors = _repo.Query(levels: "Error");
         Assert.Single(errors);
         Assert.Equal("Error msg", errors[0].Message);
     }
@@ -152,6 +152,46 @@ public class LogsRepositoryTests : IDisposable
     }
 
     [Fact]
+    public void Query_FiltersByMultipleLevels()
+    {
+        _repo.Write("Information", "Cat", "Info msg");
+        _repo.Write("Error", "Cat", "Error msg");
+        _repo.Write("Debug", "Cat", "Debug msg");
+        _repo.Write("Warning", "Cat", "Warning msg");
+
+        var results = _repo.Query(levels: "Error,Warning");
+        Assert.Equal(2, results.Count);
+        Assert.Contains(results, r => r.Level == "Error");
+        Assert.Contains(results, r => r.Level == "Warning");
+    }
+
+    [Fact]
+    public void Query_OffsetSkipsRows()
+    {
+        for (int i = 0; i < 5; i++)
+            _repo.Write("Information", "Cat", $"Message {i}");
+
+        var all = _repo.Query(limit: 10);
+        Assert.Equal(5, all.Count);
+
+        var offset2 = _repo.Query(limit: 10, offset: 2);
+        Assert.Equal(3, offset2.Count);
+    }
+
+    [Fact]
+    public void QueryCount_ReturnsTotalMatchingFilters()
+    {
+        _repo.Write("Information", "Cat", "Info msg 1");
+        _repo.Write("Information", "Cat", "Info msg 2");
+        _repo.Write("Error", "Cat", "Error msg");
+
+        Assert.Equal(3, _repo.QueryCount());
+        Assert.Equal(2, _repo.QueryCount(levels: "Information"));
+        Assert.Equal(1, _repo.QueryCount(levels: "Error"));
+        Assert.Equal(3, _repo.QueryCount(levels: "Information,Error"));
+    }
+
+    [Fact]
     public void Prune_DeletesOldDebugLogs()
     {
         // Insert an old debug log
@@ -186,7 +226,7 @@ public class LogsRepositoryTests : IDisposable
         var deleted = _repo.Prune(debugDays: 7, infoDays: 30, errorDays: 90);
         Assert.Equal(1, deleted);
 
-        var remaining = _repo.Query(level: "Error");
+        var remaining = _repo.Query(levels: "Error");
         Assert.Single(remaining);
         Assert.Equal("Recent error", remaining[0].Message);
     }
