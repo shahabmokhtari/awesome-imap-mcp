@@ -1,20 +1,24 @@
 using UltimateImapMcp.Core.Configuration;
+using UltimateImapMcp.Core.Encryption;
+using UltimateImapMcp.ImapClient;
+using UltimateImapMcp.ImapClient.Repositories;
 using UltimateImapMcp.Queue.Models;
 
 namespace UltimateImapMcp.Queue;
 
 public record SendEnqueueResult(string PendingId, string ConfirmMode, string Status, string? SendsAt, int? UndoWindowSeconds);
 
-public class QueueManager(QueueRepository repo, AppConfig config)
+public class QueueManager(QueueRepository repo, AccountRepository accountRepo,
+    CredentialEncryptor encryptor)
 {
     public SendEnqueueResult EnqueueSend(string accountId, string payload)
     {
-        var account = config.Accounts.FirstOrDefault(a =>
-            a.Name.Equals(accountId, StringComparison.OrdinalIgnoreCase));
-        if (account is null)
-            throw new InvalidOperationException($"Account '{accountId}' not found.");
-        var confirmMode = account.ConfirmMode ?? "implicit";
-        var undoSeconds = account.UndoWindowSeconds;
+        var dbAccount = accountRepo.ResolveAccount(accountId)
+            ?? throw new InvalidOperationException($"Account '{accountId}' not found.");
+
+        var accountConfig = AccountConfigMapper.ToAccountConfig(dbAccount, encryptor);
+        var confirmMode = accountConfig.ConfirmMode ?? "implicit";
+        var undoSeconds = accountConfig.UndoWindowSeconds;
 
         string? sendsAt = null;
         bool requiresConfirm;
@@ -34,7 +38,7 @@ public class QueueManager(QueueRepository repo, AppConfig config)
 
         var id = repo.Insert(new EnqueueRequest
         {
-            AccountId = accountId,
+            AccountId = dbAccount.Id,
             Operation = OperationType.Send,
             Priority = OperationPriority.P0,
             Payload = payload,
@@ -51,6 +55,10 @@ public class QueueManager(QueueRepository repo, AppConfig config)
 
     public string EnqueueOperation(string accountId, OperationType operation, string payload)
     {
+        // Resolve to canonical DB ID
+        var dbAccount = accountRepo.ResolveAccount(accountId);
+        var resolvedId = dbAccount?.Id ?? accountId;
+
         var priority = operation switch
         {
             OperationType.Send or OperationType.Reply or OperationType.Forward => OperationPriority.P0,
@@ -60,7 +68,7 @@ public class QueueManager(QueueRepository repo, AppConfig config)
 
         var id = repo.Insert(new EnqueueRequest
         {
-            AccountId = accountId,
+            AccountId = resolvedId,
             Operation = operation,
             Priority = priority,
             Payload = payload

@@ -5,6 +5,13 @@ namespace UltimateImapMcp.Core.Configuration;
 /// <summary>Top-level application configuration.</summary>
 public class AppConfig
 {
+    /// <summary>
+    /// The file path this config was loaded from. Not serialised — set at runtime by Program.cs.
+    /// Used by the dashboard to write settings back to disk.
+    /// </summary>
+    [JsonIgnore]
+    public string? SourcePath { get; set; }
+
     [JsonPropertyName("server")]
     public ServerConfig Server { get; set; } = new();
 
@@ -22,6 +29,9 @@ public class AppConfig
 
     [JsonPropertyName("metrics")]
     public MetricsConfig Metrics { get; set; } = new();
+
+    [JsonPropertyName("oauth_providers")]
+    public Dictionary<string, OAuthProviderConfig> OAuthProviders { get; set; } = new();
 }
 
 /// <summary>MCP server transport and dashboard settings.</summary>
@@ -42,11 +52,17 @@ public class ServerConfig
     [JsonPropertyName("dashboard_auth")]
     public string? DashboardAuth { get; set; }
 
+    [JsonPropertyName("dashboard_auto_open")]
+    public bool DashboardAutoOpen { get; set; } = false;
+
     [JsonPropertyName("log_level")]
     public string LogLevel { get; set; } = "Information";
 
     [JsonPropertyName("log_file")]
     public string? LogFile { get; set; }
+
+    [JsonPropertyName("log_dir")]
+    public string? LogDir { get; set; }
 }
 
 /// <summary>IMAP/SMTP account configuration.</summary>
@@ -254,4 +270,23 @@ public class MetricsConfig
 
     [JsonPropertyName("export_interval_seconds")]
     public int ExportIntervalSeconds { get; set; } = 15;
+}
+
+/// <summary>Configuration for an OAuth2 provider (e.g. Gmail, Outlook).</summary>
+public class OAuthProviderConfig
+{
+    [JsonPropertyName("client_id")]
+    public string ClientId { get; set; } = string.Empty;
+
+    [JsonPropertyName("client_secret")]
+    public string? ClientSecret { get; set; }
+
+    [JsonPropertyName("auth_url")]
+    public string? AuthUrl { get; set; }
+
+    [JsonPropertyName("token_url")]
+    public string? TokenUrl { get; set; }
+
+    [JsonPropertyName("scopes")]
+    public List<string>? Scopes { get; set; }
 }
