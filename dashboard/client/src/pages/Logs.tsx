@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useLogs, useLogInstances, type LogEntry } from '../hooks/useApi'
 
-const LOG_LEVELS = ['All', 'Trace', 'Debug', 'Information', 'Warning', 'Error', 'Critical'] as const
+const LOG_LEVELS = ['Trace', 'Debug', 'Information', 'Warning', 'Error', 'Critical'] as const
 
 const LOG_SCOPES = [
   { value: 'All', label: 'All Scopes' },
@@ -41,6 +41,8 @@ const SCOPE_PILL_STYLES: Record<string, string> = {
   queue: 'bg-amber-100 text-amber-800',
   system: 'bg-slate-200 text-slate-800',
 }
+
+const PAGE_SIZE_OPTIONS = [50, 100, 200, 500] as const
 
 function LogRow({ log, expanded, onToggle }: { log: LogEntry; expanded: boolean; onToggle: () => void }) {
   const colors = LEVEL_COLORS[log.level] ?? LEVEL_COLORS.Information
@@ -111,27 +113,70 @@ function LogRow({ log, expanded, onToggle }: { log: LogEntry; expanded: boolean;
 }
 
 export default function Logs() {
-  const [level, setLevel] = useState<string>('All')
+  const [selectedLevels, setSelectedLevels] = useState<Set<string>>(new Set())
   const [scope, setScope] = useState<string>('All')
   const [instanceId, setInstanceId] = useState<string>('')
   const [search, setSearch] = useState('')
   const [searchInput, setSearchInput] = useState('')
-  const [limit, setLimit] = useState(200)
-  const [expandedId, setExpandedId] = useState<number | null>(null)
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(100)
+  const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set())
 
   const { data: instances } = useLogInstances()
 
+  const levelsParam = selectedLevels.size > 0 ? Array.from(selectedLevels).join(',') : undefined
+
   const { data, isLoading, error } = useLogs({
-    level: level === 'All' ? undefined : level,
+    levels: levelsParam,
     scope: scope === 'All' ? undefined : scope,
     instance_id: instanceId || undefined,
     search: search || undefined,
-    limit,
+    page,
+    page_size: pageSize,
   })
+
+  const totalPages = data ? Math.max(1, Math.ceil(data.total_count / data.page_size)) : 1
+
+  function toggleInSet<T>(setter: React.Dispatch<React.SetStateAction<Set<T>>>, item: T) {
+    setter(prev => {
+      const next = new Set(prev)
+      if (next.has(item)) next.delete(item)
+      else next.add(item)
+      return next
+    })
+  }
+
+  const toggleLevel = (level: string) => {
+    toggleInSet(setSelectedLevels, level)
+    setPage(1)
+  }
+
+  const clearLevels = () => {
+    setSelectedLevels(new Set())
+    setPage(1)
+  }
+
+  const toggleExpanded = (id: number) => toggleInSet(setExpandedIds, id)
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
     setSearch(searchInput)
+    setPage(1)
+  }
+
+  const handleScopeChange = (value: string) => {
+    setScope(value)
+    setPage(1)
+  }
+
+  const handleInstanceChange = (value: string) => {
+    setInstanceId(value)
+    setPage(1)
+  }
+
+  const handlePageSizeChange = (value: number) => {
+    setPageSize(value)
+    setPage(1)
   }
 
   return (
@@ -142,7 +187,7 @@ export default function Logs() {
           {/* Instance picker */}
           <select
             value={instanceId}
-            onChange={e => setInstanceId(e.target.value)}
+            onChange={e => handleInstanceChange(e.target.value)}
             className="text-sm border border-gray-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="">All instances</option>
@@ -151,7 +196,9 @@ export default function Logs() {
             ))}
           </select>
           {data && (
-            <span className="text-sm text-gray-500">{data.count} entries</span>
+            <span className="text-sm text-gray-500">
+              {data.total_count} total
+            </span>
           )}
         </div>
       </div>
@@ -159,12 +206,22 @@ export default function Logs() {
       {/* Level filter pills */}
       <div className="flex items-center gap-2 mb-3 flex-wrap">
         <span className="text-xs text-gray-500 font-medium mr-1">Level:</span>
+        <button
+          onClick={clearLevels}
+          className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+            selectedLevels.size === 0
+              ? PILL_STYLES.All
+              : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+          }`}
+        >
+          All
+        </button>
         {LOG_LEVELS.map(l => (
           <button
             key={l}
-            onClick={() => setLevel(l)}
+            onClick={() => toggleLevel(l)}
             className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-              level === l
+              selectedLevels.has(l)
                 ? PILL_STYLES[l]
                 : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
             }`}
@@ -180,7 +237,7 @@ export default function Logs() {
         {LOG_SCOPES.map(s => (
           <button
             key={s.value}
-            onClick={() => setScope(s.value)}
+            onClick={() => handleScopeChange(s.value)}
             className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
               scope === s.value
                 ? SCOPE_PILL_STYLES[s.value]
@@ -210,7 +267,7 @@ export default function Logs() {
         {search && (
           <button
             type="button"
-            onClick={() => { setSearch(''); setSearchInput('') }}
+            onClick={() => { setSearch(''); setSearchInput(''); setPage(1) }}
             className="px-3 py-2 text-gray-500 bg-gray-100 rounded-lg text-sm hover:bg-gray-200"
           >
             Clear
@@ -230,7 +287,7 @@ export default function Logs() {
 
       {data && data.logs.length === 0 && (
         <div className="text-center py-12 bg-white rounded-lg shadow">
-          <p className="text-gray-500">No logs found{level !== 'All' ? ` for level "${level}"` : ''}{scope !== 'All' ? ` in scope "${scope}"` : ''}{search ? ` matching "${search}"` : ''}.</p>
+          <p className="text-gray-500">No logs found{selectedLevels.size > 0 ? ` for level "${Array.from(selectedLevels).join(', ')}"` : ''}{scope !== 'All' ? ` in scope "${scope}"` : ''}{search ? ` matching "${search}"` : ''}.</p>
         </div>
       )}
 
@@ -240,22 +297,50 @@ export default function Logs() {
             <LogRow
               key={log.id}
               log={log}
-              expanded={expandedId === log.id}
-              onToggle={() => setExpandedId(prev => prev === log.id ? null : log.id)}
+              expanded={expandedIds.has(log.id)}
+              onToggle={() => toggleExpanded(log.id)}
             />
           ))}
         </div>
       )}
 
-      {/* Load more */}
-      {data && data.count >= limit && (
-        <div className="text-center mt-4">
-          <button
-            onClick={() => setLimit(prev => prev + 200)}
-            className="px-4 py-2 text-sm text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-          >
-            Load more
-          </button>
+      {/* Pagination controls */}
+      {data && data.total_count > 0 && (
+        <div className="flex items-center justify-between mt-4">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-500">Rows per page:</span>
+            <select
+              value={pageSize}
+              onChange={e => handlePageSizeChange(Number(e.target.value))}
+              className="text-sm border border-gray-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {PAGE_SIZE_OPTIONS.map(size => (
+                <option key={size} value={size}>{size}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-gray-600">
+              Page {page} of {totalPages}
+            </span>
+            <div className="flex gap-1">
+              <button
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page <= 1}
+                className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                Previous
+              </button>
+              <button
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                disabled={page >= totalPages}
+                className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                Next
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
