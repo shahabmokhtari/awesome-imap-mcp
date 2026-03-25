@@ -111,6 +111,37 @@ export function useAuthStatus() {
   })
 }
 
+// ---------- Server hooks ----------
+
+export interface ServerInfo {
+  instance_id: string
+  uptime_seconds: number
+  process_id: number
+  version: string
+  started_at: string
+  transport: string
+  dashboard_port: number
+  http_port: number
+}
+
+export function useServerInfo() {
+  return useQuery({
+    queryKey: ['server-info'],
+    queryFn: () => apiFetch<ServerInfo>('/api/server/info'),
+    refetchInterval: 30000,
+  })
+}
+
+export function useShutdownServer() {
+  return useMutation({
+    mutationFn: (data?: { delay_seconds?: number }) =>
+      apiFetch<{ message: string; shutting_down: boolean }>('/api/server/shutdown', {
+        method: 'POST',
+        body: JSON.stringify(data ?? {}),
+      }),
+  })
+}
+
 // ---------- Mutation hooks ----------
 
 export function useCreateAccount() {
