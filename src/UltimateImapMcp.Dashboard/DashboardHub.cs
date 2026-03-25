@@ -57,9 +57,10 @@ public sealed class DashboardHubRelay(
 
     public override Task StopAsync(CancellationToken cancellationToken)
     {
-        foreach (var sub in _subscriptions)
-            sub.Dispose();
+        var subs = _subscriptions.ToList();
         _subscriptions.Clear();
+        foreach (var sub in subs)
+            sub.Dispose();
         return base.StopAsync(cancellationToken);
     }
 }

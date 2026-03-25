@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using UltimateImapMcp.Core.Configuration;
 
 namespace UltimateImapMcp.Dashboard;
 
@@ -22,7 +24,8 @@ public static class PinAuthMiddleware
             return Results.Ok(new { HasPinSet = hasPinSet });
         });
 
-        app.MapPost("/api/auth/setup", async (HttpContext ctx, DashboardAuthRepository authRepo) =>
+        app.MapPost("/api/auth/setup", async (HttpContext ctx, DashboardAuthRepository authRepo, AppConfig config,
+            ILogger<DashboardAuthRepository> logger) =>
         {
             if (authRepo.HasPinSet())
                 return Results.BadRequest(new { Error = "PIN already set. Use /api/auth/login." });
@@ -31,10 +34,21 @@ public static class PinAuthMiddleware
             if (body is null || string.IsNullOrWhiteSpace(body.Pin))
                 return Results.BadRequest(new { Error = "PIN is required" });
 
+            if (body.Pin.Length < 4 || body.Pin.Length > 6 || !body.Pin.All(char.IsDigit))
+                return Results.BadRequest(new { Error = "PIN must be 4-6 digits" });
+
             var hash = BCrypt.Net.BCrypt.HashPassword(body.Pin);
             authRepo.UpsertPin(hash);
 
-            var token = authRepo.CreateSession(TimeSpan.FromHours(24));
+            // Enable PIN auth in config and persist
+            config.Server.DashboardAuth = "pin";
+            if (config.SourcePath is not null)
+            {
+                try { ConfigLoader.SaveToFile(config, config.SourcePath); }
+                catch (Exception ex) { logger.LogWarning(ex, "Failed to persist config after PIN setup"); }
+            }
+
+            var token = authRepo.CreateSession(TimeSpan.FromMinutes(30));
             return Results.Ok(new { Token = token, Message = "PIN set successfully" });
         });
 
@@ -51,8 +65,57 @@ public static class PinAuthMiddleware
             if (!BCrypt.Net.BCrypt.Verify(body.Pin, auth.Hash))
                 return Results.Json(new { Error = "Invalid PIN" }, statusCode: 401);
 
-            var token = authRepo.CreateSession(TimeSpan.FromHours(24));
+            var token = authRepo.CreateSession(TimeSpan.FromMinutes(30));
             return Results.Ok(new { Token = token });
+        });
+
+        app.MapPost("/api/auth/change-pin", async (HttpContext ctx, DashboardAuthRepository authRepo) =>
+        {
+            // Validate session token — this endpoint is under /api/auth/ which bypasses PIN middleware
+            var authHeader = ctx.Request.Headers.Authorization.FirstOrDefault();
+            if (authRepo.HasPinSet())
+            {
+                if (authHeader is null || !authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+                    return Results.Json(new { Error = "Authentication required" }, statusCode: 401);
+                var sessionToken = authHeader["Bearer ".Length..].Trim();
+                if (!authRepo.ValidateSession(sessionToken))
+                    return Results.Json(new { Error = "Invalid or expired session" }, statusCode: 401);
+            }
+
+            var body = await ctx.Request.ReadFromJsonAsync<ChangePinRequest>().ConfigureAwait(false);
+            if (body is null || string.IsNullOrWhiteSpace(body.NewPin))
+                return Results.BadRequest(new { Error = "new_pin is required" });
+
+            if (body.NewPin.Length < 4 || body.NewPin.Length > 6 || !body.NewPin.All(char.IsDigit))
+                return Results.BadRequest(new { Error = "PIN must be 4-6 digits" });
+
+            // If PIN already set, require old pin
+            if (authRepo.HasPinSet())
+            {
+                if (string.IsNullOrWhiteSpace(body.OldPin))
+                    return Results.BadRequest(new { Error = "old_pin is required when changing an existing PIN" });
+
+                var auth = authRepo.GetPinAuth();
+                if (auth is null || !BCrypt.Net.BCrypt.Verify(body.OldPin, auth.Hash))
+                    return Results.Json(new { Error = "Invalid current PIN" }, statusCode: 401);
+            }
+
+            var hash = BCrypt.Net.BCrypt.HashPassword(body.NewPin);
+            authRepo.UpsertPin(hash);
+
+            var token = authRepo.CreateSession(TimeSpan.FromMinutes(30));
+            return Results.Ok(new { Token = token, Message = "PIN updated successfully" });
+        });
+
+        app.MapPost("/api/auth/logout", (HttpContext ctx, DashboardAuthRepository authRepo) =>
+        {
+            var authHeader = ctx.Request.Headers.Authorization.FirstOrDefault();
+            if (authHeader is not null && authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+            {
+                var token = authHeader["Bearer ".Length..].Trim();
+                authRepo.DeleteSession(token);
+            }
+            return Results.Ok(new { Message = "Logged out" });
         });
 
         return app;
@@ -72,16 +135,22 @@ public static class PinAuthMiddleware
                 return;
             }
 
+            // Skip auth when dashboard_auth is not "pin" AND no PIN has been set in DB
+            var config = ctx.RequestServices.GetRequiredService<AppConfig>();
             var authRepo = ctx.RequestServices.GetRequiredService<DashboardAuthRepository>();
+            var pinIsConfigured = string.Equals(config.Server.DashboardAuth, "pin", StringComparison.OrdinalIgnoreCase);
+            var pinExistsInDb = authRepo.HasPinSet();
 
-            // If no PIN set yet, block all API access except auth endpoints
-            if (!authRepo.HasPinSet())
+            if (!pinIsConfigured && !pinExistsInDb)
             {
-                ctx.Response.StatusCode = 403;
-                ctx.Response.ContentType = "application/json";
-                await ctx.Response.WriteAsync(
-                    JsonSerializer.Serialize(new { Error = "Dashboard not configured. Set a PIN via /api/auth/setup first." })).ConfigureAwait(false);
+                await next().ConfigureAwait(false);
                 return;
+            }
+
+            // If PIN exists in DB but config doesn't say "pin", auto-fix the config
+            if (pinExistsInDb && !pinIsConfigured)
+            {
+                config.Server.DashboardAuth = "pin";
             }
 
             // Check for Bearer token
@@ -113,4 +182,12 @@ public static class PinAuthMiddleware
 public record PinRequest
 {
     public string Pin { get; init; } = "";
+}
+
+public record ChangePinRequest
+{
+    [System.Text.Json.Serialization.JsonPropertyName("old_pin")]
+    public string? OldPin { get; init; }
+    [System.Text.Json.Serialization.JsonPropertyName("new_pin")]
+    public string? NewPin { get; init; }
 }

@@ -1,10 +1,14 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Net.Sockets;
 using MailKit;
+using MailKit.Net.Imap;
+using MailKit.Security;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using UltimateImapMcp.Core.Configuration;
 using UltimateImapMcp.Core.Encryption;
+using UltimateImapMcp.Core.OAuth;
 using UltimateImapMcp.Core.Providers;
 using UltimateImapMcp.ImapClient.Repositories;
 using ImapClientLib = MailKit.Net.Imap.ImapClient;
@@ -18,12 +22,13 @@ namespace UltimateImapMcp.ImapClient;
 /// 3. On-demand sync triggered by MCP tools
 /// </summary>
 public class SyncManager(
-    AppConfig config,
+    AccountRepository accountRepo,
     CredentialEncryptor encryptor,
     ProviderProfileRegistry providerRegistry,
     ImapSyncService syncService,
     FolderRepository folderRepo,
     SyncLogRepository syncLogRepo,
+    IOAuthAccessTokenProvider oauthProvider,
     ILogger<SyncManager> logger) : BackgroundService
 {
     private readonly ConcurrentDictionary<string, ImapConnectionManager> _connections = new();
@@ -36,18 +41,22 @@ public class SyncManager(
 
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
-        logger.LogInformation("SyncManager started — {Count} account(s) configured",
-            config.Accounts.Count);
+        var dbAccounts = accountRepo.GetAll();
+
+        logger.LogInformation("SyncManager started — {Count} account(s) in database",
+            dbAccounts.Count);
 
         var tasks = new List<Task>();
 
-        foreach (var account in config.Accounts)
+        foreach (var record in dbAccounts)
         {
-            var accountId = account.Name.ToLowerInvariant().Replace(' ', '-');
+            var accountId = record.Id;
+            var account = AccountConfigMapper.ToAccountConfig(record, encryptor);
 
             // Create a connection manager for each account
             var connMgr = new ImapConnectionManager(account, encryptor,
-                logger as ILogger<ImapConnectionManager>);
+                logger as ILogger<ImapConnectionManager>,
+                oauthProvider, accountId);
             _connections[accountId] = connMgr;
 
             // Start IDLE listeners for configured folders
@@ -80,7 +89,7 @@ public class SyncManager(
         foreach (var (_, connMgr) in _connections)
         {
             try { await connMgr.DisconnectAsync(ct).ConfigureAwait(false); }
-            catch (Exception ex) { Console.Error.WriteLine($"[SyncManager] Cleanup failed: {ex.Message}"); }
+            catch (Exception ex) { logger.LogDebug(ex, "Connection cleanup failed for account (non-fatal)"); }
             connMgr.Dispose();
         }
         _connections.Clear();
@@ -110,13 +119,26 @@ public class SyncManager(
                 idleClient = new ImapClientLib();
                 await idleClient.ConnectAsync(
                     account.ImapHost, account.ImapPort,
-                    MailKit.Security.SecureSocketOptions.SslOnConnect,
+                    SecureSocketOptions.SslOnConnect,
                     idleCts.Token).ConfigureAwait(false);
 
-                var password = account.Password ?? throw new InvalidOperationException($"No password configured for IDLE connection to account '{account.Username}'.");
-                await idleClient.AuthenticateAsync(
-                    account.Username, password,
-                    idleCts.Token).ConfigureAwait(false);
+                if (account.AuthType.Equals("oauth2", StringComparison.OrdinalIgnoreCase)
+                    && oauthProvider is not null)
+                {
+                    var accessToken = await oauthProvider.GetAccessTokenAsync(accountId, idleCts.Token)
+                        .ConfigureAwait(false)
+                        ?? throw new InvalidOperationException(
+                            $"No OAuth access token available for IDLE connection to account '{account.Username}'.");
+                    var oauth2 = new SaslMechanismOAuth2(account.Username, accessToken);
+                    await idleClient.AuthenticateAsync(oauth2, idleCts.Token).ConfigureAwait(false);
+                }
+                else
+                {
+                    var password = account.Password ?? throw new InvalidOperationException($"No password configured for IDLE connection to account '{account.Username}'.");
+                    await idleClient.AuthenticateAsync(
+                        account.Username, password,
+                        idleCts.Token).ConfigureAwait(false);
+                }
 
                 var imapFolder = await idleClient.GetFolderAsync(folderPath, idleCts.Token)
                     .ConfigureAwait(false);
@@ -135,8 +157,10 @@ public class SyncManager(
                         }
                         catch (Exception ex)
                         {
-                            logger.LogWarning(ex, "IDLE-triggered sync failed for {Account}/{Folder}",
+                            logger.LogError(ex, "IDLE-triggered sync failed for {Account}/{Folder}",
                                 accountId, folderPath);
+                            _folderStatus[$"{accountId}:{folderPath}"] = new FolderSyncStatus(
+                                folderPath, null, DateTime.UtcNow, 0, 0, "failed");
                         }
                     }, ct);
                 };
@@ -181,7 +205,7 @@ public class SyncManager(
             }
             finally
             {
-                try { idleClient?.Dispose(); } catch (Exception ex) { Console.Error.WriteLine($"[SyncManager] Cleanup failed: {ex.Message}"); }
+                try { idleClient?.Dispose(); } catch (Exception ex) { logger.LogDebug(ex, "IDLE client cleanup failed (non-fatal)"); }
             }
         }
     }
@@ -209,7 +233,7 @@ public class SyncManager(
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Initial sync failed for {Account}", accountId);
+            logger.LogError(ex, "Initial sync failed for {Account}", accountId);
         }
 
         while (!ct.IsCancellationRequested)
@@ -246,52 +270,87 @@ public class SyncManager(
     private async Task SyncAllFoldersAsync(string accountId, AccountConfig account,
         ImapConnectionManager connMgr, string syncType, CancellationToken ct)
     {
-        var client = await connMgr.GetConnectedClientAsync(ct).ConfigureAwait(false);
-
-        // Sync folder list first
-        var profile = providerRegistry.GetProfileByName(account.Provider);
-        var mapper = new FolderMapper(profile);
-        await syncService.SyncFoldersAsync(client, accountId, mapper, ct).ConfigureAwait(false);
-
-        // Sync messages for each enabled folder
-        var folders = folderRepo.GetByAccount(accountId);
-        foreach (var folder in folders.Where(f => f.SyncEnabled))
+        await connMgr.ExecuteAsync(async client =>
         {
-            ct.ThrowIfCancellationRequested();
-            await SyncFolderInternalAsync(accountId, connMgr, folder, syncType, ct)
-                .ConfigureAwait(false);
-        }
+            // Sync folder list first
+            var profile = providerRegistry.GetProfileByName(account.Provider);
+            var mapper = new FolderMapper(profile);
+            await syncService.SyncFoldersAsync(client, accountId, mapper, ct).ConfigureAwait(false);
+
+            // Sync messages for each enabled folder
+            var folders = folderRepo.GetByAccount(accountId);
+            var enabledFolders = folders.Where(f => f.SyncEnabled).ToList();
+
+            logger.LogInformation("Starting {SyncType} sync for {Account} — {Count} enabled folder(s)",
+                syncType, accountId, enabledFolders.Count);
+
+            foreach (var folder in enabledFolders)
+            {
+                ct.ThrowIfCancellationRequested();
+                await SyncFolderInternalCoreAsync(client, accountId, folder, syncType, ct)
+                    .ConfigureAwait(false);
+            }
+
+            logger.LogInformation("Completed {SyncType} sync for {Account} — {Count} folder(s) processed",
+                syncType, accountId, enabledFolders.Count);
+        }, ct).ConfigureAwait(false);
     }
 
     private async Task SyncFolderAsync(string accountId, AccountConfig account,
         ImapConnectionManager connMgr, string folderPath, string syncType,
         CancellationToken ct)
     {
-        var folder = folderRepo.GetByPath(accountId, folderPath);
-        if (folder is null)
+        await connMgr.ExecuteAsync(async client =>
         {
-            logger.LogWarning("Folder {Folder} not found for account {Account}", folderPath, accountId);
-            return;
-        }
+            var folder = folderRepo.GetByPath(accountId, folderPath);
+            if (folder is null)
+            {
+                // Folder not in DB yet — discover from IMAP
+                logger.LogInformation("Folder {Folder} not in DB, discovering from IMAP for account {Account}",
+                    folderPath, accountId);
+                var imapFolder = await client.GetFolderAsync(folderPath, ct).ConfigureAwait(false);
+                if (imapFolder is null)
+                    throw new InvalidOperationException($"Folder '{folderPath}' does not exist on the IMAP server.");
 
-        await SyncFolderInternalAsync(accountId, connMgr, folder, syncType, ct).ConfigureAwait(false);
+                await imapFolder.OpenAsync(MailKit.FolderAccess.ReadOnly, ct).ConfigureAwait(false);
+                var delimiter = imapFolder.DirectorySeparator.ToString();
+                folderRepo.Insert(accountId, folderPath, imapFolder.Name, null, delimiter);
+                await imapFolder.CloseAsync(false, ct).ConfigureAwait(false);
+
+                folder = folderRepo.GetByPath(accountId, folderPath)
+                    ?? throw new InvalidOperationException($"Failed to create folder record for '{folderPath}'.");
+            }
+
+            await SyncFolderInternalCoreAsync(client, accountId, folder, syncType, ct)
+                .ConfigureAwait(false);
+        }, ct).ConfigureAwait(false);
     }
 
+    /// <summary>Syncs a single folder using ExecuteAsync for thread safety.</summary>
     private async Task SyncFolderInternalAsync(string accountId, ImapConnectionManager connMgr,
         FolderRecord folder, string syncType, CancellationToken ct)
+    {
+        await connMgr.ExecuteAsync(async client =>
+        {
+            await SyncFolderInternalCoreAsync(client, accountId, folder, syncType, ct)
+                .ConfigureAwait(false);
+        }, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Core folder sync logic. Caller must ensure exclusive IMAP client access.</summary>
+    private async Task SyncFolderInternalCoreAsync(MailKit.Net.Imap.ImapClient client,
+        string accountId, FolderRecord folder, string syncType, CancellationToken ct)
     {
         var logId = syncLogRepo.LogStart(accountId, folder.Id, syncType);
         var sw = Stopwatch.StartNew();
 
         try
         {
-            var client = await connMgr.GetConnectedClientAsync(ct).ConfigureAwait(false);
             await syncService.SyncFolderMessagesAsync(client, accountId, folder, ct)
                 .ConfigureAwait(false);
 
             sw.Stop();
 
-            // Get updated folder to see how many messages were synced
             var updatedFolder = folderRepo.GetByPath(accountId, folder.Path);
             var messagesSynced = updatedFolder is not null
                 ? updatedFolder.LastSyncedUid - folder.LastSyncedUid
@@ -299,7 +358,6 @@ public class SyncManager(
 
             syncLogRepo.LogComplete(logId, (int)Math.Max(0, messagesSynced), sw.ElapsedMilliseconds);
 
-            // Update status
             _folderStatus[$"{accountId}:{folder.Path}"] = new FolderSyncStatus(
                 folder.Path,
                 folder.DisplayName,
@@ -325,6 +383,10 @@ public class SyncManager(
                 "failed");
 
             logger.LogError(ex, "Sync failed for {Account}/{Folder}", accountId, folder.Path);
+
+            // Rethrow connection-level errors so the parent stops trying more folders on a dead connection
+            if (ex is IOException or SocketException or ImapProtocolException)
+                throw;
         }
     }
 
@@ -338,15 +400,24 @@ public class SyncManager(
     public async Task TriggerSyncAsync(string accountId, string? folderPath = null,
         CancellationToken ct = default)
     {
+        // Resolve account from DB
+        var record = accountRepo.ResolveAccount(accountId)
+            ?? throw new InvalidOperationException($"Account '{accountId}' not found in database.");
+
+        // Use the canonical DB id
+        accountId = record.Id;
+        var account = AccountConfigMapper.ToAccountConfig(record, encryptor);
+
+        // Create connection on the fly if not already tracked (e.g., account added after startup)
         if (!_connections.TryGetValue(accountId, out var connMgr))
         {
-            throw new InvalidOperationException($"Account '{accountId}' is not configured or not connected.");
+            connMgr = new ImapConnectionManager(account, encryptor,
+                logger as ILogger<ImapConnectionManager>,
+                oauthProvider, accountId);
+            _connections[accountId] = connMgr;
+            logger.LogInformation("Created on-demand connection for account {AccountId} ({Name})",
+                accountId, record.Name);
         }
-
-        // Find the matching account config
-        var account = config.Accounts.FirstOrDefault(a =>
-            a.Name.ToLowerInvariant().Replace(' ', '-') == accountId)
-            ?? throw new InvalidOperationException($"Account config for '{accountId}' not found.");
 
         if (folderPath is not null)
         {

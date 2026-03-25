@@ -16,10 +16,12 @@ public static class LogsApi
             var from = ctx.Request.Query["from"].FirstOrDefault();
             var to = ctx.Request.Query["to"].FirstOrDefault();
             var search = ctx.Request.Query["search"].FirstOrDefault();
+            var scope = ctx.Request.Query["scope"].FirstOrDefault();
+            var instanceId = ctx.Request.Query["instance_id"].FirstOrDefault();
             var limitStr = ctx.Request.Query["limit"].FirstOrDefault();
             var limit = int.TryParse(limitStr, out var l) ? l : 100;
 
-            var results = logsRepo.Query(level, category, from, to, search, limit);
+            var results = logsRepo.Query(level, category, from, to, search, limit, scope, instanceId);
 
             return Results.Ok(new
             {
@@ -32,9 +34,17 @@ public static class LogsApi
                     message = log.Message,
                     exception = log.Exception,
                     metadata = log.Metadata,
-                    created_at = log.CreatedAt
+                    created_at = log.CreatedAt,
+                    scope = log.Scope,
+                    instance_id = log.InstanceId
                 }).ToList()
             });
+        });
+
+        app.MapGet("/api/logs/instances", (LogsRepository logsRepo) =>
+        {
+            var instances = logsRepo.GetDistinctInstanceIds();
+            return Results.Ok(instances);
         });
 
         return app;

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using UltimateImapMcp.Core;
 using UltimateImapMcp.Core.Configuration;
 using UltimateImapMcp.Core.Database;
 using UltimateImapMcp.Core.Encryption;
@@ -18,6 +19,7 @@ namespace UltimateImapMcp.McpServer;
 /// <summary>
 /// Background service that hosts the MCP server over HTTP+SSE transport
 /// on the configured http_port. Only activated when transport is "http" or "both".
+/// If the port is already in use, enters standby mode and takes over when it frees up.
 /// </summary>
 public sealed class HttpMcpTransportHost : BackgroundService
 {
@@ -37,6 +39,33 @@ public sealed class HttpMcpTransportHost : BackgroundService
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var port = _config.Server.HttpPort;
+
+        // Wait in standby if another instance owns the port
+        await PortUtils.WaitForPortAsync(port, _logger, "MCP HTTP", stoppingToken).ConfigureAwait(false);
+
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            try
+            {
+                await StartHttpServer(port, stoppingToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
+            {
+                _logger.LogError(ex, "MCP HTTP transport failed — will retry when port {Port} is available", port);
+                _webApp = null;
+
+                // Wait for port to become available again before retrying
+                await PortUtils.WaitForPortAsync(port, _logger, "MCP HTTP", stoppingToken).ConfigureAwait(false);
+            }
+        }
+    }
+
+    private async Task StartHttpServer(int port, CancellationToken stoppingToken)
+    {
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
 
@@ -78,14 +107,7 @@ public sealed class HttpMcpTransportHost : BackgroundService
 
         _logger.LogInformation("MCP HTTP transport starting on http://0.0.0.0:{Port}", port);
 
-        try
-        {
-            await app.RunAsync(stoppingToken).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-        {
-            // Expected shutdown
-        }
+        await app.RunAsync(stoppingToken).ConfigureAwait(false);
     }
 
     public override async Task StopAsync(CancellationToken cancellationToken)

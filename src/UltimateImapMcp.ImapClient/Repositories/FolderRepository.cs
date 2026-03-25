@@ -6,7 +6,8 @@ public record FolderRecord(
     int Id, string AccountId, string Path, string? DisplayName,
     string? Role, string Delimiter, string? Flags,
     int MessageCount, int UnreadCount, long LastSyncedUid,
-    string? LastSyncedAt, bool SyncEnabled, bool IdleEnabled, int PollInterval);
+    string? LastSyncedAt, bool SyncEnabled, bool IdleEnabled, int PollInterval,
+    string? SyncCursor = null);
 
 public class FolderRepository(AppDatabase db)
 {
@@ -71,6 +72,21 @@ public class FolderRepository(AppDatabase db)
         });
     }
 
+    /// <summary>
+    /// Updates the sync cursor for REST-based backends that use cursor-based pagination.
+    /// </summary>
+    public void UpdateSyncCursor(int folderId, string? syncCursor)
+    {
+        db.ExecuteWrite(conn =>
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "UPDATE folders SET sync_cursor = $cursor WHERE id = $id;";
+            cmd.Parameters.AddWithValue("$id", folderId);
+            cmd.Parameters.AddWithValue("$cursor", (object?)syncCursor ?? DBNull.Value);
+            cmd.ExecuteNonQuery();
+        });
+    }
+
     private static FolderRecord ReadRecord(Microsoft.Data.Sqlite.SqliteDataReader r) => new(
         Id: r.GetInt32(r.GetOrdinal("id")),
         AccountId: r.GetString(r.GetOrdinal("account_id")),
@@ -85,6 +101,7 @@ public class FolderRepository(AppDatabase db)
         LastSyncedAt: r.IsDBNull(r.GetOrdinal("last_synced_at")) ? null : r.GetString(r.GetOrdinal("last_synced_at")),
         SyncEnabled: r.GetInt32(r.GetOrdinal("sync_enabled")) == 1,
         IdleEnabled: r.GetInt32(r.GetOrdinal("idle_enabled")) == 1,
-        PollInterval: r.GetInt32(r.GetOrdinal("poll_interval"))
+        PollInterval: r.GetInt32(r.GetOrdinal("poll_interval")),
+        SyncCursor: r.IsDBNull(r.GetOrdinal("sync_cursor")) ? null : r.GetString(r.GetOrdinal("sync_cursor"))
     );
 }

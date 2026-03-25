@@ -12,8 +12,9 @@ namespace UltimateImapMcp.Core.Logging;
 public sealed class SqliteLoggerProvider : ILoggerProvider, IDisposable
 {
     private readonly LogsRepository _logsRepo;
+    private readonly string _instanceId;
     private readonly ConcurrentQueue<(string Level, string Category, string Message,
-        string? Exception, string? Metadata)> _buffer = new();
+        string? Exception, string? Metadata, string Scope, string InstanceId)> _buffer = new();
     private readonly Timer _flushTimer;
     private readonly Timer _pruneTimer;
     private readonly ConcurrentDictionary<string, SqliteLogger> _loggers = new();
@@ -22,23 +23,24 @@ public sealed class SqliteLoggerProvider : ILoggerProvider, IDisposable
     private static readonly TimeSpan FlushInterval = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan PruneInterval = TimeSpan.FromHours(1);
 
-    public SqliteLoggerProvider(LogsRepository logsRepo)
+    public SqliteLoggerProvider(LogsRepository logsRepo, string instanceId = "")
     {
         _logsRepo = logsRepo;
+        _instanceId = instanceId;
         _flushTimer = new Timer(_ => Flush(), null, FlushInterval, FlushInterval);
         _pruneTimer = new Timer(_ => Prune(), null, PruneInterval, PruneInterval);
     }
 
     public ILogger CreateLogger(string categoryName)
     {
-        return _loggers.GetOrAdd(categoryName, name => new SqliteLogger(name, this));
+        return _loggers.GetOrAdd(categoryName, name => new SqliteLogger(name, this, _instanceId));
     }
 
     internal void Enqueue(string level, string category, string message,
-        string? exception, string? metadata)
+        string? exception, string? metadata, string scope, string instanceId)
     {
         if (_disposed) return;
-        _buffer.Enqueue((level, category, message, exception, metadata));
+        _buffer.Enqueue((level, category, message, exception, metadata, scope, instanceId));
     }
 
     /// <summary>
@@ -50,7 +52,7 @@ public sealed class SqliteLoggerProvider : ILoggerProvider, IDisposable
         if (_buffer.IsEmpty) return;
 
         var entries = new List<(string Level, string Category, string Message,
-            string? Exception, string? Metadata)>();
+            string? Exception, string? Metadata, string Scope, string InstanceId)>();
 
         while (_buffer.TryDequeue(out var entry))
         {
@@ -98,8 +100,21 @@ public sealed class SqliteLoggerProvider : ILoggerProvider, IDisposable
 /// <summary>
 /// Individual logger instance that writes to the SqliteLoggerProvider buffer.
 /// </summary>
-internal sealed class SqliteLogger(string category, SqliteLoggerProvider provider) : ILogger
+internal sealed class SqliteLogger : ILogger
 {
+    private readonly string _category;
+    private readonly SqliteLoggerProvider _provider;
+    private readonly string _scope;
+    private readonly string _instanceId;
+
+    public SqliteLogger(string category, SqliteLoggerProvider provider, string instanceId)
+    {
+        _category = category;
+        _provider = provider;
+        _scope = LogScopeMapper.MapCategoryToScope(category);
+        _instanceId = instanceId;
+    }
+
     public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
 
     public bool IsEnabled(LogLevel logLevel) => logLevel != LogLevel.None;
@@ -121,6 +136,6 @@ internal sealed class SqliteLogger(string category, SqliteLoggerProvider provide
             _ => "None"
         };
 
-        provider.Enqueue(level, category, message, exception?.ToString(), null);
+        _provider.Enqueue(level, _category, message, exception?.ToString(), null, _scope, _instanceId);
     }
 }
