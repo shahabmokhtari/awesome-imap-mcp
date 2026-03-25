@@ -183,8 +183,9 @@ public class LogsRepository(AppDatabase db)
         }
         if (search is not null)
         {
-            where += " AND message LIKE $search";
-            cmd.Parameters.AddWithValue("$search", $"%{search}%");
+            where += " AND message LIKE $search ESCAPE '\\'";
+            var escapedSearch = search.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
+            cmd.Parameters.AddWithValue("$search", $"%{escapedSearch}%");
         }
         if (scope is not null)
         {

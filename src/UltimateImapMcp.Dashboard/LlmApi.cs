@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -10,22 +11,32 @@ namespace UltimateImapMcp.Dashboard;
 
 public static class LlmApi
 {
-    private static readonly Dictionary<string, string[]> ModelsByProvider = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly Dictionary<string, string[]> StaticModelsByProvider = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["openai"] = ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo", "o1", "o1-mini", "o3-mini"],
-        ["anthropic"] = ["claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5-20251001"],
-        ["acp_claude"] = [],
-        ["acp_copilot"] = [],
+        ["openai"] = ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "o3-mini", "o4-mini"],
+        ["anthropic"] = ["claude-sonnet-4-5", "claude-haiku-4-5", "claude-3-5-sonnet", "claude-3-5-haiku"],
         ["in_context"] = [],
     };
+
+    private static Dictionary<string, string[]>? _acpModelsCache;
+    private static readonly object AcpCacheLock = new();
 
     public static IEndpointRouteBuilder MapLlmApi(this IEndpointRouteBuilder app)
     {
         app.MapGet("/api/llm/models", (HttpContext ctx) =>
         {
             var provider = ctx.Request.Query["provider"].FirstOrDefault() ?? "";
-            if (ModelsByProvider.TryGetValue(provider, out var models))
+
+            if (StaticModelsByProvider.TryGetValue(provider, out var models))
                 return Results.Ok(models);
+
+            // For ACP providers, try to detect available models from CLI
+            if (provider.StartsWith("acp_", StringComparison.OrdinalIgnoreCase))
+            {
+                var acpModels = GetAcpModels(provider);
+                return Results.Ok(acpModels);
+            }
+
             return Results.Ok(Array.Empty<string>());
         });
 
@@ -71,11 +82,80 @@ public static class LlmApi
             }
             finally
             {
-                (client as IDisposable)?.Dispose();
+                if (client is IAsyncDisposable asyncDisposable)
+                    await asyncDisposable.DisposeAsync().ConfigureAwait(false);
+                else
+                    (client as IDisposable)?.Dispose();
             }
         });
 
         return app;
+    }
+
+    /// <summary>
+    /// Gets available models for an ACP provider by parsing CLI help output.
+    /// Results are cached after first call.
+    /// </summary>
+    private static string[] GetAcpModels(string provider)
+    {
+        lock (AcpCacheLock)
+        {
+            _acpModelsCache ??= new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
+
+            if (_acpModelsCache.TryGetValue(provider, out var cached))
+                return cached;
+
+            var models = provider.ToLowerInvariant() switch
+            {
+                "acp_copilot" => DetectModelsFromCli("gh", ["copilot", "--", "--help"]),
+                "acp_claude" => DetectModelsFromCli("claude", ["--help"]),
+                _ => []
+            };
+
+            _acpModelsCache[provider] = models;
+            return models;
+        }
+    }
+
+    /// <summary>
+    /// Runs a CLI command and parses --model choices from its help output.
+    /// </summary>
+    private static string[] DetectModelsFromCli(string command, string[] args)
+    {
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = command,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            };
+            foreach (var arg in args)
+                psi.ArgumentList.Add(arg);
+
+            using var process = Process.Start(psi);
+            if (process is null) return [];
+
+            var output = process.StandardOutput.ReadToEnd();
+            process.WaitForExit(TimeSpan.FromSeconds(5));
+
+            // Parse model choices from help text: --model <model> ... (choices: "model1", "model2", ...)
+            var match = Regex.Match(output, @"--model.*?choices:\s*(""[^)]+)", RegexOptions.Singleline);
+            if (!match.Success) return [];
+
+            var choicesText = match.Groups[1].Value;
+            var models = Regex.Matches(choicesText, @"""([^""]+)""")
+                .Select(m => m.Groups[1].Value)
+                .ToArray();
+
+            return models;
+        }
+        catch
+        {
+            return [];
+        }
     }
 }
 

@@ -52,7 +52,7 @@ public sealed class DashboardHubRelay(
     private async void SendToAll(string method, object arg)
     {
         try { await hubContext.Clients.All.SendAsync(method, arg); }
-        catch (Exception ex) { Console.Error.WriteLine($"[SignalR] Failed to send {method}: {ex.Message}"); }
+        catch (Exception ex) { logger.LogWarning(ex, "SignalR failed to send {Method}", method); }
     }
 
     public override Task StopAsync(CancellationToken cancellationToken)
