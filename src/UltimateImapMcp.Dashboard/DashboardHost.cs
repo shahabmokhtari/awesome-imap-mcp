@@ -119,6 +119,9 @@ public sealed class DashboardHost : BackgroundService
         builder.Services.AddSingleton(_rootServices.GetRequiredService<OAuthStateStore>());
         builder.Services.AddSingleton(_rootServices.GetRequiredService<IOAuthAccessTokenProvider>());
 
+        // LLM config (for test endpoint)
+        builder.Services.AddSingleton(_rootServices.GetRequiredService<UltimateImapMcp.Core.Configuration.LlmConfig>());
+
         // Dashboard-own services
         builder.Services.AddSingleton(_rootServices.GetRequiredService<IEventBus>());
         builder.Services.AddSingleton<DashboardAuthRepository>();
@@ -152,6 +155,7 @@ public sealed class DashboardHost : BackgroundService
         app.MapOAuthApi();
         app.MapMetricsApi();
         app.MapLogsApi();
+        app.MapLlmApi();
 
         // Map SignalR hub
         app.MapHub<DashboardHub>("/hub");
