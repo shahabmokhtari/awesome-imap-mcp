@@ -19,11 +19,11 @@ public static class LlmApi
     };
 
     private static Dictionary<string, string[]>? _acpModelsCache;
-    private static readonly object AcpCacheLock = new();
+    private static readonly SemaphoreSlim AcpCacheSemaphore = new(1, 1);
 
     public static IEndpointRouteBuilder MapLlmApi(this IEndpointRouteBuilder app)
     {
-        app.MapGet("/api/llm/models", (HttpContext ctx) =>
+        app.MapGet("/api/llm/models", async (HttpContext ctx) =>
         {
             var provider = ctx.Request.Query["provider"].FirstOrDefault() ?? "";
 
@@ -33,7 +33,7 @@ public static class LlmApi
             // For ACP providers, try to detect available models from CLI
             if (provider.StartsWith("acp_", StringComparison.OrdinalIgnoreCase))
             {
-                var acpModels = GetAcpModels(provider);
+                var acpModels = await GetAcpModelsAsync(provider).ConfigureAwait(false);
                 return Results.Ok(acpModels);
             }
 
@@ -94,11 +94,12 @@ public static class LlmApi
 
     /// <summary>
     /// Gets available models for an ACP provider by parsing CLI help output.
-    /// Results are cached after first call.
+    /// Results are cached after first call. Uses async semaphore to avoid blocking threads.
     /// </summary>
-    private static string[] GetAcpModels(string provider)
+    private static async Task<string[]> GetAcpModelsAsync(string provider)
     {
-        lock (AcpCacheLock)
+        await AcpCacheSemaphore.WaitAsync().ConfigureAwait(false);
+        try
         {
             _acpModelsCache ??= new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
 
@@ -107,13 +108,17 @@ public static class LlmApi
 
             var models = provider.ToLowerInvariant() switch
             {
-                "acp_copilot" => DetectModelsFromCli("gh", ["copilot", "--", "--help"]),
-                "acp_claude" => DetectModelsFromCli("claude", ["--help"]),
+                "acp_copilot" => await DetectModelsFromCliAsync("gh", ["copilot", "--", "--help"]).ConfigureAwait(false),
+                "acp_claude" => await DetectModelsFromCliAsync("claude", ["--help"]).ConfigureAwait(false),
                 _ => []
             };
 
             _acpModelsCache[provider] = models;
             return models;
+        }
+        finally
+        {
+            AcpCacheSemaphore.Release();
         }
     }
 
@@ -121,7 +126,7 @@ public static class LlmApi
     /// Runs a CLI command and parses --model choices from its help output.
     /// Reads stdout and stderr concurrently to avoid pipe-buffer deadlocks.
     /// </summary>
-    private static string[] DetectModelsFromCli(string command, string[] args)
+    private static async Task<string[]> DetectModelsFromCliAsync(string command, string[] args)
     {
         try
         {
@@ -143,12 +148,10 @@ public static class LlmApi
             var stdoutTask = process.StandardOutput.ReadToEndAsync();
             var stderrTask = process.StandardError.ReadToEndAsync();
 
-            process.WaitForExit(TimeSpan.FromSeconds(5));
+            await Task.WhenAll(stdoutTask, stderrTask).ConfigureAwait(false);
+            await process.WaitForExitAsync().ConfigureAwait(false);
 
-            var output = stdoutTask.GetAwaiter().GetResult();
-            // Also check stderr — some CLIs print help to stderr
-            var stderrOutput = stderrTask.GetAwaiter().GetResult();
-            var combinedOutput = output + stderrOutput;
+            var combinedOutput = stdoutTask.Result + stderrTask.Result;
 
             // Parse model choices from help text: --model <model> ... (choices: "model1", "model2", ...)
             var match = Regex.Match(combinedOutput, @"--model.*?choices:\s*(""[^)]+)", RegexOptions.Singleline);

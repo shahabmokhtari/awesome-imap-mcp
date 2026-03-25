@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { Routes, Route, NavLink, Navigate } from 'react-router-dom'
 import { useAccounts, useAuthStatus } from './hooks/useApi'
 import { useQueryClient } from '@tanstack/react-query'
@@ -132,9 +132,15 @@ function SetupGuard() {
     return <PinLogin onSuccess={handleLoginSuccess} />
   }
 
-  // If accounts request failed (likely 401 from stale token), clear token and show login
+  // If accounts request failed (likely 401 from stale token), clear token and reset auth state
+  useEffect(() => {
+    if (pinIsSet && accountsError && authed) {
+      localStorage.removeItem('dashboard_token')
+      setAuthed(false)
+    }
+  }, [pinIsSet, accountsError, authed])
+
   if (pinIsSet && accountsError) {
-    localStorage.removeItem('dashboard_token')
     return <PinLogin onSuccess={handleLoginSuccess} />
   }
 
