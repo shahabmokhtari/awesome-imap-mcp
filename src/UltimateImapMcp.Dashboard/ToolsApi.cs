@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace UltimateImapMcp.Dashboard;
 
@@ -19,7 +20,7 @@ public static class ToolsApi
     /// <summary>
     /// Cached tool metadata, built once on first request via assembly scanning.
     /// </summary>
-    private static volatile List<ToolMetadata>? _cachedTools;
+    private static volatile IReadOnlyList<ToolMetadata>? _cachedTools;
     private static readonly object CacheLock = new();
 
     public static IEndpointRouteBuilder MapToolsApi(this IEndpointRouteBuilder app)
@@ -33,7 +34,7 @@ public static class ToolsApi
 
         // POST /api/tools/{name}/execute — execute a tool by name
         app.MapPost("/api/tools/{name}/execute", async (
-            string name, HttpContext ctx, IServiceProvider sp) =>
+            string name, HttpContext ctx, IServiceProvider sp, ILogger<DashboardHost> logger) =>
         {
             var tools = GetToolMetadata();
             var tool = tools.FirstOrDefault(t =>
@@ -49,9 +50,9 @@ public static class ToolsApi
                 body = await ctx.Request.ReadFromJsonAsync<Dictionary<string, JsonElement>>()
                     .ConfigureAwait(false);
             }
-            catch
+            catch (JsonException)
             {
-                // Body is optional for parameterless tools
+                return Results.BadRequest(new { error = "Invalid JSON in request body." });
             }
 
             body ??= new Dictionary<string, JsonElement>();
@@ -65,13 +66,19 @@ public static class ToolsApi
                     var parsed = JsonSerializer.Deserialize<JsonElement>(result);
                     return Results.Ok(parsed);
                 }
-                catch
+                catch (JsonException)
                 {
                     return Results.Ok(new { result });
                 }
             }
+            catch (ArgumentException ex)
+            {
+                logger.LogWarning(ex, "Tool '{Tool}' parameter error", name);
+                return Results.BadRequest(new { error = ex.Message });
+            }
             catch (Exception ex)
             {
+                logger.LogError(ex, "Tool '{Tool}' execution failed", name);
                 var message = ex.InnerException?.Message ?? ex.Message;
                 return Results.Json(
                     new { error = message },
@@ -88,7 +95,7 @@ public static class ToolsApi
     /// Uses attribute names rather than direct type references since the Dashboard
     /// project does not reference the ModelContextProtocol package.
     /// </summary>
-    private static List<ToolMetadata> GetToolMetadata()
+    private static IReadOnlyList<ToolMetadata> GetToolMetadata()
     {
         if (_cachedTools is not null)
             return _cachedTools;
@@ -107,7 +114,12 @@ public static class ToolsApi
                 {
                     types = assembly.GetTypes();
                 }
-                catch
+                catch (ReflectionTypeLoadException ex)
+                {
+                    // Recover partial types from assemblies with unresolvable dependencies
+                    types = ex.Types.Where(t => t is not null).ToArray()!;
+                }
+                catch (Exception)
                 {
                     continue;
                 }
@@ -153,12 +165,12 @@ public static class ToolsApi
                             MethodName: method.Name,
                             ToolType: type,
                             Method: method,
-                            Parameters: parameters));
+                            Parameters: parameters.AsReadOnly()));
                     }
                 }
             }
 
-            _cachedTools = tools.OrderBy(t => t.Name).ToList();
+            _cachedTools = tools.OrderBy(t => t.Name).ToList().AsReadOnly();
             return _cachedTools;
         }
     }
@@ -187,7 +199,15 @@ public static class ToolsApi
                     jsonValue.ValueKind != JsonValueKind.Null &&
                     jsonValue.ValueKind != JsonValueKind.Undefined)
                 {
-                    args[i] = DeserializeParam(jsonValue, param.ParameterType);
+                    try
+                    {
+                        args[i] = DeserializeParam(jsonValue, param.ParameterType);
+                    }
+                    catch (JsonException ex)
+                    {
+                        throw new ArgumentException(
+                            $"Parameter '{paramName}' expected type '{param.ParameterType.Name}' but got: {jsonValue}", ex);
+                    }
                 }
                 else if (param.HasDefaultValue)
                 {
@@ -271,7 +291,7 @@ internal record ToolMetadata(
     string MethodName,
     [property: System.Text.Json.Serialization.JsonIgnore] Type ToolType,
     [property: System.Text.Json.Serialization.JsonIgnore] MethodInfo Method,
-    List<ToolParameterMetadata> Parameters);
+    IReadOnlyList<ToolParameterMetadata> Parameters);
 
 internal record ToolParameterMetadata(
     string Name,
