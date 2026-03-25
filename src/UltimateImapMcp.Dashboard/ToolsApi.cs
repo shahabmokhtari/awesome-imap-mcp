@@ -4,6 +4,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace UltimateImapMcp.Dashboard;
 
@@ -18,7 +19,7 @@ public static class ToolsApi
     /// <summary>
     /// Cached tool metadata, built once on first request via assembly scanning.
     /// </summary>
-    private static List<ToolMetadata>? _cachedTools;
+    private static volatile List<ToolMetadata>? _cachedTools;
     private static readonly object CacheLock = new();
 
     public static IEndpointRouteBuilder MapToolsApi(this IEndpointRouteBuilder app)
@@ -126,8 +127,12 @@ public static class ToolsApi
 
                         var desc = method.GetCustomAttribute<DescriptionAttribute>()?.Description ?? "";
 
-                        // Convert method name to snake_case for the tool name
-                        var toolName = ToSnakeCase(method.Name);
+                        // Use explicit Name from McpServerToolAttribute if set, otherwise derive from method name
+                        var mcpToolAttr = method.GetCustomAttributes()
+                            .First(a => a.GetType().Name == "McpServerToolAttribute");
+                        var nameProp = mcpToolAttr.GetType().GetProperty("Name");
+                        var explicitName = nameProp?.GetValue(mcpToolAttr) as string;
+                        var toolName = !string.IsNullOrEmpty(explicitName) ? explicitName : ToSnakeCase(method.Name);
 
                         var parameters = new List<ToolParameterMetadata>();
                         foreach (var param in method.GetParameters())
@@ -165,19 +170,8 @@ public static class ToolsApi
     private static async Task<string> InvokeToolAsync(
         ToolMetadata tool, Dictionary<string, JsonElement> body, IServiceProvider sp)
     {
-        // Resolve constructor dependencies from DI to create the tool instance
-        var ctors = tool.ToolType.GetConstructors();
-        if (ctors.Length == 0)
-            throw new InvalidOperationException($"Tool class '{tool.ClassName}' has no public constructor.");
-
-        var ctor = ctors[0];
-        var ctorParams = ctor.GetParameters()
-            .Select(p => sp.GetService(p.ParameterType)
-                ?? throw new InvalidOperationException(
-                    $"Cannot resolve constructor parameter '{p.Name}' of type '{p.ParameterType.Name}'."))
-            .ToArray();
-
-        var instance = ctor.Invoke(ctorParams);
+        // Resolve constructor dependencies from DI using ActivatorUtilities
+        var instance = ActivatorUtilities.CreateInstance(sp, tool.ToolType);
         try
         {
             // Build method arguments from the request body

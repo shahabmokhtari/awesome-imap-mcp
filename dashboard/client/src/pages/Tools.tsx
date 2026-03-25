@@ -82,9 +82,19 @@ function ToolPanel({ tool }: { tool: ToolInfo }) {
       }
 
       if (param.type === 'integer') {
-        args[param.name] = parseInt(raw, 10)
+        const parsed = parseInt(raw, 10)
+        if (isNaN(parsed)) {
+          setResult(JSON.stringify({ error: `Parameter '${param.name}' must be a valid integer.` }, null, 2))
+          return
+        }
+        args[param.name] = parsed
       } else if (param.type === 'number') {
-        args[param.name] = parseFloat(raw)
+        const parsed = parseFloat(raw)
+        if (isNaN(parsed)) {
+          setResult(JSON.stringify({ error: `Parameter '${param.name}' must be a valid number.` }, null, 2))
+          return
+        }
+        args[param.name] = parsed
       } else if (param.type === 'boolean') {
         args[param.name] = raw === 'true'
       } else {

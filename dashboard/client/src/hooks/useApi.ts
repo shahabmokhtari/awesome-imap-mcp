@@ -46,7 +46,7 @@ export function useTriggerSync() {
 }
 
 export function useQueue(status?: string) {
-  const url = status ? `/api/queue?status=${status}` : '/api/queue'
+  const url = status ? `/api/queue?status=${encodeURIComponent(status)}` : '/api/queue'
   return useQuery({
     queryKey: ['queue', status],
     queryFn: () => apiFetch<Array<Record<string, unknown>>>(url),
@@ -292,7 +292,7 @@ export interface MessageDetail extends MessageSummary {
 export function useFolders(accountId: string | undefined) {
   return useQuery({
     queryKey: ['folders', accountId],
-    queryFn: () => apiFetch<FolderInfo[]>(`/api/folders?account_id=${accountId}`),
+    queryFn: () => apiFetch<FolderInfo[]>(`/api/folders?account_id=${encodeURIComponent(accountId!)}`),
     enabled: !!accountId,
   })
 }

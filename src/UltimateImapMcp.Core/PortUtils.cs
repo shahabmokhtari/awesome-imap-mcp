@@ -19,10 +19,16 @@ public static class PortUtils
             listener.Stop();
             return false;
         }
-        catch (SocketException)
+        catch (SocketException ex) when (ex.SocketErrorCode == SocketError.AddressAlreadyInUse)
         {
-            // Any bind failure (address in use, permission denied, etc.) means we can't use this port
             return true;
+        }
+        catch (SocketException ex)
+        {
+            // Permission denied or other errors — rethrow so callers get a clear error
+            // instead of entering an infinite standby loop
+            throw new InvalidOperationException(
+                $"Cannot bind to port {port}: {ex.SocketErrorCode} — {ex.Message}", ex);
         }
     }
 
