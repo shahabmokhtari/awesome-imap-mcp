@@ -356,6 +356,41 @@ export function useTestLlm() {
   })
 }
 
+// ---------- Tools hooks ----------
+
+export interface ToolParameterInfo {
+  name: string
+  type: string
+  description: string
+  required: boolean
+  defaultValue: unknown
+}
+
+export interface ToolInfo {
+  name: string
+  description: string
+  className: string
+  methodName: string
+  parameters: ToolParameterInfo[]
+}
+
+export function useTools() {
+  return useQuery({
+    queryKey: ['tools'],
+    queryFn: () => apiFetch<ToolInfo[]>('/api/tools'),
+  })
+}
+
+export function useExecuteTool() {
+  return useMutation({
+    mutationFn: (params: { name: string; args: Record<string, unknown> }) =>
+      apiFetch<unknown>(`/api/tools/${params.name}/execute`, {
+        method: 'POST',
+        body: JSON.stringify(params.args),
+      }),
+  })
+}
+
 // ---------- Types ----------
 
 export interface CreateAccountRequest {
