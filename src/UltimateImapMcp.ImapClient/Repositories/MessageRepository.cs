@@ -153,17 +153,18 @@ public class MessageRepository(AppDatabase db)
     /// <summary>
     /// Gets the most recent messages in a folder, ordered by date descending.
     /// </summary>
-    public List<MessageRecord> GetByFolder(string accountId, int folderId, int limit = 50)
+    public List<MessageRecord> GetByFolder(string accountId, int folderId, int limit = 50, int offset = 0)
     {
         using var conn = db.GetReadConnection();
         using var cmd = conn.CreateCommand();
         cmd.CommandText = """
             SELECT * FROM messages WHERE account_id = $a AND folder_id = $f
-            ORDER BY date_epoch DESC LIMIT $limit;
+            ORDER BY date_epoch DESC LIMIT $limit OFFSET $offset;
             """;
         cmd.Parameters.AddWithValue("$a", accountId);
         cmd.Parameters.AddWithValue("$f", folderId);
         cmd.Parameters.AddWithValue("$limit", limit);
+        cmd.Parameters.AddWithValue("$offset", offset);
         using var reader = cmd.ExecuteReader();
         var list = new List<MessageRecord>();
         while (reader.Read())

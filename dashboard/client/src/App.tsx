@@ -12,6 +12,7 @@ import OAuthCallback from './pages/OAuthCallback'
 import PinLogin from './pages/PinLogin'
 import Messages from './pages/Messages'
 import Logs from './pages/Logs'
+import Tools from './pages/Tools'
 
 const navItems = [
   { to: '/', label: 'Overview' },
@@ -20,6 +21,7 @@ const navItems = [
   { to: '/sync', label: 'Sync' },
   { to: '/queue', label: 'Queue' },
   { to: '/logs', label: 'Logs' },
+  { to: '/tools', label: 'Tools' },
   { to: '/settings', label: 'Settings' },
 ]
 
@@ -84,6 +86,7 @@ function MainLayout({ onLogout }: { onLogout?: () => void }) {
           <Route path="/sync" element={<Sync />} />
           <Route path="/queue" element={<Queue />} />
           <Route path="/logs" element={<Logs />} />
+          <Route path="/tools" element={<Tools />} />
           <Route path="/settings" element={<Settings />} />
         </Routes>
       </main>

@@ -13,7 +13,8 @@ public class SearchTools(MessageRepository messageRepo)
     [McpServerTool, Description(
         "Search emails using full-text search. Searches cached emails first (instant). " +
         "Supports searching by subject, body, and sender. " +
-        "Use summary_only=true to get compact results without body content.")]
+        "Use summary_only=true to get compact results without body content. " +
+        "To browse a folder without searching, use list_emails instead.")]
     public string SearchEmails(
         [Description("Search query text")] string query,
         [Description("Account ID to search (optional)")] string? accountId = null,
