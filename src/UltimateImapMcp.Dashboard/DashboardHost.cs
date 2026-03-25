@@ -125,6 +125,9 @@ public sealed class DashboardHost : BackgroundService
         builder.Services.AddSingleton(_rootServices.GetRequiredService<OAuthStateStore>());
         builder.Services.AddSingleton(_rootServices.GetRequiredService<IOAuthAccessTokenProvider>());
 
+        // LLM config (for test endpoint)
+        builder.Services.AddSingleton(_rootServices.GetRequiredService<UltimateImapMcp.Core.Configuration.LlmConfig>());
+
         // Instance info + root lifetime (for shutdown endpoint)
         builder.Services.AddSingleton(_rootServices.GetRequiredService<InstanceInfo>());
         builder.Services.AddSingleton(new RootLifetime(
@@ -163,6 +166,7 @@ public sealed class DashboardHost : BackgroundService
         app.MapOAuthApi();
         app.MapMetricsApi();
         app.MapLogsApi();
+        app.MapLlmApi();
         app.MapServerApi();
 
         // Map SignalR hub

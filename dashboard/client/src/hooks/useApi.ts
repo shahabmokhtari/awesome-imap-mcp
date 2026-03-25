@@ -329,6 +329,33 @@ export function useSearchMessages(accountId: string | undefined, query: string, 
   })
 }
 
+// ---------- LLM hooks ----------
+
+export function useLlmModels(provider: string | undefined) {
+  return useQuery({
+    queryKey: ['llm-models', provider],
+    queryFn: () => apiFetch<string[]>(`/api/llm/models?provider=${encodeURIComponent(provider ?? '')}`),
+    enabled: !!provider,
+  })
+}
+
+export interface LlmTestResult {
+  response: string | null
+  model: string
+  duration_ms: number
+  error?: string
+}
+
+export function useTestLlm() {
+  return useMutation({
+    mutationFn: (data: { prompt: string; provider?: string; model?: string }) =>
+      apiFetch<LlmTestResult>('/api/llm/test', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+  })
+}
+
 // ---------- Types ----------
 
 export interface CreateAccountRequest {

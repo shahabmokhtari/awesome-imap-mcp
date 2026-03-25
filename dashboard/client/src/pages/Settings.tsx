@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useSettings, useUpdateSettings, useAuthStatus, useChangePin, useSetupPin, useServerInfo, useShutdownServer } from '../hooks/useApi'
+import { useSettings, useUpdateSettings, useAuthStatus, useChangePin, useSetupPin, useLlmModels, useTestLlm, useServerInfo, useShutdownServer } from '../hooks/useApi'
 
 /** Fields that require a server restart when changed. */
 const RESTART_FIELDS = new Set([
@@ -28,14 +28,26 @@ function SectionCard({
   values,
   onSave,
   saving,
+  dropdownOverrides,
+  skipFields,
+  onFormChange,
 }: {
   section: string
   values: Record<string, unknown>
   onSave: (section: string, data: Record<string, unknown>) => void
   saving: boolean
+  /** Dynamic dropdown options that override DROPDOWN_OPTIONS for specific fields. */
+  dropdownOverrides?: Record<string, string[] | undefined>
+  /** Additional fields to hide from display (beyond HIDDEN_FIELDS). */
+  skipFields?: Set<string>
+  /** Called when any form field changes, with the updated form state. */
+  onFormChange?: (form: Record<string, unknown>) => void
 }) {
-  // Filter out hidden fields for display, but keep them in save payload
-  const displayEntries = Object.entries(values).filter(([key]) => !HIDDEN_FIELDS.has(key))
+  const displayEntries = Object.entries(values).filter(([key]) => {
+    if (HIDDEN_FIELDS.has(key)) return false
+    if (skipFields?.has(key)) return false
+    return true
+  })
 
   const [form, setForm] = useState<Record<string, unknown>>({})
   const [dirty, setDirty] = useState(false)
@@ -49,7 +61,6 @@ function SectionCard({
   const handleChange = useCallback((key: string, value: unknown) => {
     setForm(prev => {
       const next = { ...prev, [key]: value }
-      // Check if any field differs from the original
       const isDirty = Object.keys(next).some(k => {
         if (HIDDEN_FIELDS.has(k)) return false
         const orig = values[k]
@@ -59,9 +70,10 @@ function SectionCard({
         return String(orig) !== String(cur)
       })
       setDirty(isDirty)
+      onFormChange?.(next)
       return next
     })
-  }, [values])
+  }, [values, onFormChange])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -81,7 +93,9 @@ function SectionCard({
             const currentValue = form[key]
             const isBoolean = typeof originalValue === 'boolean'
             const isNumber = typeof originalValue === 'number'
-            const dropdownOpts = DROPDOWN_OPTIONS[key]
+            const dropdownOpts = (dropdownOverrides && key in dropdownOverrides)
+              ? dropdownOverrides[key]
+              : DROPDOWN_OPTIONS[key]
 
             return (
               <div key={key} className="flex flex-col">
@@ -435,6 +449,116 @@ function DashboardPinCard() {
 }
 
 // ---------------------------------------------------------------------------
+// LLM Settings card — reuses SectionCard with dynamic model dropdown
+// ---------------------------------------------------------------------------
+
+function LlmSectionCard({
+  values,
+  onSave,
+  saving,
+}: {
+  values: Record<string, unknown>
+  onSave: (section: string, data: Record<string, unknown>) => void
+  saving: boolean
+}) {
+  const [currentProvider, setCurrentProvider] = useState(values.provider as string | undefined)
+  const { data: modelOptions } = useLlmModels(currentProvider)
+  const hasModels = modelOptions && modelOptions.length > 0
+
+  // Sync provider from upstream when settings are reloaded
+  useEffect(() => {
+    setCurrentProvider(values.provider as string | undefined)
+  }, [values.provider])
+
+  const handleFormChange = useCallback((form: Record<string, unknown>) => {
+    const provider = form.provider as string | undefined
+    setCurrentProvider(prev => prev === provider ? prev : provider)
+  }, [])
+
+  return (
+    <SectionCard
+      section="llm"
+      values={values}
+      onSave={onSave}
+      saving={saving}
+      dropdownOverrides={{ model: hasModels ? modelOptions : undefined }}
+      skipFields={hasModels ? undefined : new Set(['model'])}
+      onFormChange={handleFormChange}
+    />
+  )
+}
+
+// ---------------------------------------------------------------------------
+// LLM Test Panel
+// ---------------------------------------------------------------------------
+
+function LlmTestPanel({ settings }: { settings: Record<string, unknown> }) {
+  const llm = settings.llm as Record<string, unknown> | undefined
+  const isEnabled = llm?.enabled === true
+
+  const [prompt, setPrompt] = useState('Hello, respond with a short greeting')
+  const testLlm = useTestLlm()
+
+  if (!isEnabled) return null
+
+  const handleTest = () => {
+    testLlm.mutate({
+      prompt,
+      provider: llm?.provider as string | undefined,
+      model: llm?.model as string | undefined,
+    })
+  }
+
+  return (
+    <div className="bg-white rounded-lg shadow p-5">
+      <h3 className="text-lg font-medium text-gray-800 mb-4">LLM Test</h3>
+
+      <div className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-600 mb-1">Prompt</label>
+          <textarea
+            value={prompt}
+            onChange={e => setPrompt(e.target.value)}
+            rows={3}
+            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          />
+        </div>
+
+        <button
+          onClick={handleTest}
+          disabled={testLlm.isPending || !prompt.trim()}
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {testLlm.isPending ? 'Testing...' : 'Test LLM'}
+        </button>
+
+        {testLlm.data && !testLlm.data.error && (
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-2">
+            <p className="text-sm text-gray-900 whitespace-pre-wrap">{testLlm.data.response}</p>
+            <div className="flex gap-4 text-xs text-gray-500">
+              <span>Model: {testLlm.data.model}</span>
+              <span>Duration: {testLlm.data.duration_ms}ms</span>
+            </div>
+          </div>
+        )}
+
+        {testLlm.data?.error && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+            <p className="text-sm text-red-700">{testLlm.data.error}</p>
+          </div>
+        )}
+
+        {testLlm.error && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+            <p className="text-sm text-red-700">{testLlm.error.message}</p>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Main Settings page
 // ---------------------------------------------------------------------------
 
@@ -528,12 +652,24 @@ export default function Settings() {
         {/* Settings section cards */}
         {settings && (
           <>
-            {Object.entries(settings).map(([section, values]) => {
+            {Object.entries(settings as Record<string, unknown>).map(([section, values]) => {
               if (typeof values !== 'object' || values === null) {
                 return (
                   <div key={section} className="bg-white rounded-lg shadow p-5">
                     <h3 className="text-lg font-medium text-gray-800 mb-4 capitalize">{section}</h3>
                     <p className="text-sm text-gray-900 font-mono">{String(values)}</p>
+                  </div>
+                )
+              }
+              if (section === 'llm') {
+                return (
+                  <div key={section} className="space-y-6">
+                    <LlmSectionCard
+                      values={values as Record<string, unknown>}
+                      onSave={handleSave}
+                      saving={updateSettings.isPending}
+                    />
+                    <LlmTestPanel settings={settings as Record<string, unknown>} />
                   </div>
                 )
               }
