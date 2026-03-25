@@ -273,7 +273,7 @@ public class LogsRepository(AppDatabase db)
                     DELETE FROM logs
                     WHERE level = 'Warning' AND created_at < datetime('now', $days);
                     """;
-                cmd.Parameters.AddWithValue("$days", $"-{errorDays} days");
+                cmd.Parameters.AddWithValue("$days", $"-{infoDays} days");
                 total += cmd.ExecuteNonQuery();
             }
 

@@ -146,14 +146,16 @@ export default function Logs() {
     })
   }
 
+  const resetView = () => { setPage(1); setExpandedIds(new Set()) }
+
   const toggleLevel = (level: string) => {
     toggleInSet(setSelectedLevels, level)
-    setPage(1)
+    resetView()
   }
 
   const clearLevels = () => {
     setSelectedLevels(new Set())
-    setPage(1)
+    resetView()
   }
 
   const toggleExpanded = (id: number) => toggleInSet(setExpandedIds, id)
@@ -161,17 +163,17 @@ export default function Logs() {
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
     setSearch(searchInput)
-    setPage(1)
+    resetView()
   }
 
   const handleScopeChange = (value: string) => {
     setScope(value)
-    setPage(1)
+    resetView()
   }
 
   const handleInstanceChange = (value: string) => {
     setInstanceId(value)
-    setPage(1)
+    resetView()
   }
 
   const handlePageSizeChange = (value: number) => {

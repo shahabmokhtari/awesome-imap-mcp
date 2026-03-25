@@ -197,11 +197,10 @@ public sealed class DashboardHost : BackgroundService
 
     public override async Task StopAsync(CancellationToken cancellationToken)
     {
-        if (_webApp is not null)
-        {
-            await _webApp.StopAsync(cancellationToken).ConfigureAwait(false);
-            await _webApp.DisposeAsync().ConfigureAwait(false);
-        }
+        // Let base.StopAsync signal stoppingToken, which causes RunAsync to exit
+        // and WebApplication to tear itself down. No explicit _webApp.StopAsync
+        // needed — RunAsync already handles stop+dispose internally.
         await base.StopAsync(cancellationToken).ConfigureAwait(false);
+        _webApp = null;
     }
 }

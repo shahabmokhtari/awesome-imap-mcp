@@ -119,6 +119,7 @@ public static class LlmApi
 
     /// <summary>
     /// Runs a CLI command and parses --model choices from its help output.
+    /// Reads stdout and stderr concurrently to avoid pipe-buffer deadlocks.
     /// </summary>
     private static string[] DetectModelsFromCli(string command, string[] args)
     {
@@ -138,11 +139,19 @@ public static class LlmApi
             using var process = Process.Start(psi);
             if (process is null) return [];
 
-            var output = process.StandardOutput.ReadToEnd();
+            // Read both streams concurrently to avoid deadlock from pipe buffer filling
+            var stdoutTask = process.StandardOutput.ReadToEndAsync();
+            var stderrTask = process.StandardError.ReadToEndAsync();
+
             process.WaitForExit(TimeSpan.FromSeconds(5));
 
+            var output = stdoutTask.GetAwaiter().GetResult();
+            // Also check stderr — some CLIs print help to stderr
+            var stderrOutput = stderrTask.GetAwaiter().GetResult();
+            var combinedOutput = output + stderrOutput;
+
             // Parse model choices from help text: --model <model> ... (choices: "model1", "model2", ...)
-            var match = Regex.Match(output, @"--model.*?choices:\s*(""[^)]+)", RegexOptions.Singleline);
+            var match = Regex.Match(combinedOutput, @"--model.*?choices:\s*(""[^)]+)", RegexOptions.Singleline);
             if (!match.Success) return [];
 
             var choicesText = match.Groups[1].Value;

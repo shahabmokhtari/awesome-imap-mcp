@@ -26,7 +26,9 @@ public static class ServerApi
         app.MapGet("/api/server/info", (InstanceInfo instanceInfo, AppConfig config) =>
         {
             using var process = Process.GetCurrentProcess();
-            var startTime = process.StartTime.ToUniversalTime();
+            DateTime startTime;
+            try { startTime = process.StartTime.ToUniversalTime(); }
+            catch { startTime = DateTime.UtcNow; }
             var uptime = DateTime.UtcNow - startTime;
 
             return Results.Ok(new
