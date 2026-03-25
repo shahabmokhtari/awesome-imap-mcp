@@ -16,7 +16,6 @@ public static class DashboardServiceExtensions
     {
         services.AddSingleton<IEventBus, EventBus>();
         services.AddHostedService<DashboardHost>();
-        services.AddHostedService<DashboardHubRelay>();
 
         return services;
     }

@@ -27,6 +27,8 @@ public class LogsRepositoryTests : IDisposable
         Assert.Equal("Information", results[0].Level);
         Assert.Equal("TestCategory", results[0].Category);
         Assert.Equal("Hello world", results[0].Message);
+        Assert.Equal("system", results[0].Scope);
+        Assert.Equal("", results[0].InstanceId);
     }
 
     [Fact]
@@ -42,13 +44,25 @@ public class LogsRepositoryTests : IDisposable
     }
 
     [Fact]
+    public void Write_WithScopeAndInstanceId()
+    {
+        _repo.Write("Information", "SyncManager", "Sync started",
+            scope: "mail", instanceId: "test-instance-1");
+
+        var results = _repo.Query(scope: "mail");
+        Assert.Single(results);
+        Assert.Equal("mail", results[0].Scope);
+        Assert.Equal("test-instance-1", results[0].InstanceId);
+    }
+
+    [Fact]
     public void WriteBatch_InsertsMultipleEntries()
     {
-        var entries = new List<(string, string, string, string?, string?)>
+        var entries = new List<(string, string, string, string?, string?, string, string)>
         {
-            ("Information", "Cat1", "Message 1", null, null),
-            ("Warning", "Cat2", "Message 2", null, null),
-            ("Error", "Cat1", "Message 3", "exception text", null)
+            ("Information", "Cat1", "Message 1", null, null, "system", "inst-1"),
+            ("Warning", "Cat2", "Message 2", null, null, "mail", "inst-1"),
+            ("Error", "Cat1", "Message 3", "exception text", null, "api", "inst-1")
         };
 
         _repo.WriteBatch(entries);
@@ -81,6 +95,29 @@ public class LogsRepositoryTests : IDisposable
     }
 
     [Fact]
+    public void Query_FiltersByScope()
+    {
+        _repo.Write("Information", "SyncManager", "Sync started", scope: "mail", instanceId: "i1");
+        _repo.Write("Information", "QueueWorker", "Queue flushed", scope: "queue", instanceId: "i1");
+        _repo.Write("Information", "DashboardHost", "Dashboard starting", scope: "api", instanceId: "i1");
+
+        var mailLogs = _repo.Query(scope: "mail");
+        Assert.Single(mailLogs);
+        Assert.Equal("Sync started", mailLogs[0].Message);
+    }
+
+    [Fact]
+    public void Query_FiltersByInstanceId()
+    {
+        _repo.Write("Information", "Cat", "From instance 1", scope: "system", instanceId: "inst-1");
+        _repo.Write("Information", "Cat", "From instance 2", scope: "system", instanceId: "inst-2");
+
+        var inst1Logs = _repo.Query(instanceId: "inst-1");
+        Assert.Single(inst1Logs);
+        Assert.Equal("From instance 1", inst1Logs[0].Message);
+    }
+
+    [Fact]
     public void Query_SearchInMessage()
     {
         _repo.Write("Information", "Cat", "User login succeeded");
@@ -99,6 +136,19 @@ public class LogsRepositoryTests : IDisposable
 
         var results = _repo.Query(limit: 3);
         Assert.Equal(3, results.Count);
+    }
+
+    [Fact]
+    public void GetDistinctInstanceIds_ReturnsUniqueIds()
+    {
+        _repo.Write("Information", "Cat", "msg1", scope: "system", instanceId: "inst-1");
+        _repo.Write("Information", "Cat", "msg2", scope: "system", instanceId: "inst-1");
+        _repo.Write("Information", "Cat", "msg3", scope: "system", instanceId: "inst-2");
+
+        var ids = _repo.GetDistinctInstanceIds();
+        Assert.Equal(2, ids.Count);
+        Assert.Contains("inst-1", ids);
+        Assert.Contains("inst-2", ids);
     }
 
     [Fact]

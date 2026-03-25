@@ -1,22 +1,26 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using MimeKit;
-using UltimateImapMcp.Core.Configuration;
+using UltimateImapMcp.Core.Encryption;
+using UltimateImapMcp.Core.OAuth;
 using UltimateImapMcp.ImapClient;
+using UltimateImapMcp.ImapClient.Repositories;
 using UltimateImapMcp.Queue.Models;
 
 namespace UltimateImapMcp.Queue.Executors;
 
-public class SendExecutor(AppConfig config, ILogger<SendExecutor> logger) : IOperationExecutor
+public class SendExecutor(AccountRepository accountRepo, CredentialEncryptor encryptor,
+    IOAuthAccessTokenProvider oauthProvider,
+    ILogger<SendExecutor> logger) : IOperationExecutor
 {
     public IReadOnlyList<string> SupportedOperations { get; } = ["send", "reply", "forward"];
 
     public async Task ExecuteAsync(QueuedOperation operation, CancellationToken ct)
     {
         var payload = JsonSerializer.Deserialize<JsonElement>(operation.Payload);
-        var accountConfig = config.Accounts.FirstOrDefault(a =>
-            a.Name.Equals(operation.AccountId, StringComparison.OrdinalIgnoreCase))
-            ?? throw new InvalidOperationException($"Account '{operation.AccountId}' not found in configuration.");
+        var record = accountRepo.ResolveAccount(operation.AccountId)
+            ?? throw new InvalidOperationException($"Account '{operation.AccountId}' not found in database.");
+        var accountConfig = AccountConfigMapper.ToAccountConfig(record, encryptor);
 
         var message = new MimeMessage();
         message.From.Add(MailboxAddress.Parse(accountConfig.Username));
@@ -37,7 +41,8 @@ public class SendExecutor(AppConfig config, ILogger<SendExecutor> logger) : IOpe
             foreach (var r in refs.GetString()!.Split(' ', StringSplitOptions.RemoveEmptyEntries))
                 message.References.Add(r);
 
-        using var smtp = new SmtpConnectionManager(accountConfig, logger);
+        using var smtp = new SmtpConnectionManager(accountConfig, logger,
+            oauthProvider, record.Id);
         await smtp.SendAsync(message, ct);
     }
 }

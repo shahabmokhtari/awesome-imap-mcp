@@ -84,6 +84,27 @@ public class DashboardAuthRepository(AppDatabase db)
         });
     }
 
+    public void ClearAllSessions()
+    {
+        db.ExecuteWrite(conn =>
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "DELETE FROM dashboard_sessions;";
+            cmd.ExecuteNonQuery();
+        });
+    }
+
+    public void DeleteSession(string token)
+    {
+        db.ExecuteWrite(conn =>
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "DELETE FROM dashboard_sessions WHERE token = $token;";
+            cmd.Parameters.AddWithValue("$token", token);
+            cmd.ExecuteNonQuery();
+        });
+    }
+
     private static DashboardAuthRecord ReadAuth(Microsoft.Data.Sqlite.SqliteDataReader r) => new(
         Id: r.GetInt32(r.GetOrdinal("id")),
         AuthType: r.GetString(r.GetOrdinal("auth_type")),

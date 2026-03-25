@@ -1,8 +1,8 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using UltimateImapMcp.Core.Configuration;
 using UltimateImapMcp.ImapClient;
+using UltimateImapMcp.ImapClient.Repositories;
 
 namespace UltimateImapMcp.Dashboard;
 
@@ -10,14 +10,14 @@ public static class SyncApi
 {
     public static IEndpointRouteBuilder MapSyncApi(this IEndpointRouteBuilder app)
     {
-        app.MapGet("/api/sync/status", (SyncManager syncManager, AppConfig config) =>
+        app.MapGet("/api/sync/status", (SyncManager syncManager, AccountRepository accountRepo) =>
         {
             var result = new Dictionary<string, object>();
-            foreach (var account in config.Accounts)
+            foreach (var account in accountRepo.GetAll())
             {
-                var accountId = account.Name.ToLowerInvariant().Replace(' ', '-');
-                var status = syncManager.GetSyncStatus(accountId);
-                result[accountId] = status;
+                var status = syncManager.GetSyncStatus(account.Id);
+                var label = $"{account.Name} ({account.Provider})";
+                result[label] = new { accountId = account.Id, folders = status };
             }
             return Results.Ok(result);
         });

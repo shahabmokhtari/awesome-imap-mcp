@@ -4,7 +4,7 @@ namespace UltimateImapMcp.Core.Repositories;
 
 /// <summary>Record for a row in the logs table.</summary>
 public record LogRecord(int Id, string Level, string Category, string Message,
-    string? Exception, string? Metadata, string CreatedAt);
+    string? Exception, string? Metadata, string CreatedAt, string Scope, string InstanceId);
 
 /// <summary>
 /// Reads and writes the logs table for structured application logs.
@@ -15,20 +15,23 @@ public class LogsRepository(AppDatabase db)
     /// Writes a single log entry.
     /// </summary>
     public void Write(string level, string category, string message,
-        string? exception = null, string? metadata = null)
+        string? exception = null, string? metadata = null,
+        string scope = "system", string instanceId = "")
     {
         db.ExecuteWrite(conn =>
         {
             using var cmd = conn.CreateCommand();
             cmd.CommandText = """
-                INSERT INTO logs (level, category, message, exception, metadata)
-                VALUES ($level, $category, $message, $exception, $metadata);
+                INSERT INTO logs (level, category, message, exception, metadata, scope, instance_id)
+                VALUES ($level, $category, $message, $exception, $metadata, $scope, $instance_id);
                 """;
             cmd.Parameters.AddWithValue("$level", level);
             cmd.Parameters.AddWithValue("$category", category);
             cmd.Parameters.AddWithValue("$message", message);
             cmd.Parameters.AddWithValue("$exception", (object?)exception ?? DBNull.Value);
             cmd.Parameters.AddWithValue("$metadata", (object?)metadata ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$scope", scope);
+            cmd.Parameters.AddWithValue("$instance_id", instanceId);
             cmd.ExecuteNonQuery();
         });
     }
@@ -37,7 +40,7 @@ public class LogsRepository(AppDatabase db)
     /// Batch-writes multiple log entries in a single transaction.
     /// </summary>
     public void WriteBatch(IReadOnlyList<(string Level, string Category, string Message,
-        string? Exception, string? Metadata)> entries)
+        string? Exception, string? Metadata, string Scope, string InstanceId)> entries)
     {
         if (entries.Count == 0) return;
 
@@ -51,14 +54,16 @@ public class LogsRepository(AppDatabase db)
                     using var cmd = conn.CreateCommand();
                     cmd.Transaction = transaction;
                     cmd.CommandText = """
-                        INSERT INTO logs (level, category, message, exception, metadata)
-                        VALUES ($level, $category, $message, $exception, $metadata);
+                        INSERT INTO logs (level, category, message, exception, metadata, scope, instance_id)
+                        VALUES ($level, $category, $message, $exception, $metadata, $scope, $instance_id);
                         """;
                     cmd.Parameters.AddWithValue("$level", entry.Level);
                     cmd.Parameters.AddWithValue("$category", entry.Category);
                     cmd.Parameters.AddWithValue("$message", entry.Message);
                     cmd.Parameters.AddWithValue("$exception", (object?)entry.Exception ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("$metadata", (object?)entry.Metadata ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("$scope", entry.Scope);
+                    cmd.Parameters.AddWithValue("$instance_id", entry.InstanceId);
                     cmd.ExecuteNonQuery();
                 }
                 transaction.Commit();
@@ -75,7 +80,8 @@ public class LogsRepository(AppDatabase db)
     /// Queries log entries with optional filters.
     /// </summary>
     public List<LogRecord> Query(string? level = null, string? category = null,
-        string? fromTime = null, string? toTime = null, string? search = null, int limit = 100)
+        string? fromTime = null, string? toTime = null, string? search = null,
+        int limit = 100, string? scope = null, string? instanceId = null)
     {
         using var conn = db.GetReadConnection();
         using var cmd = conn.CreateCommand();
@@ -86,9 +92,11 @@ public class LogsRepository(AppDatabase db)
         if (fromTime is not null) where += " AND created_at >= $from";
         if (toTime is not null) where += " AND created_at <= $to";
         if (search is not null) where += " AND message LIKE $search";
+        if (scope is not null) where += " AND scope = $scope";
+        if (instanceId is not null) where += " AND instance_id = $instance_id";
 
         cmd.CommandText = $"""
-            SELECT id, level, category, message, exception, metadata, created_at
+            SELECT id, level, category, message, exception, metadata, created_at, scope, instance_id
             FROM logs
             {where}
             ORDER BY created_at DESC
@@ -100,6 +108,8 @@ public class LogsRepository(AppDatabase db)
         if (fromTime is not null) cmd.Parameters.AddWithValue("$from", fromTime);
         if (toTime is not null) cmd.Parameters.AddWithValue("$to", toTime);
         if (search is not null) cmd.Parameters.AddWithValue("$search", $"%{search}%");
+        if (scope is not null) cmd.Parameters.AddWithValue("$scope", scope);
+        if (instanceId is not null) cmd.Parameters.AddWithValue("$instance_id", instanceId);
         cmd.Parameters.AddWithValue("$limit", limit);
 
         using var reader = cmd.ExecuteReader();
@@ -113,7 +123,32 @@ public class LogsRepository(AppDatabase db)
                 reader.GetString(3),
                 reader.IsDBNull(4) ? null : reader.GetString(4),
                 reader.IsDBNull(5) ? null : reader.GetString(5),
-                reader.GetString(6)));
+                reader.GetString(6),
+                reader.GetString(7),
+                reader.GetString(8)));
+        }
+        return list;
+    }
+
+    /// <summary>
+    /// Returns all distinct instance IDs from the logs table.
+    /// </summary>
+    public List<string> GetDistinctInstanceIds()
+    {
+        using var conn = db.GetReadConnection();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT DISTINCT instance_id FROM logs
+            WHERE instance_id != ''
+            ORDER BY instance_id DESC
+            LIMIT 50;
+            """;
+
+        using var reader = cmd.ExecuteReader();
+        var list = new List<string>();
+        while (reader.Read())
+        {
+            list.Add(reader.GetString(0));
         }
         return list;
     }
