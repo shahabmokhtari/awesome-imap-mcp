@@ -273,7 +273,7 @@ function ToolPanel({ tool, allSuggestions }: { tool: ToolInfo; allSuggestions?: 
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full overflow-y-auto">
       {/* Tool header */}
       <div className="px-6 py-4 border-b border-gray-200 flex-shrink-0">
         <h3 className="text-lg font-semibold text-gray-900 font-mono">{tool.name}</h3>
@@ -331,7 +331,7 @@ function ToolPanel({ tool, allSuggestions }: { tool: ToolInfo; allSuggestions?: 
                 Clear
               </button>
             </div>
-            <pre className="text-xs font-mono bg-gray-50 border border-gray-200 rounded-lg p-4 whitespace-pre-wrap break-words overflow-auto max-h-[60vh]">
+            <pre className="text-xs font-mono bg-gray-50 border border-gray-200 rounded-lg p-4 whitespace-pre-wrap break-words">
               {result}
             </pre>
           </div>
@@ -344,6 +344,27 @@ function ToolPanel({ tool, allSuggestions }: { tool: ToolInfo; allSuggestions?: 
     </div>
   )
 }
+
+// ---------------------------------------------------------------------------
+// Tool category grouping
+// ---------------------------------------------------------------------------
+
+function getToolCategory(name: string): string {
+  const lower = name.toLowerCase()
+  if (lower.includes('account')) return 'Accounts'
+  if (lower.includes('folder') && !lower.includes('analyze')) return 'Folders'
+  if (lower.includes('message') || lower === 'get_thread' || lower === 'list_emails') return 'Messages'
+  if (lower.includes('search')) return 'Search'
+  if (lower === 'send_email' || lower === 'reply_to' || lower === 'forward') return 'Compose'
+  if (['delete_messages', 'move_messages', 'mark_read', 'mark_unread', 'flag_messages', 'label_messages'].includes(lower)) return 'Organize'
+  if (lower.includes('sync')) return 'Sync'
+  if (['confirm_send', 'cancel_operation', 'list_pending'].includes(lower)) return 'Queue'
+  if (lower.includes('analy') || lower.includes('budget') || lower === 'category_breakdown') return 'Analysis'
+  if (lower.includes('report') || lower.includes('sender')) return 'Reports'
+  return 'Other'
+}
+
+const CATEGORY_ORDER = ['Messages', 'Search', 'Compose', 'Organize', 'Folders', 'Accounts', 'Sync', 'Queue', 'Analysis', 'Reports', 'Other']
 
 // ---------------------------------------------------------------------------
 // Tool list sidebar
@@ -392,6 +413,18 @@ export default function Tools() {
       : true
   )
 
+  const grouped = useMemo(() => {
+    if (!filteredTools) return []
+    const groups: Record<string, ToolInfo[]> = {}
+    for (const tool of filteredTools) {
+      const cat = getToolCategory(tool.name)
+      ;(groups[cat] ??= []).push(tool)
+    }
+    return CATEGORY_ORDER
+      .filter(cat => groups[cat]?.length)
+      .map(cat => ({ category: cat, tools: groups[cat] }))
+  }, [filteredTools])
+
   const selectedTool = tools?.find((t) => t.name === selectedToolName)
 
   if (isLoading) {
@@ -433,16 +466,23 @@ export default function Tools() {
               className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
-          <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
-            {filteredTools?.map((tool) => (
-              <ToolListItem
-                key={tool.name}
-                tool={tool}
-                isSelected={tool.name === selectedToolName}
-                onClick={() => setSelectedToolName(tool.name)}
-              />
+          <div className="flex-1 overflow-y-auto p-2 space-y-1">
+            {grouped.map(({ category, tools: groupTools }) => (
+              <div key={category}>
+                <div className="px-3 py-1.5 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                  {category}
+                </div>
+                {groupTools.map((tool) => (
+                  <ToolListItem
+                    key={tool.name}
+                    tool={tool}
+                    isSelected={tool.name === selectedToolName}
+                    onClick={() => setSelectedToolName(tool.name)}
+                  />
+                ))}
+              </div>
             ))}
-            {filteredTools?.length === 0 && (
+            {grouped.length === 0 && (
               <div className="text-center py-4 text-gray-400 text-xs">
                 No tools match &quot;{filterText}&quot;
               </div>
