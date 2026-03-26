@@ -10,13 +10,15 @@ public static class CacheApi
 {
     public static IEndpointRouteBuilder MapCacheApi(this IEndpointRouteBuilder app)
     {
-        app.MapDelete("/api/cache", (MessageRepository messageRepo, ILoggerFactory loggerFactory) =>
+        app.MapDelete("/api/cache", (MessageRepository messageRepo, FolderRepository folderRepo,
+            ILoggerFactory loggerFactory) =>
         {
             var logger = loggerFactory.CreateLogger("CacheApi");
             try
             {
                 var deleted = messageRepo.DeleteAll();
-                return Results.Ok(new { deleted, message = "All cached messages cleared." });
+                folderRepo.ResetAllSyncState();
+                return Results.Ok(new { deleted, message = "All cached messages cleared. Folders will re-sync." });
             }
             catch (Exception ex)
             {
@@ -26,7 +28,7 @@ public static class CacheApi
         });
 
         app.MapDelete("/api/cache/{accountId}", (string accountId, MessageRepository messageRepo,
-            AccountRepository accountRepo, ILoggerFactory loggerFactory) =>
+            FolderRepository folderRepo, AccountRepository accountRepo, ILoggerFactory loggerFactory) =>
         {
             var logger = loggerFactory.CreateLogger("CacheApi");
             if (string.IsNullOrWhiteSpace(accountId))
@@ -39,7 +41,8 @@ public static class CacheApi
             try
             {
                 var deleted = messageRepo.DeleteByAccount(accountId);
-                return Results.Ok(new { deleted, accountId, message = "Cache cleared for account." });
+                folderRepo.ResetSyncState(accountId);
+                return Results.Ok(new { deleted, accountId, message = "Cache cleared for account. Folders will re-sync." });
             }
             catch (Exception ex)
             {
@@ -49,7 +52,7 @@ public static class CacheApi
         });
 
         app.MapDelete("/api/cache/{accountId}/{folderId:int}", (string accountId, int folderId,
-            MessageRepository messageRepo, ILoggerFactory loggerFactory) =>
+            MessageRepository messageRepo, FolderRepository folderRepo, ILoggerFactory loggerFactory) =>
         {
             var logger = loggerFactory.CreateLogger("CacheApi");
             if (string.IsNullOrWhiteSpace(accountId))
@@ -58,7 +61,8 @@ public static class CacheApi
             try
             {
                 var deleted = messageRepo.DeleteByFolder(accountId, folderId);
-                return Results.Ok(new { deleted, accountId, folderId, message = "Cache cleared for folder." });
+                folderRepo.ResetFolderSyncState(accountId, folderId);
+                return Results.Ok(new { deleted, accountId, folderId, message = "Cache cleared for folder. Folder will re-sync." });
             }
             catch (Exception ex)
             {

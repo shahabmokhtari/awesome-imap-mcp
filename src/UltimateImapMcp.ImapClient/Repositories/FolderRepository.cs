@@ -87,6 +87,48 @@ public class FolderRepository(AppDatabase db)
         });
     }
 
+    /// <summary>Resets sync state for all folders of an account so they will be re-synced.</summary>
+    public void ResetSyncState(string accountId)
+    {
+        db.ExecuteWrite(conn =>
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                UPDATE folders SET last_synced_uid = 0, message_count = 0, unread_count = 0
+                WHERE account_id = $a;
+                """;
+            cmd.Parameters.AddWithValue("$a", accountId);
+            cmd.ExecuteNonQuery();
+        });
+    }
+
+    /// <summary>Resets sync state for a specific folder so it will be re-synced.</summary>
+    public void ResetFolderSyncState(string accountId, int folderId)
+    {
+        db.ExecuteWrite(conn =>
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                UPDATE folders SET last_synced_uid = 0, message_count = 0, unread_count = 0
+                WHERE id = $id AND account_id = $a;
+                """;
+            cmd.Parameters.AddWithValue("$id", folderId);
+            cmd.Parameters.AddWithValue("$a", accountId);
+            cmd.ExecuteNonQuery();
+        });
+    }
+
+    /// <summary>Resets sync state for ALL folders across all accounts.</summary>
+    public void ResetAllSyncState()
+    {
+        db.ExecuteWrite(conn =>
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "UPDATE folders SET last_synced_uid = 0, message_count = 0, unread_count = 0;";
+            cmd.ExecuteNonQuery();
+        });
+    }
+
     private static FolderRecord ReadRecord(Microsoft.Data.Sqlite.SqliteDataReader r) => new(
         Id: r.GetInt32(r.GetOrdinal("id")),
         AccountId: r.GetString(r.GetOrdinal("account_id")),
