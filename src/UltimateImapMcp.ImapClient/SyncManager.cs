@@ -7,6 +7,7 @@ using MailKit.Security;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using UltimateImapMcp.Core.Configuration;
+using UltimateImapMcp.Core.Coordination;
 using UltimateImapMcp.Core.Encryption;
 using UltimateImapMcp.Core.OAuth;
 using UltimateImapMcp.Core.Providers;
@@ -29,6 +30,8 @@ public class SyncManager(
     FolderRepository folderRepo,
     SyncLogRepository syncLogRepo,
     IOAuthAccessTokenProvider oauthProvider,
+    IInstanceCoordinator coordinator,
+    AppConfig appConfig,
     ILogger<SyncManager> logger) : BackgroundService
 {
     private readonly ConcurrentDictionary<string, ImapConnectionManager> _connections = new();
@@ -113,6 +116,20 @@ public class SyncManager(
         // IDLE requires its own dedicated connection (separate from the shared one)
         while (!idleCts.Token.IsCancellationRequested)
         {
+            if (!coordinator.IsLeader)
+            {
+                try
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(appConfig.Server.HeartbeatInterval), idleCts.Token)
+                        .ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+                continue;
+            }
+
             ImapClientLib? idleClient = null;
             try
             {
@@ -238,6 +255,19 @@ public class SyncManager(
 
         while (!ct.IsCancellationRequested)
         {
+            if (!coordinator.IsLeader)
+            {
+                try
+                {
+                    await Task.Delay(interval, ct).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+                continue;
+            }
+
             try
             {
                 await Task.Delay(interval, ct).ConfigureAwait(false);

@@ -1,9 +1,19 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using UltimateImapMcp.Core.Configuration;
+using UltimateImapMcp.Core.Coordination;
 using UltimateImapMcp.Core.Database;
 using UltimateImapMcp.ImapClient.Repositories;
 
 namespace UltimateImapMcp.ImapClient.Tests;
+
+/// <summary>Stub coordinator that always reports this instance as leader.</summary>
+file sealed class AlwaysLeaderCoordinator : IInstanceCoordinator
+{
+    public bool IsLeader => true;
+    public string InstanceId => "test-instance";
+    public IReadOnlyList<InstanceHeartbeat> GetLiveInstances() => [];
+    public Task<bool> RequestShutdownAsync(string instanceId) => Task.FromResult(false);
+}
 
 public class CacheEvictorTests : IDisposable
 {
@@ -93,7 +103,7 @@ public class CacheEvictorTests : IDisposable
         // message rows deleted.
         var config = new CacheConfig { MaxSizeMb = 0 };
         var evictor = new CacheEvictor(_db, _messageRepo, config,
-            NullLogger<CacheEvictor>.Instance);
+            new AlwaysLeaderCoordinator(), NullLogger<CacheEvictor>.Instance);
 
         evictor.RunEviction();
 
@@ -128,7 +138,7 @@ public class CacheEvictorTests : IDisposable
         // 0 MB limit → body eviction finds nothing, proceeds to delete messages
         var config = new CacheConfig { MaxSizeMb = 0 };
         var evictor = new CacheEvictor(_db, _messageRepo, config,
-            NullLogger<CacheEvictor>.Instance);
+            new AlwaysLeaderCoordinator(), NullLogger<CacheEvictor>.Instance);
 
         evictor.RunEviction();
 
@@ -176,7 +186,7 @@ public class CacheEvictorTests : IDisposable
         var config = new CacheConfig { MaxSizeMb = 1000, MaxBodyAgeDays = 30 };
 
         var evictor = new CacheEvictor(_db, _messageRepo, config,
-            NullLogger<CacheEvictor>.Instance);
+            new AlwaysLeaderCoordinator(), NullLogger<CacheEvictor>.Instance);
 
         evictor.RunEviction();
 
@@ -228,7 +238,7 @@ public class CacheEvictorTests : IDisposable
         var config = new CacheConfig { MaxSizeMb = 1000, DefaultWindowDays = 90 };
 
         var evictor = new CacheEvictor(_db, _messageRepo, config,
-            NullLogger<CacheEvictor>.Instance);
+            new AlwaysLeaderCoordinator(), NullLogger<CacheEvictor>.Instance);
 
         evictor.RunEviction();
 
@@ -257,7 +267,7 @@ public class CacheEvictorTests : IDisposable
         var config = new CacheConfig { MaxSizeMb = 1000 };
 
         var evictor = new CacheEvictor(_db, _messageRepo, config,
-            NullLogger<CacheEvictor>.Instance);
+            new AlwaysLeaderCoordinator(), NullLogger<CacheEvictor>.Instance);
 
         evictor.RunEviction();
 

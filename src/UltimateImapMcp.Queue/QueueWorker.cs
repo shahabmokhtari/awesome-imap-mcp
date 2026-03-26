@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using UltimateImapMcp.Core.Configuration;
+using UltimateImapMcp.Core.Coordination;
 using UltimateImapMcp.Queue.Executors;
 using UltimateImapMcp.Queue.Models;
 
@@ -10,6 +11,7 @@ public class QueueWorker(
     QueueRepository repo,
     IEnumerable<IOperationExecutor> executors,
     QueueConfig config,
+    IInstanceCoordinator coordinator,
     ILogger<QueueWorker> logger) : BackgroundService
 {
     private readonly Dictionary<string, IOperationExecutor> _executors =
@@ -31,6 +33,19 @@ public class QueueWorker(
 
         while (!ct.IsCancellationRequested)
         {
+            if (!coordinator.IsLeader)
+            {
+                try
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(1), ct);
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    break;
+                }
+                continue;
+            }
+
             try
             {
                 var now = DateTime.UtcNow;
