@@ -27,6 +27,9 @@ public sealed class DashboardHost : BackgroundService
     private WebApplication? _webApp;
     private int _consecutiveFailures;
 
+    /// <summary>True when this instance is actively serving the dashboard (owns the port).</summary>
+    public bool IsActivelyServing => _webApp is not null;
+
     public DashboardHost(AppConfig config, IServiceProvider rootServices,
         ILogger<DashboardHost> logger)
     {
