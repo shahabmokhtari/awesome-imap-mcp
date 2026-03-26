@@ -537,6 +537,9 @@ function DashboardPinCard() {
 // LLM Settings card — reuses SectionCard with dynamic model dropdown
 // ---------------------------------------------------------------------------
 
+/** Providers that don't need an API key. */
+const KEYLESS_PROVIDERS = new Set(['acp_claude', 'acp_copilot', 'in_context'])
+
 function LlmSectionCard({
   values,
   onSave,
@@ -549,27 +552,96 @@ function LlmSectionCard({
   const [currentProvider, setCurrentProvider] = useState(values.provider as string | undefined)
   const { data: modelOptions } = useLlmModels(currentProvider)
   const hasModels = modelOptions && modelOptions.length > 0
+  const isKeyless = KEYLESS_PROVIDERS.has(currentProvider ?? '')
+
+  // Per-provider API key state
+  const providerApiKeys = (values.providerApiKeys ?? {}) as Record<string, string>
+  const [providerKeys, setProviderKeys] = useState<Record<string, string>>({ ...providerApiKeys })
+  const [keysDirty, setKeysDirty] = useState(false)
 
   // Sync provider from upstream when settings are reloaded
   useEffect(() => {
     setCurrentProvider(values.provider as string | undefined)
   }, [values.provider])
 
+  useEffect(() => {
+    setProviderKeys({ ...(values.providerApiKeys ?? {}) as Record<string, string> })
+    setKeysDirty(false)
+  }, [values.providerApiKeys])
+
   const handleFormChange = useCallback((form: Record<string, unknown>) => {
     const provider = form.provider as string | undefined
     setCurrentProvider(prev => prev === provider ? prev : provider)
   }, [])
 
+  // Wrap onSave to include providerApiKeys
+  const handleSave = useCallback((section: string, data: Record<string, unknown>) => {
+    if (keysDirty) {
+      data.providerApiKeys = providerKeys
+    }
+    onSave(section, data)
+    setKeysDirty(false)
+  }, [onSave, providerKeys, keysDirty])
+
+  const handleKeyChange = useCallback((provider: string, value: string) => {
+    setProviderKeys(prev => {
+      const next = { ...prev, [provider]: value }
+      setKeysDirty(true)
+      return next
+    })
+  }, [])
+
   return (
-    <SectionCard
-      section="llm"
-      values={values}
-      onSave={onSave}
-      saving={saving}
-      dropdownOverrides={{ model: hasModels ? modelOptions : undefined }}
-      skipFields={hasModels ? undefined : new Set(['model'])}
-      onFormChange={handleFormChange}
-    />
+    <div className="space-y-4">
+      <SectionCard
+        section="llm"
+        values={values}
+        onSave={handleSave}
+        saving={saving}
+        dropdownOverrides={{ model: hasModels ? modelOptions : undefined }}
+        skipFields={new Set([
+          ...(hasModels ? [] : ['model']),
+          'providerApiKeys',
+        ])}
+        onFormChange={handleFormChange}
+      />
+
+      {/* API key status / per-provider keys */}
+      <div className="bg-white rounded-lg shadow p-5">
+        <h3 className="text-lg font-medium text-gray-800 mb-4">API Keys</h3>
+
+        {isKeyless ? (
+          <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-700">
+            Provider <span className="font-medium">{currentProvider}</span> does not require an API key.
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600">
+              Set a provider-specific API key below, or use the global key configured in config.json.
+            </p>
+            {['openai', 'anthropic'].map(p => (
+              <div key={p} className="flex flex-col">
+                <label className="text-sm font-medium text-gray-600 mb-1 capitalize">
+                  {p} API Key
+                </label>
+                <input
+                  type="password"
+                  value={providerKeys[p] ?? ''}
+                  onChange={e => handleKeyChange(p, e.target.value)}
+                  placeholder={providerKeys[p] === '***' ? '(unchanged)' : 'Enter API key'}
+                  className="border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 max-w-md"
+                />
+              </div>
+            ))}
+            {keysDirty && (
+              <p className="text-xs text-amber-600">
+                Provider API key changes will be saved when you click &quot;Save Changes&quot; in the LLM section above.
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
   )
 }
 
