@@ -101,6 +101,44 @@ public static class MessagesApi
             });
         });
 
+        // POST /api/messages/{accountId}/{folderId}/{uid}/fetch-body — Fetch message body on demand
+        app.MapPost("/api/messages/{accountId}/{folderId:int}/{uid:long}/fetch-body", async (
+            string accountId, int folderId, long uid,
+            UltimateImapMcp.Core.Email.IEmailBackendFactory backendFactory,
+            UltimateImapMcp.ImapClient.Repositories.FolderRepository folderRepo,
+            UltimateImapMcp.ImapClient.Repositories.MessageRepository messageRepo) =>
+        {
+            // Resolve folder path from folderId
+            var folders = folderRepo.GetByAccount(accountId);
+            var folder = folders.FirstOrDefault(f => f.Id == folderId);
+            if (folder is null)
+                return Results.NotFound(new { error = "Folder not found" });
+
+            try
+            {
+                await using var backend = backendFactory.CreateSyncBackend(accountId);
+                await backend.FetchMessageBodyAsync(accountId, folder.Path, uid).ConfigureAwait(false);
+
+                // Return updated message
+                var message = messageRepo.GetByUid(accountId, folderId, uid);
+                if (message is null)
+                    return Results.NotFound(new { error = "Message not found after fetch" });
+
+                return Results.Ok(new
+                {
+                    message.Id, message.Uid,
+                    subject = message.Subject ?? "(no subject)",
+                    bodyText = message.BodyText,
+                    bodyHtml = message.BodyHtml,
+                    bodyFetched = message.BodyFetched,
+                });
+            }
+            catch (Exception ex)
+            {
+                return Results.Json(new { error = ex.Message }, statusCode: 500);
+            }
+        });
+
         // GET /api/messages/search?account_id=X&query=text&limit=20 — Full-text search
         app.MapGet("/api/messages/search", (HttpContext ctx, MessageRepository messageRepo, FolderRepository folderRepo) =>
         {
