@@ -265,6 +265,47 @@ if (transport is "http" or "both")
 
 var host = builder.Build();
 
+// Wire sync events to the dashboard event bus (if dashboard is enabled)
+{
+    var syncMgr = host.Services.GetRequiredService<SyncManager>();
+    var evtBus = host.Services.GetService<IEventBus>();
+    if (evtBus is not null)
+    {
+        syncMgr.SetEventCallback((method, data) =>
+        {
+            switch (method)
+            {
+                case "sync:progress":
+                    evtBus.Publish(new SyncProgressEvent(
+                        GetProp<string>(data, "accountId"),
+                        GetProp<string>(data, "folder"),
+                        0,
+                        GetProp<int>(data, "totalFolders")));
+                    break;
+                case "sync:complete":
+                    evtBus.Publish(new SyncCompleteEvent(
+                        GetProp<string>(data, "accountId"),
+                        GetProp<string>(data, "folder"),
+                        GetProp<int>(data, "messagesSynced")));
+                    break;
+                case "sync:error":
+                    evtBus.Publish(new SyncErrorEvent(
+                        GetProp<string>(data, "accountId"),
+                        GetProp<string>(data, "folder"),
+                        GetProp<string>(data, "error")));
+                    break;
+            }
+        });
+    }
+}
+
+// Helper to extract properties from anonymous objects via reflection
+static T GetProp<T>(object obj, string name)
+{
+    var prop = obj.GetType().GetProperty(name);
+    return prop is not null ? (T)prop.GetValue(obj)! : default!;
+}
+
 // Print startup banner to stderr (stdout is reserved for MCP stdio protocol)
 {
     var bannerRepo = new AccountRepository(database);

@@ -97,6 +97,29 @@ public class SyncLogRepository(AppDatabase db)
         return list;
     }
 
+    /// <summary>
+    /// Returns the most recent sync log entries, optionally filtered by account.
+    /// </summary>
+    public List<SyncLogRecord> GetRecent(string? accountId, int limit, bool _allAccounts)
+    {
+        if (accountId is not null)
+            return GetRecent(accountId, limit);
+
+        using var conn = db.GetReadConnection();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT * FROM sync_log
+            ORDER BY started_at DESC
+            LIMIT $limit;
+            """;
+        cmd.Parameters.AddWithValue("$limit", limit);
+        using var reader = cmd.ExecuteReader();
+        var list = new List<SyncLogRecord>();
+        while (reader.Read())
+            list.Add(ReadRecord(reader));
+        return list;
+    }
+
     private static SyncLogRecord ReadRecord(Microsoft.Data.Sqlite.SqliteDataReader r) => new(
         Id: r.GetInt32(r.GetOrdinal("id")),
         AccountId: r.GetString(r.GetOrdinal("account_id")),

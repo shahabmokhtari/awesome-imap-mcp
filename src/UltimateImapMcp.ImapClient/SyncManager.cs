@@ -37,6 +37,16 @@ public class SyncManager(
     private readonly ConcurrentDictionary<string, ImapConnectionManager> _connections = new();
     private readonly ConcurrentDictionary<string, FolderSyncStatus> _folderStatus = new();
     private readonly ConcurrentDictionary<string, CancellationTokenSource> _idleCts = new();
+    private Action<string, object>? _onSyncEvent;
+
+    /// <summary>
+    /// Sets a callback to receive sync lifecycle events (sync:progress, sync:complete, sync:error).
+    /// Typically wired to publish events to the dashboard IEventBus.
+    /// </summary>
+    public void SetEventCallback(Action<string, object> callback)
+    {
+        _onSyncEvent = callback;
+    }
 
     // ------------------------------------------------------------------
     // Lifecycle
@@ -320,6 +330,12 @@ public class SyncManager(
             foreach (var folder in enabledFolders)
             {
                 ct.ThrowIfCancellationRequested();
+
+                _folderStatus[$"{accountId}:{folder.Path}"] = new FolderSyncStatus(
+                    folder.Path, folder.DisplayName, DateTime.UtcNow, folder.MessageCount, folder.UnreadCount, "syncing");
+
+                _onSyncEvent?.Invoke("sync:progress", new { accountId, folder = folder.Path, status = "syncing", totalFolders = enabledFolders.Count });
+
                 await SyncFolderInternalCoreAsync(client, accountId, folder, syncType, ct)
                     .ConfigureAwait(false);
             }
@@ -399,6 +415,8 @@ public class SyncManager(
                 updatedFolder?.UnreadCount ?? folder.UnreadCount,
                 "completed");
 
+            _onSyncEvent?.Invoke("sync:complete", new { accountId, folder = folder.Path, messagesSynced = (int)Math.Max(0, messagesSynced), durationMs = sw.ElapsedMilliseconds });
+
             logger.LogDebug("Synced {Account}/{Folder} — {Messages} new messages in {Duration}ms",
                 accountId, folder.Path, messagesSynced, sw.ElapsedMilliseconds);
         }
@@ -414,6 +432,8 @@ public class SyncManager(
                 folder.MessageCount,
                 folder.UnreadCount,
                 "failed");
+
+            _onSyncEvent?.Invoke("sync:error", new { accountId, folder = folder.Path, error = ex.Message });
 
             logger.LogError(ex, "Sync failed for {Account}/{Folder}", accountId, folder.Path);
 

@@ -58,6 +58,32 @@ export function useTriggerSyncAll() {
   })
 }
 
+export interface SyncLogEntry {
+  id: number
+  accountId: string
+  folderId: number | null
+  syncType: string
+  status: string
+  messagesSynced: number
+  errorMessage: string | null
+  startedAt: string
+  completedAt: string | null
+  durationMs: number | null
+}
+
+export function useSyncLogs(accountId?: string) {
+  return useQuery({
+    queryKey: ['sync-logs', accountId],
+    queryFn: () => {
+      const params = new URLSearchParams()
+      if (accountId) params.set('account_id', accountId)
+      params.set('limit', '30')
+      return apiFetch<SyncLogEntry[]>(`/api/sync/logs?${params}`)
+    },
+    refetchInterval: 5000,
+  })
+}
+
 export function useQueue(status?: string) {
   const url = status ? `/api/queue?status=${encodeURIComponent(status)}` : '/api/queue'
   return useQuery({
