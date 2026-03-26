@@ -53,7 +53,20 @@
     "api_key_env": "ANTHROPIC_API_KEY",
     "daily_token_budget": 1000000,
     "monthly_cost_limit": 5.00,
-    "auto_analyze_new": false
+    "auto_analyze_new": false,
+    "acp": {
+        "provider": "claude",
+        "pool_size": 2,
+        "request_timeout_seconds": 60,
+        "claude": {
+            "command": "claude-agent-acp",
+            "args": []
+        },
+        "copilot": {
+            "command": "copilot",
+            "args": ["--acp"]
+        }
+    }
   },
   "metrics": {
     "internal_retention_days": 7,
