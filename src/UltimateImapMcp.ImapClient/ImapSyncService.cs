@@ -74,6 +74,11 @@ public sealed class ImapSyncService
             var path = imapFolder.FullName;
             if (string.IsNullOrWhiteSpace(path)) continue;
 
+            // Skip non-selectable folders (e.g., [Gmail] namespace container)
+            if (imapFolder.Attributes.HasFlag(FolderAttributes.NonExistent)
+                || imapFolder.Attributes.HasFlag(FolderAttributes.NoSelect))
+                continue;
+
             var role = mapper.DetectRole(path);
             var displayName = mapper.GetDisplayName(path, role);
             var folderDelimiter = imapFolder.DirectorySeparator.ToString();
@@ -106,6 +111,12 @@ public sealed class ImapSyncService
 
         // Open the folder read-only.
         var imapFolder = await client.GetFolderAsync(folder.Path, ct).ConfigureAwait(false);
+
+        // Skip non-selectable folders (namespace containers like [Gmail])
+        if (imapFolder.Attributes.HasFlag(FolderAttributes.NoSelect)
+            || imapFolder.Attributes.HasFlag(FolderAttributes.NonExistent))
+            return;
+
         await imapFolder.OpenAsync(FolderAccess.ReadOnly, ct).ConfigureAwait(false);
 
         try
