@@ -279,6 +279,137 @@ public sealed class ImapSyncService
     }
 
     // ------------------------------------------------------------------
+    // Server-side IMAP search
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// Searches directly on the IMAP server and returns matching messages.
+    /// Messages not in the local cache are fetched and cached automatically.
+    /// </summary>
+    public async Task<List<MessageRecord>> ServerSearchAsync(
+        ImapClientLib client, string accountId, FolderRecord folder,
+        string? query, string? from, string? to, string? subject,
+        long? fromEpoch, long? toEpoch, int maxResults,
+        CancellationToken ct = default)
+    {
+        var imapFolder = await client.GetFolderAsync(folder.Path, ct).ConfigureAwait(false);
+        if (imapFolder.Attributes.HasFlag(FolderAttributes.NoSelect))
+            return [];
+
+        await imapFolder.OpenAsync(FolderAccess.ReadOnly, ct).ConfigureAwait(false);
+
+        try
+        {
+            // Build IMAP search query
+            SearchQuery searchQuery = SearchQuery.All;
+            if (!string.IsNullOrEmpty(query))
+                searchQuery = SearchQuery.And(searchQuery, SearchQuery.BodyContains(query));
+            if (!string.IsNullOrEmpty(from))
+                searchQuery = SearchQuery.And(searchQuery, SearchQuery.FromContains(from));
+            if (!string.IsNullOrEmpty(to))
+                searchQuery = SearchQuery.And(searchQuery, SearchQuery.ToContains(to));
+            if (!string.IsNullOrEmpty(subject))
+                searchQuery = SearchQuery.And(searchQuery, SearchQuery.SubjectContains(subject));
+            if (fromEpoch is not null)
+                searchQuery = SearchQuery.And(searchQuery,
+                    SearchQuery.SentSince(DateTimeOffset.FromUnixTimeSeconds(fromEpoch.Value).DateTime));
+            if (toEpoch is not null)
+                searchQuery = SearchQuery.And(searchQuery,
+                    SearchQuery.SentBefore(DateTimeOffset.FromUnixTimeSeconds(toEpoch.Value).DateTime));
+
+            var uids = await imapFolder.SearchAsync(searchQuery, ct).ConfigureAwait(false);
+
+            // Limit and reverse for newest-first
+            var limitedUids = uids.Reverse().Take(maxResults).ToList();
+            if (limitedUids.Count == 0) return [];
+
+            // Check which are already cached
+            var results = new List<MessageRecord>();
+            var missingUids = new List<UniqueId>();
+
+            foreach (var uid in limitedUids)
+            {
+                var cached = _messageRepo.GetByUid(accountId, folder.Id, uid.Id);
+                if (cached is not null)
+                    results.Add(cached);
+                else
+                    missingUids.Add(uid);
+            }
+
+            // Fetch and cache missing messages
+            if (missingUids.Count > 0)
+            {
+                var fetchRequest = new FetchRequest(
+                    MessageSummaryItems.UniqueId | MessageSummaryItems.Envelope |
+                    MessageSummaryItems.Flags | MessageSummaryItems.Size |
+                    MessageSummaryItems.BodyStructure,
+                    new[] { "References" });
+
+                var summaries = await imapFolder.FetchAsync(missingUids, fetchRequest, ct).ConfigureAwait(false);
+
+                foreach (var summary in summaries)
+                {
+                    ct.ThrowIfCancellationRequested();
+
+                    var uid = (long)summary.UniqueId.Id;
+                    var envelope = summary.Envelope;
+                    var messageId = envelope?.MessageId;
+                    var inReplyTo = envelope?.InReplyTo;
+                    var subjectText = envelope?.Subject;
+                    var date = envelope?.Date?.ToString("o") ?? DateTimeOffset.UtcNow.ToString("o");
+                    var dateEpoch = envelope?.Date?.ToUnixTimeSeconds();
+
+                    var fromAddress = envelope?.From.FirstOrDefault()?.ToString();
+                    var fromEmail = fromAddress is not null
+                        ? MessageParser.ExtractEmailFromAddress(fromAddress)
+                        : null;
+
+                    var toJson = SerializeAddressList(envelope?.To);
+                    var ccJson = SerializeAddressList(envelope?.Cc);
+
+                    var referencesHdr = summary.References?.Count > 0
+                        ? string.Join(" ", summary.References)
+                        : summary.Headers?["References"];
+                    var threadId = ThreadBuilder.ComputeThreadId(messageId, referencesHdr);
+
+                    var flags = BuildFlagsString(summary.Flags, summary.Keywords);
+                    var hasAttachments = summary.Attachments?.Any() ?? false;
+
+                    string? snippet = null;
+                    try
+                    {
+                        var textBodyPart = summary.TextBody;
+                        if (textBodyPart is not null)
+                        {
+                            var mimeEntity = await imapFolder
+                                .GetBodyPartAsync(summary.UniqueId, textBodyPart, ct)
+                                .ConfigureAwait(false);
+                            if (mimeEntity is MimeKit.TextPart textPart)
+                                snippet = MessageParser.GenerateSnippet(textPart.Text);
+                        }
+                    }
+                    catch { snippet = subjectText is not null ? MessageParser.GenerateSnippet(subjectText) : null; }
+
+                    _messageRepo.Insert(accountId, folder.Id, uid, messageId, inReplyTo, referencesHdr,
+                        threadId, subjectText, fromAddress, fromEmail, toJson, ccJson,
+                        bccAddresses: null, date, dateEpoch, flags,
+                        sizeBytes: summary.Size.HasValue ? (int?)summary.Size.Value : null,
+                        hasAttachments, snippet);
+
+                    var inserted = _messageRepo.GetByUid(accountId, folder.Id, uid);
+                    if (inserted is not null) results.Add(inserted);
+                }
+            }
+
+            return results;
+        }
+        finally
+        {
+            await imapFolder.CloseAsync(false, ct).ConfigureAwait(false);
+        }
+    }
+
+    // ------------------------------------------------------------------
     // Private helpers
     // ------------------------------------------------------------------
 

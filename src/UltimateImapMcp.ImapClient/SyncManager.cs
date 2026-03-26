@@ -464,6 +464,40 @@ public class SyncManager(
         }
     }
 
+    /// <summary>Searches directly on the IMAP server via connection manager.</summary>
+    public async Task<List<MessageRecord>> ServerSearchAsync(
+        string accountId, string folderPath, string? query, string? from,
+        string? to, string? subject, long? fromEpoch, long? toEpoch,
+        int maxResults, CancellationToken ct = default)
+    {
+        // Resolve account from DB (same pattern as TriggerSyncAsync)
+        var record = accountRepo.ResolveAccount(accountId)
+            ?? throw new InvalidOperationException($"Account '{accountId}' not found in database.");
+
+        accountId = record.Id;
+        var account = AccountConfigMapper.ToAccountConfig(record, encryptor);
+
+        // Create connection on the fly if not already tracked
+        if (!_connections.TryGetValue(accountId, out var connMgr))
+        {
+            connMgr = new ImapConnectionManager(account, encryptor,
+                logger as ILogger<ImapConnectionManager>,
+                oauthProvider, accountId);
+            _connections[accountId] = connMgr;
+            logger.LogInformation("Created on-demand connection for server search on account {AccountId} ({Name})",
+                accountId, record.Name);
+        }
+
+        var folder = folderRepo.GetByPath(accountId, folderPath)
+            ?? throw new InvalidOperationException($"Folder '{folderPath}' not found for account '{accountId}'.");
+
+        return await connMgr.ExecuteAsync(async client =>
+            await syncService.ServerSearchAsync(client, accountId, folder,
+                query, from, to, subject, fromEpoch, toEpoch, maxResults, ct)
+                .ConfigureAwait(false),
+            ct).ConfigureAwait(false);
+    }
+
     /// <summary>
     /// Returns per-folder sync status for an account.
     /// </summary>
