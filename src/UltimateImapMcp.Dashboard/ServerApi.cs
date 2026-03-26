@@ -6,7 +6,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using UltimateImapMcp.Core;
 using UltimateImapMcp.Core.Configuration;
-using UltimateImapMcp.Core.Repositories;
+using UltimateImapMcp.Core.Coordination;
 
 namespace UltimateImapMcp.Dashboard;
 
@@ -44,14 +44,24 @@ public static class ServerApi
             });
         });
 
-        app.MapGet("/api/server/instances", (InstanceInfo instanceInfo, LogsRepository logsRepo) =>
+        app.MapGet("/api/server/instances", (IInstanceCoordinator coordinator) =>
         {
-            var instances = logsRepo.GetDistinctInstanceIds();
-            return Results.Ok(new
-            {
-                current = instanceInfo.Id,
-                instances,
-            });
+            var instances = coordinator.GetLiveInstances();
+            return Results.Ok(new { current = coordinator.InstanceId, instances });
+        });
+
+        app.MapPost("/api/server/instances/{instanceId}/shutdown", async (
+            string instanceId, IInstanceCoordinator coordinator, InstanceInfo self,
+            ILogger<RootLifetime> logger) =>
+        {
+            if (instanceId == self.Id)
+                return Results.BadRequest(new { error = "Use /api/server/shutdown to stop the dashboard instance." });
+
+            logger.LogWarning("Remote shutdown requested for instance {InstanceId}", instanceId);
+            var success = await coordinator.RequestShutdownAsync(instanceId).ConfigureAwait(false);
+            return success
+                ? Results.Ok(new { shutting_down = true, instance_id = instanceId })
+                : Results.NotFound(new { error = $"Instance '{instanceId}' not found or already stale." });
         });
 
         app.MapPost("/api/server/shutdown", async (HttpContext ctx, RootLifetime rootLifetime,
