@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { useSyncStatus, useTriggerSync, useTriggerSyncAll } from '../hooks/useApi'
+import { useSyncStatus, useTriggerSync, useTriggerSyncAll, useSyncLogs } from '../hooks/useApi'
+import type { SyncLogEntry } from '../hooks/useApi'
 
 export default function Sync() {
   const { data: syncStatus, isLoading, error } = useSyncStatus()
@@ -149,8 +150,61 @@ export default function Sync() {
                 </tbody>
               </table>
             </div>
+            <SyncLogPanel accountId={accountId} />
           </div>
         )})}
+    </div>
+  )
+}
+
+function SyncLogPanel({ accountId }: { accountId: string }) {
+  const { data: logs } = useSyncLogs(accountId)
+  const [expanded, setExpanded] = useState(false)
+
+  if (!logs || logs.length === 0) return null
+
+  return (
+    <div className="mt-2">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1"
+      >
+        {expanded ? '\u25BC' : '\u25B6'} Recent Sync Activity ({logs.length})
+      </button>
+      {expanded && (
+        <div className="mt-2 bg-gray-50 rounded-lg border border-gray-200 overflow-hidden">
+          <table className="w-full text-xs">
+            <thead className="bg-gray-100">
+              <tr>
+                <th className="text-left px-3 py-1.5 text-gray-500">Type</th>
+                <th className="text-left px-3 py-1.5 text-gray-500">Status</th>
+                <th className="text-left px-3 py-1.5 text-gray-500">Messages</th>
+                <th className="text-left px-3 py-1.5 text-gray-500">Duration</th>
+                <th className="text-left px-3 py-1.5 text-gray-500">Time</th>
+                <th className="text-left px-3 py-1.5 text-gray-500">Error</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {logs.map((log: SyncLogEntry) => (
+                <tr key={log.id} className="hover:bg-gray-50">
+                  <td className="px-3 py-1.5 capitalize">{log.syncType}</td>
+                  <td className="px-3 py-1.5">
+                    <span className={`inline-block px-1.5 py-0.5 rounded text-xs font-medium ${
+                      log.status === 'completed' ? 'bg-green-100 text-green-700' :
+                      log.status === 'failed' ? 'bg-red-100 text-red-700' :
+                      'bg-blue-100 text-blue-700'
+                    }`}>{log.status}</span>
+                  </td>
+                  <td className="px-3 py-1.5">{log.messagesSynced}</td>
+                  <td className="px-3 py-1.5">{log.durationMs != null ? `${log.durationMs}ms` : '...'}</td>
+                  <td className="px-3 py-1.5 text-gray-400">{log.startedAt}</td>
+                  <td className="px-3 py-1.5 text-red-600 truncate max-w-48" title={log.errorMessage ?? ''}>{log.errorMessage ?? ''}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   )
 }

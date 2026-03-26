@@ -52,6 +52,30 @@ public static class SyncApi
             return Results.Ok(new { triggered, total = accounts.Count, errors });
         });
 
+        app.MapGet("/api/sync/logs", (HttpContext ctx, SyncLogRepository syncLogRepo) =>
+        {
+            var accountId = ctx.Request.Query["account_id"].FirstOrDefault();
+            var limitStr = ctx.Request.Query["limit"].FirstOrDefault();
+            var limit = 50;
+            if (!string.IsNullOrEmpty(limitStr) && int.TryParse(limitStr, out var parsed))
+                limit = Math.Clamp(parsed, 1, 200);
+
+            var logs = syncLogRepo.GetRecent(accountId, limit, true);
+            return Results.Ok(logs.Select(l => new
+            {
+                id = l.Id,
+                accountId = l.AccountId,
+                folderId = l.FolderId,
+                syncType = l.SyncType,
+                status = l.Status,
+                messagesSynced = l.MessagesSynced,
+                errorMessage = l.ErrorMessage,
+                startedAt = l.StartedAt,
+                completedAt = l.CompletedAt,
+                durationMs = l.DurationMs,
+            }));
+        });
+
         app.MapPost("/api/sync/trigger", async (HttpContext ctx, SyncManager syncManager) =>
         {
             var body = await ctx.Request.ReadFromJsonAsync<SyncTriggerRequest>().ConfigureAwait(false);
