@@ -12,6 +12,8 @@ const PARAM_SUGGESTION_MAP: Record<string, string> = {
   folderpath: 'folderPath',
   folder_path: 'folderPath',
   folder: 'folderPath',
+  folderid: 'folderId',
+  folder_id: 'folderId',
   uid: 'uid',
   messageuid: 'uid',
   message_uid: 'uid',

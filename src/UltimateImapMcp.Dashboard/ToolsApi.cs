@@ -66,6 +66,23 @@ public static class ToolsApi
             }
             suggestions["folderPath"] = folderPaths;
 
+            // Folder IDs per account
+            var folderIdSuggestions = new List<object>();
+            foreach (var account in accounts)
+            {
+                var folders = folderRepo.GetByAccount(account.Id);
+                foreach (var f in folders)
+                {
+                    folderIdSuggestions.Add(new
+                    {
+                        value = f.Id,
+                        label = $"{f.DisplayName ?? f.Path} (ID: {f.Id}) — {account.Name}",
+                        accountId = account.Id
+                    });
+                }
+            }
+            suggestions["folderId"] = folderIdSuggestions;
+
             // Recent message UIDs per account (last 20 per account)
             var messageUids = new List<object>();
             foreach (var account in accounts)
