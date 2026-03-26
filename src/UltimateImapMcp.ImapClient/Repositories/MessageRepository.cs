@@ -79,10 +79,76 @@ public class MessageRepository(AppDatabase db)
             cmd.Parameters.AddWithValue("$snippet", (object?)snippet ?? DBNull.Value);
             cmd.Parameters.AddWithValue("$rawHeaders", (object?)rawHeaders ?? DBNull.Value);
             cmd.ExecuteNonQuery();
+
+            // Also link to the folder in the junction table
+            using var linkCmd = conn.CreateCommand();
+            linkCmd.CommandText = """
+                INSERT OR IGNORE INTO message_folders (message_id, folder_id, uid)
+                VALUES (
+                    (SELECT id FROM messages WHERE account_id = $a2 AND folder_id = $f2 AND uid = $u2),
+                    $f2, $u2
+                );
+                """;
+            linkCmd.Parameters.AddWithValue("$a2", accountId);
+            linkCmd.Parameters.AddWithValue("$f2", folderId);
+            linkCmd.Parameters.AddWithValue("$u2", uid);
+            linkCmd.ExecuteNonQuery();
         });
     }
 
+    /// <summary>
+    /// Inserts a message if it doesn't already exist (by RFC message_id header),
+    /// and links it to the specified folder. If the message already exists for
+    /// this account (same RFC message_id), only adds a folder link.
+    /// Returns the message's database ID.
+    /// </summary>
+    public int InsertOrLink(string accountId, int folderId, long uid, string? messageId,
+        string? inReplyTo, string? referencesHdr, string? threadId,
+        string? subject, string? fromAddress, string? fromEmail,
+        string? toAddresses, string? ccAddresses, string? bccAddresses,
+        string? date, long? dateEpoch, string? flags, int? sizeBytes,
+        bool hasAttachments, string? snippet)
+    {
+        // Check if this RFC message_id already exists for this account
+        if (!string.IsNullOrEmpty(messageId))
+        {
+            var existing = FindByRfcMessageId(accountId, messageId);
+            if (existing is not null)
+            {
+                // Message already exists — just link to this folder
+                LinkToFolder(existing.Id, folderId, uid);
+                return existing.Id;
+            }
+        }
+
+        // New message — insert it
+        Insert(accountId, folderId, uid, messageId, inReplyTo, referencesHdr, threadId,
+            subject, fromAddress, fromEmail, toAddresses, ccAddresses, bccAddresses,
+            date ?? DateTimeOffset.UtcNow.ToString("o"), dateEpoch, flags, sizeBytes, hasAttachments, snippet);
+
+        // Get the inserted record's ID
+        var inserted = GetByUidDirect(accountId, folderId, uid);
+        return inserted?.Id ?? 0;
+    }
+
     public MessageRecord? GetByUid(string accountId, int folderId, long uid)
+    {
+        using var conn = db.GetReadConnection();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT m.* FROM messages m
+            JOIN message_folders mf ON mf.message_id = m.id
+            WHERE m.account_id = $a AND mf.folder_id = $f AND mf.uid = $u
+            LIMIT 1;
+            """;
+        cmd.Parameters.AddWithValue("$a", accountId);
+        cmd.Parameters.AddWithValue("$f", folderId);
+        cmd.Parameters.AddWithValue("$u", uid);
+        using var reader = cmd.ExecuteReader();
+        return reader.Read() ? ReadRecord(reader) : null;
+    }
+
+    private MessageRecord? GetByUidDirect(string accountId, int folderId, long uid)
     {
         using var conn = db.GetReadConnection();
         using var cmd = conn.CreateCommand();
@@ -113,7 +179,7 @@ public class MessageRepository(AppDatabase db)
 
         var where = "WHERE messages_fts MATCH $query";
         if (accountId != null) where += " AND m.account_id = $accountId";
-        if (folderId != null) where += " AND m.folder_id = $folderId";
+        if (folderId != null) where += " AND m.id IN (SELECT message_id FROM message_folders WHERE folder_id = $folderId)";
 
         cmd.CommandText = $"""
             SELECT m.* FROM messages m
@@ -144,7 +210,7 @@ public class MessageRepository(AppDatabase db)
 
         if (useFts) conditions.Add("messages_fts MATCH $query");
         if (filter.AccountId is not null) conditions.Add("m.account_id = $accountId");
-        if (filter.FolderId is not null) conditions.Add("m.folder_id = $folderId");
+        if (filter.FolderId is not null) conditions.Add("m.id IN (SELECT message_id FROM message_folders WHERE folder_id = $folderId)");
         if (filter.FromAddress is not null) conditions.Add("m.from_email LIKE $from ESCAPE '\\'");
         if (filter.ToAddress is not null) conditions.Add("m.to_addresses LIKE $to ESCAPE '\\'");
         if (filter.Subject is not null) conditions.Add("m.subject LIKE $subject ESCAPE '\\'");
@@ -217,8 +283,9 @@ public class MessageRepository(AppDatabase db)
         using var conn = db.GetReadConnection();
         using var cmd = conn.CreateCommand();
         cmd.CommandText = """
-            SELECT COALESCE(MAX(uid), 0) FROM messages
-            WHERE account_id = $a AND folder_id = $f;
+            SELECT COALESCE(MAX(mf.uid), 0) FROM message_folders mf
+            JOIN messages m ON m.id = mf.message_id
+            WHERE m.account_id = $a AND mf.folder_id = $f;
             """;
         cmd.Parameters.AddWithValue("$a", accountId);
         cmd.Parameters.AddWithValue("$f", folderId);
@@ -233,8 +300,10 @@ public class MessageRepository(AppDatabase db)
         using var conn = db.GetReadConnection();
         using var cmd = conn.CreateCommand();
         cmd.CommandText = """
-            SELECT * FROM messages WHERE account_id = $a AND folder_id = $f
-            ORDER BY date_epoch DESC LIMIT $limit OFFSET $offset;
+            SELECT m.* FROM messages m
+            JOIN message_folders mf ON mf.message_id = m.id
+            WHERE mf.folder_id = $f AND m.account_id = $a
+            ORDER BY m.date_epoch DESC LIMIT $limit OFFSET $offset;
             """;
         cmd.Parameters.AddWithValue("$a", accountId);
         cmd.Parameters.AddWithValue("$f", folderId);
@@ -332,6 +401,10 @@ public class MessageRepository(AppDatabase db)
     {
         return db.ExecuteWrite(conn =>
         {
+            using var unlinkCmd = conn.CreateCommand();
+            unlinkCmd.CommandText = "DELETE FROM message_folders;";
+            unlinkCmd.ExecuteNonQuery();
+
             using var cmd = conn.CreateCommand();
             cmd.CommandText = "DELETE FROM messages;";
             return cmd.ExecuteNonQuery();
@@ -342,6 +415,16 @@ public class MessageRepository(AppDatabase db)
     {
         return db.ExecuteWrite(conn =>
         {
+            // Delete message_folders entries for this account's messages
+            using var unlinkCmd = conn.CreateCommand();
+            unlinkCmd.CommandText = """
+                DELETE FROM message_folders WHERE message_id IN
+                (SELECT id FROM messages WHERE account_id = $a);
+                """;
+            unlinkCmd.Parameters.AddWithValue("$a", accountId);
+            unlinkCmd.ExecuteNonQuery();
+
+            // Delete the messages themselves
             using var cmd = conn.CreateCommand();
             cmd.CommandText = "DELETE FROM messages WHERE account_id = $a;";
             cmd.Parameters.AddWithValue("$a", accountId);
@@ -353,11 +436,26 @@ public class MessageRepository(AppDatabase db)
     {
         return db.ExecuteWrite(conn =>
         {
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = "DELETE FROM messages WHERE account_id = $a AND folder_id = $f;";
-            cmd.Parameters.AddWithValue("$a", accountId);
-            cmd.Parameters.AddWithValue("$f", folderId);
-            return cmd.ExecuteNonQuery();
+            // Remove folder links
+            using var unlinkCmd = conn.CreateCommand();
+            unlinkCmd.CommandText = """
+                DELETE FROM message_folders WHERE folder_id = $f
+                AND message_id IN (SELECT id FROM messages WHERE account_id = $a);
+                """;
+            unlinkCmd.Parameters.AddWithValue("$a", accountId);
+            unlinkCmd.Parameters.AddWithValue("$f", folderId);
+            var unlinked = unlinkCmd.ExecuteNonQuery();
+
+            // Delete orphaned messages (not linked to any folder)
+            using var cleanupCmd = conn.CreateCommand();
+            cleanupCmd.CommandText = """
+                DELETE FROM messages WHERE account_id = $a
+                AND id NOT IN (SELECT message_id FROM message_folders);
+                """;
+            cleanupCmd.Parameters.AddWithValue("$a", accountId);
+            cleanupCmd.ExecuteNonQuery();
+
+            return unlinked;
         });
     }
 
@@ -471,6 +569,32 @@ public class MessageRepository(AppDatabase db)
         }
 
         return null;
+    }
+
+    /// <summary>Find a message by RFC Message-ID header within an account.</summary>
+    private MessageRecord? FindByRfcMessageId(string accountId, string rfcMessageId)
+    {
+        using var conn = db.GetReadConnection();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT * FROM messages WHERE account_id = $a AND message_id = $mid LIMIT 1;";
+        cmd.Parameters.AddWithValue("$a", accountId);
+        cmd.Parameters.AddWithValue("$mid", rfcMessageId);
+        using var reader = cmd.ExecuteReader();
+        return reader.Read() ? ReadRecord(reader) : null;
+    }
+
+    /// <summary>Link a message to a folder (add junction table entry).</summary>
+    public void LinkToFolder(int messageDbId, int folderId, long uid)
+    {
+        db.ExecuteWrite(conn =>
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "INSERT OR IGNORE INTO message_folders (message_id, folder_id, uid) VALUES ($mid, $fid, $uid);";
+            cmd.Parameters.AddWithValue("$mid", messageDbId);
+            cmd.Parameters.AddWithValue("$fid", folderId);
+            cmd.Parameters.AddWithValue("$uid", uid);
+            cmd.ExecuteNonQuery();
+        });
     }
 
     private static string EscapeLike(string value) =>
