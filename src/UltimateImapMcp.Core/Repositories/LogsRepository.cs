@@ -83,12 +83,12 @@ public class LogsRepository(AppDatabase db)
     public List<LogRecord> Query(string? levels = null, string? category = null,
         string? fromTime = null, string? toTime = null, string? search = null,
         int limit = 100, string? scope = null, string? instanceId = null,
-        int offset = 0)
+        int offset = 0, IReadOnlyList<string>? liveInstanceIds = null)
     {
         using var conn = db.GetReadConnection();
         using var cmd = conn.CreateCommand();
 
-        var where = BuildWhereClause(levels, category, fromTime, toTime, search, scope, instanceId, cmd);
+        var where = BuildWhereClause(levels, category, fromTime, toTime, search, scope, instanceId, cmd, liveInstanceIds);
 
         cmd.CommandText = $"""
             SELECT id, level, category, message, exception, metadata, created_at, scope, instance_id
@@ -124,12 +124,13 @@ public class LogsRepository(AppDatabase db)
     /// </summary>
     public int QueryCount(string? levels = null, string? category = null,
         string? fromTime = null, string? toTime = null, string? search = null,
-        string? scope = null, string? instanceId = null)
+        string? scope = null, string? instanceId = null,
+        IReadOnlyList<string>? liveInstanceIds = null)
     {
         using var conn = db.GetReadConnection();
         using var cmd = conn.CreateCommand();
 
-        var where = BuildWhereClause(levels, category, fromTime, toTime, search, scope, instanceId, cmd);
+        var where = BuildWhereClause(levels, category, fromTime, toTime, search, scope, instanceId, cmd, liveInstanceIds);
 
         cmd.CommandText = $"SELECT COUNT(*) FROM logs {where};";
 
@@ -142,7 +143,8 @@ public class LogsRepository(AppDatabase db)
     private static string BuildWhereClause(string? levels, string? category,
         string? fromTime, string? toTime, string? search,
         string? scope, string? instanceId,
-        Microsoft.Data.Sqlite.SqliteCommand cmd)
+        Microsoft.Data.Sqlite.SqliteCommand cmd,
+        IReadOnlyList<string>? liveInstanceIds = null)
     {
         var where = "WHERE 1=1";
 
@@ -196,6 +198,14 @@ public class LogsRepository(AppDatabase db)
         {
             where += " AND instance_id = $instance_id";
             cmd.Parameters.AddWithValue("$instance_id", instanceId);
+        }
+
+        if (liveInstanceIds is { Count: > 0 })
+        {
+            var placeholders = string.Join(",", liveInstanceIds.Select((_, i) => $"$live{i}"));
+            where += $" AND instance_id IN ({placeholders})";
+            for (var i = 0; i < liveInstanceIds.Count; i++)
+                cmd.Parameters.AddWithValue($"$live{i}", liveInstanceIds[i]);
         }
 
         return where;

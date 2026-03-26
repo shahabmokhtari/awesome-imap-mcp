@@ -126,6 +126,10 @@ public sealed class DashboardHost : BackgroundService
         builder.Services.AddSingleton(_rootServices.GetRequiredService<MetricsRepository>());
         builder.Services.AddSingleton(_rootServices.GetRequiredService<LogsRepository>());
 
+        // Multi-instance coordination
+        builder.Services.AddSingleton(_rootServices.GetRequiredService<UltimateImapMcp.Core.Database.HealthDatabase>());
+        builder.Services.AddSingleton(_rootServices.GetRequiredService<UltimateImapMcp.Core.Coordination.IInstanceCoordinator>());
+
         // OAuth services (from root host)
         builder.Services.AddSingleton(_rootServices.GetRequiredService<OAuthTokenRepository>());
         builder.Services.AddSingleton(_rootServices.GetRequiredService<OAuthTokenService>());
