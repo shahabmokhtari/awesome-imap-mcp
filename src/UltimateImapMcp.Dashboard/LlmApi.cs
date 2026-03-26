@@ -158,7 +158,7 @@ public static class LlmApi
             var models = provider.ToLowerInvariant() switch
             {
                 "acp_copilot" => await DetectModelsFromCliAsync("gh", ["copilot", "--", "--help"]).ConfigureAwait(false),
-                "acp_claude" => ["claude-sonnet-4-5", "claude-opus-4-5", "claude-haiku-4-5", "claude-sonnet-4-6", "claude-opus-4-6"],
+                "acp_claude" => ["sonnet", "opus", "haiku"],
                 _ => []
             };
 
