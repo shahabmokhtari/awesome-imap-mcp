@@ -229,7 +229,7 @@ public sealed class ImapSyncService
             // Fetch and cache missing messages using the shared helper
             if (missingUids.Count > 0)
             {
-                var insertedIds = await FetchAndStoreMessagesAsync(imapFolder, accountId, folder.Id, missingUids, ct)
+                var insertedIds = await FetchAndStoreMessagesAsync(imapFolder, accountId, folder.Id, missingUids, ct, synced: false)
                     .ConfigureAwait(false);
 
                 foreach (var dbMsgId in insertedIds)
@@ -260,7 +260,7 @@ public sealed class ImapSyncService
     /// </summary>
     private async Task<List<int>> FetchAndStoreMessagesAsync(
         IMailFolder imapFolder, string accountId, int folderId,
-        IList<UniqueId> uids, CancellationToken ct)
+        IList<UniqueId> uids, CancellationToken ct, bool synced = true)
     {
         var fetchRequest = new FetchRequest(
             MessageSummaryItems.UniqueId |
@@ -357,7 +357,8 @@ public sealed class ImapSyncService
                 flags,
                 sizeBytes: summary.Size.HasValue ? (int?)summary.Size.Value : null,
                 hasAttachments,
-                snippet);
+                snippet,
+                synced: synced);
 
             insertedIds.Add(dbMsgId);
 
