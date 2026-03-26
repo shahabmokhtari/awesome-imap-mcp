@@ -102,6 +102,10 @@ public sealed class DashboardHost : BackgroundService
         }
 
         // Register dashboard-specific services
+        builder.Services.ConfigureHttpJsonOptions(opts =>
+        {
+            opts.SerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
+        });
         builder.Services.AddHttpClient();
         builder.Services.AddSignalR();
 
