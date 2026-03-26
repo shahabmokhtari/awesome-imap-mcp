@@ -109,7 +109,7 @@ public static class LlmApi
             var models = provider.ToLowerInvariant() switch
             {
                 "acp_copilot" => await DetectModelsFromCliAsync("gh", ["copilot", "--", "--help"]).ConfigureAwait(false),
-                "acp_claude" => await DetectModelsFromCliAsync("claude", ["--help"]).ConfigureAwait(false),
+                "acp_claude" => await DetectModelsFromCliAsync("claude", ["--acp", "--verbose", "--help"]).ConfigureAwait(false),
                 _ => []
             };
 
@@ -153,16 +153,31 @@ public static class LlmApi
 
             var combinedOutput = stdoutTask.Result + stderrTask.Result;
 
-            // Parse model choices from help text: --model <model> ... (choices: "model1", "model2", ...)
+            // Parse model choices from help text. Supports two formats:
+            //   choices: "model1", "model2", ...  (parenthesized list)
+            //   {model1,model2,...}                (brace-delimited list)
             var match = Regex.Match(combinedOutput, @"--model.*?choices:\s*(""[^)]+)", RegexOptions.Singleline);
-            if (!match.Success) return [];
+            if (match.Success)
+            {
+                var choicesText = match.Groups[1].Value;
+                var models = Regex.Matches(choicesText, @"""([^""]+)""")
+                    .Select(m => m.Groups[1].Value)
+                    .ToArray();
+                if (models.Length > 0) return models;
+            }
 
-            var choicesText = match.Groups[1].Value;
-            var models = Regex.Matches(choicesText, @"""([^""]+)""")
-                .Select(m => m.Groups[1].Value)
-                .ToArray();
+            // Fallback: brace-delimited comma-separated list, e.g. --model {model1,model2}
+            var braceMatch = Regex.Match(combinedOutput, @"--model\s+\{([^}]+)\}", RegexOptions.Singleline);
+            if (braceMatch.Success)
+            {
+                var models = braceMatch.Groups[1].Value
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Where(s => s.Length > 0)
+                    .ToArray();
+                if (models.Length > 0) return models;
+            }
 
-            return models;
+            return [];
         }
         catch
         {
