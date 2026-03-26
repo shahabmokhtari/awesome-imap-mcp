@@ -65,6 +65,9 @@ public sealed class ZohoSyncService : BackgroundService
                 continue;
             }
 
+            // Sync immediately on first iteration; delay at end of each cycle.
+            // This is intentional: the leader syncs eagerly on startup, then waits
+            // DefaultPollInterval before syncing again.
             try
             {
                 await SyncAllZohoAccountsAsync(ct).ConfigureAwait(false);
