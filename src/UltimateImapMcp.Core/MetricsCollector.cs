@@ -2,6 +2,7 @@ using System.Diagnostics.Metrics;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using UltimateImapMcp.Core.Configuration;
+using UltimateImapMcp.Core.Coordination;
 using UltimateImapMcp.Core.Repositories;
 
 namespace UltimateImapMcp.Core;
@@ -15,6 +16,7 @@ public class MetricsCollector : BackgroundService
 {
     private readonly MetricsRepository _metricsRepo;
     private readonly MetricsConfig _config;
+    private readonly IInstanceCoordinator _coordinator;
     private readonly ILogger<MetricsCollector> _logger;
     private readonly MeterListener _listener;
     private readonly List<(string Name, double Value, string? Tags)> _buffer = [];
@@ -23,10 +25,11 @@ public class MetricsCollector : BackgroundService
     private static readonly TimeSpan CollectInterval = TimeSpan.FromSeconds(30);
 
     public MetricsCollector(MetricsRepository metricsRepo, MetricsConfig config,
-        ILogger<MetricsCollector> logger)
+        IInstanceCoordinator coordinator, ILogger<MetricsCollector> logger)
     {
         _metricsRepo = metricsRepo;
         _config = config;
+        _coordinator = coordinator;
         _logger = logger;
 
         _listener = new MeterListener();
@@ -81,6 +84,19 @@ public class MetricsCollector : BackgroundService
 
         while (!ct.IsCancellationRequested)
         {
+            if (!_coordinator.IsLeader)
+            {
+                try
+                {
+                    await Task.Delay(CollectInterval, ct).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    break;
+                }
+                continue;
+            }
+
             try
             {
                 await Task.Delay(CollectInterval, ct).ConfigureAwait(false);

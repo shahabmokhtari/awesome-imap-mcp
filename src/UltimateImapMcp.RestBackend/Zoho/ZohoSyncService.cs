@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using UltimateImapMcp.Core.Coordination;
 using UltimateImapMcp.Core.Email;
 using UltimateImapMcp.ImapClient.Repositories;
 
@@ -15,6 +16,7 @@ public sealed class ZohoSyncService : BackgroundService
     private readonly IEmailBackendFactory _backendFactory;
     private readonly AccountRepository _accountRepo;
     private readonly FolderRepository _folderRepo;
+    private readonly IInstanceCoordinator _coordinator;
     private readonly ILogger<ZohoSyncService> _logger;
 
     /// <summary>Default polling interval for Zoho accounts.</summary>
@@ -24,11 +26,13 @@ public sealed class ZohoSyncService : BackgroundService
         IEmailBackendFactory backendFactory,
         AccountRepository accountRepo,
         FolderRepository folderRepo,
+        IInstanceCoordinator coordinator,
         ILogger<ZohoSyncService> logger)
     {
         _backendFactory = backendFactory;
         _accountRepo = accountRepo;
         _folderRepo = folderRepo;
+        _coordinator = coordinator;
         _logger = logger;
     }
 
@@ -48,6 +52,19 @@ public sealed class ZohoSyncService : BackgroundService
 
         while (!ct.IsCancellationRequested)
         {
+            if (!_coordinator.IsLeader)
+            {
+                try
+                {
+                    await Task.Delay(DefaultPollInterval, ct).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+                continue;
+            }
+
             try
             {
                 await SyncAllZohoAccountsAsync(ct).ConfigureAwait(false);

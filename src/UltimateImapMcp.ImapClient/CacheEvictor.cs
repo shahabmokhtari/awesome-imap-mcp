@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using UltimateImapMcp.Core.Configuration;
+using UltimateImapMcp.Core.Coordination;
 using UltimateImapMcp.Core.Database;
 using UltimateImapMcp.ImapClient.Repositories;
 
@@ -15,6 +16,7 @@ public class CacheEvictor(
     AppDatabase db,
     MessageRepository messageRepo,
     CacheConfig cacheConfig,
+    IInstanceCoordinator coordinator,
     ILogger<CacheEvictor> logger) : BackgroundService
 {
     private const int BatchSize = 500;
@@ -27,6 +29,19 @@ public class CacheEvictor(
 
         while (!ct.IsCancellationRequested)
         {
+            if (!coordinator.IsLeader)
+            {
+                try
+                {
+                    await Task.Delay(Interval, ct).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    break;
+                }
+                continue;
+            }
+
             try
             {
                 RunEviction();

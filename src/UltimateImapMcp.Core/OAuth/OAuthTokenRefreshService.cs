@@ -1,6 +1,7 @@
 using System.Globalization;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using UltimateImapMcp.Core.Coordination;
 
 namespace UltimateImapMcp.Core.OAuth;
 
@@ -11,6 +12,7 @@ namespace UltimateImapMcp.Core.OAuth;
 public sealed class OAuthTokenRefreshService(
     OAuthTokenRepository tokenRepo,
     IOAuthAccessTokenProvider tokenProvider,
+    IInstanceCoordinator coordinator,
     ILogger<OAuthTokenRefreshService> logger) : BackgroundService
 {
     private static readonly TimeSpan Interval = TimeSpan.FromMinutes(5);
@@ -22,6 +24,19 @@ public sealed class OAuthTokenRefreshService(
 
         while (!stoppingToken.IsCancellationRequested)
         {
+            if (!coordinator.IsLeader)
+            {
+                try
+                {
+                    await Task.Delay(Interval, stoppingToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+                continue;
+            }
+
             try
             {
                 await Task.Delay(Interval, stoppingToken).ConfigureAwait(false);
