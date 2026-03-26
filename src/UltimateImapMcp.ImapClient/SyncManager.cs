@@ -239,18 +239,21 @@ public class SyncManager(
         logger.LogInformation("Starting polling loop for {Account} — interval {Interval}s",
             accountId, interval.TotalSeconds);
 
-        // Initial sync of all folders on startup
-        try
+        // Initial sync of all folders on startup — only the leader performs IMAP work.
+        if (coordinator.IsLeader)
         {
-            await SyncAllFoldersAsync(accountId, account, connMgr, "poll", ct).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested)
-        {
-            return;
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Initial sync failed for {Account}", accountId);
+            try
+            {
+                await SyncAllFoldersAsync(accountId, account, connMgr, "poll", ct).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                return;
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Initial sync failed for {Account}", accountId);
+            }
         }
 
         while (!ct.IsCancellationRequested)
