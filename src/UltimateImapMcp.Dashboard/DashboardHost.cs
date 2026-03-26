@@ -149,6 +149,11 @@ public sealed class DashboardHost : BackgroundService
         // Email backend factory (for on-demand body fetch)
         builder.Services.AddSingleton(_rootServices.GetRequiredService<UltimateImapMcp.Core.Email.IEmailBackendFactory>());
 
+        // ACP pool (optional — only registered when ACP provider is enabled)
+        var acpPool = _rootServices.GetService<UltimateImapMcp.Llm.Acp.IAcpClientPool>();
+        if (acpPool is not null)
+            builder.Services.AddSingleton(acpPool);
+
         // Instance info + root lifetime (for shutdown endpoint)
         builder.Services.AddSingleton(_rootServices.GetRequiredService<InstanceInfo>());
         builder.Services.AddSingleton(new RootLifetime(

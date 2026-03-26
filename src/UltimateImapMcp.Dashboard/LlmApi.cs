@@ -1,12 +1,10 @@
 using System.Diagnostics;
-using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using UltimateImapMcp.Core.Configuration;
 using UltimateImapMcp.Llm;
 using UltimateImapMcp.Llm.Acp;
@@ -119,105 +117,28 @@ public static class LlmApi
         return app;
     }
 
-    /// <summary>
-    /// Tests an ACP provider by spawning a temporary agent, creating a session,
-    /// sending the prompt, collecting the response, then disposing everything.
-    /// Each test runs a fresh process to avoid state leakage.
-    /// </summary>
     private static async Task<IResult> TestAcpProviderAsync(
         string provider, string model, string prompt,
         LlmConfig llmConfig, IServiceProvider services)
     {
-        var loggerFactory = services.GetRequiredService<ILoggerFactory>();
-        var (command, args) = ResolveAcpCommandArgs(provider, model, llmConfig);
-
-        var sw = Stopwatch.StartNew();
-        var acpClient = new AcpClient(command, args, loggerFactory.CreateLogger<AcpClient>(),
-            timeout: TimeSpan.FromSeconds(60));
-        try
-        {
-            await acpClient.InitializeAsync().ConfigureAwait(false);
-            var session = await acpClient.CreateSessionAsync(Path.GetTempPath()).ConfigureAwait(false);
-
-            try
-            {
-                var responseText = new StringBuilder();
-                await foreach (var evt in acpClient.SendPromptAsync(session, prompt).ConfigureAwait(false))
-                {
-                    if (evt.Type == AcpEventType.TextDelta && evt.Text is not null)
-                        responseText.Append(evt.Text);
-                    else if (evt.Type == AcpEventType.Complete && evt.Text is not null)
-                        responseText.Append(evt.Text);
-                    else if (evt.Type == AcpEventType.Error)
-                    {
-                        sw.Stop();
-                        return Results.Json(new
-                        {
-                            error = evt.Error ?? "ACP agent returned an error",
-                            model,
-                        }, statusCode: 502);
-                    }
-                }
-
-                sw.Stop();
-                return Results.Ok(new
-                {
-                    response = responseText.ToString(),
-                    model,
-                    duration_ms = sw.ElapsedMilliseconds,
-                });
-            }
-            finally
-            {
-                await acpClient.DeleteSessionAsync(session).ConfigureAwait(false);
-            }
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            sw.Stop();
+        var pool = services.GetService<IAcpClientPool>();
+        if (pool is null)
             return Results.Json(new
             {
-                error = ex.Message,
-                model,
-            }, statusCode: 502);
-        }
-        finally
-        {
-            await acpClient.DisposeAsync().ConfigureAwait(false);
-        }
-    }
+                error = "ACP pool not initialized. Enable an ACP provider in config and restart.",
+            }, statusCode: 500);
 
-    /// <summary>
-    /// Resolves the CLI command and arguments for an ACP provider.
-    /// Uses the configured ACP command/args as a base, with provider-specific defaults.
-    /// </summary>
-    private static (string Command, string[] Args) ResolveAcpCommandArgs(
-        string provider, string model, LlmConfig llmConfig)
-    {
-        var normalized = provider.ToLowerInvariant();
-        string command;
-        var argsList = new List<string>();
+        var result = await pool.SendPromptAsync(prompt, model).ConfigureAwait(false);
 
-        if (normalized == "acp_copilot")
-        {
-            command = "gh";
-            argsList.AddRange(["copilot", "--", "--acp"]);
-        }
-        else
-        {
-            // acp_claude or custom — use configured command/args
-            command = llmConfig.Acp.Command;
-            argsList.AddRange(llmConfig.Acp.Args);
-        }
+        if (result.Error is not null)
+            return Results.Json(new { error = result.Error, model }, statusCode: 502);
 
-        // Append model flag if specified and not already in args
-        if (!string.IsNullOrEmpty(model) && !argsList.Contains("--model"))
+        return Results.Ok(new
         {
-            argsList.Add("--model");
-            argsList.Add(model);
-        }
-
-        return (command, argsList.ToArray());
+            response = result.Response,
+            model,
+            duration_ms = result.PromptLatencyMs,
+        });
     }
 
     /// <summary>
