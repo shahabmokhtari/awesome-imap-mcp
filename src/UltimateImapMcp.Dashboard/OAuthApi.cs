@@ -26,10 +26,10 @@ public static class OAuthApi
             var providers = OAuthProviderDefaults.GetAvailableProviders(config);
             var result = providers.Select(p => new
             {
-                Provider = p.Key,
-                Configured = p.Value is not null,
-                AuthUrl = p.Value?.AuthUrl,
-                Scopes = p.Value?.Scopes
+                provider = p.Key,
+                configured = p.Value is not null,
+                authUrl = p.Value?.AuthUrl,
+                scopes = p.Value?.Scopes
             });
             return Results.Ok(result);
         });
@@ -40,7 +40,7 @@ public static class OAuthApi
         {
             var provider = ctx.Request.Query["provider"].FirstOrDefault();
             if (string.IsNullOrEmpty(provider))
-                return Results.BadRequest(new { Error = "provider query parameter is required" });
+                return Results.BadRequest(new { error = "provider query parameter is required" });
 
             logger.LogInformation("Starting OAuth flow for provider {Provider}", provider);
 
@@ -72,7 +72,7 @@ public static class OAuthApi
             }
 
             if (effectiveConfig is null)
-                return Results.BadRequest(new { Error = $"Provider '{provider}' is not configured. Set client_id in config or provide it as a query parameter." });
+                return Results.BadRequest(new { error = $"Provider '{provider}' is not configured. Set client_id in config or provide it as a query parameter." });
 
             // Apply overrides
             if (!string.IsNullOrEmpty(clientIdOverride))
@@ -126,7 +126,7 @@ public static class OAuthApi
             }
 
             if (string.IsNullOrEmpty(code) || string.IsNullOrEmpty(state))
-                return Results.BadRequest(new { Error = "Missing code or state parameter" });
+                return Results.BadRequest(new { error = "Missing code or state parameter" });
 
             var flow = stateStore.TryConsume(state);
             if (flow is null)
@@ -263,13 +263,13 @@ public static class OAuthApi
         {
             var body = await ctx.Request.ReadFromJsonAsync<OAuthCompleteRequest>().ConfigureAwait(false);
             if (body is null || string.IsNullOrEmpty(body.TempId))
-                return Results.BadRequest(new { Error = "temp_id is required" });
+                return Results.BadRequest(new { error = "temp_id is required" });
 
             if (!PendingResults.TryRemove(body.TempId, out var pending))
-                return Results.BadRequest(new { Error = "Invalid or expired temp_id" });
+                return Results.BadRequest(new { error = "Invalid or expired temp_id" });
 
             if (DateTime.UtcNow - pending.CreatedAt > TimeSpan.FromMinutes(10))
-                return Results.BadRequest(new { Error = "Expired temp_id" });
+                return Results.BadRequest(new { error = "Expired temp_id" });
 
             logger.LogInformation("Completing OAuth account creation for {Provider}, email={Email}",
                 pending.Provider, pending.Email ?? "(unknown)");

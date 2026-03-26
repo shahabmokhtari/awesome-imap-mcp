@@ -55,15 +55,15 @@ public static class SyncApi
             try
             {
                 await syncManager.TriggerSyncAsync(body.AccountId, body.FolderPath).ConfigureAwait(false);
-                return Results.Ok(new { Triggered = true, body.AccountId, body.FolderPath });
+                return Results.Ok(new { triggered = true, accountId = body.AccountId, folderPath = body.FolderPath });
             }
             catch (InvalidOperationException ex)
             {
-                return Results.BadRequest(new { Error = ex.Message });
+                return Results.BadRequest(new { error = ex.Message });
             }
             catch (Exception ex)
             {
-                return Results.Json(new { Error = ex.Message }, statusCode: 500);
+                return Results.Json(new { error = ex.Message }, statusCode: 500);
             }
         });
 

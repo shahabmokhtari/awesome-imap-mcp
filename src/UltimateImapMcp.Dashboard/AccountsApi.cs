@@ -19,18 +19,18 @@ public static class AccountsApi
             // Strip credentials from response
             return Results.Ok(accounts.Select(a => new
             {
-                a.Id,
-                a.Name,
-                a.ImapHost,
-                a.ImapPort,
-                a.SmtpHost,
-                a.SmtpPort,
-                a.SmtpUseSsl,
-                a.Username,
-                a.AuthType,
-                a.Provider,
-                a.CreatedAt,
-                a.UpdatedAt
+                id = a.Id,
+                name = a.Name,
+                imapHost = a.ImapHost,
+                imapPort = a.ImapPort,
+                smtpHost = a.SmtpHost,
+                smtpPort = a.SmtpPort,
+                smtpUseSsl = a.SmtpUseSsl,
+                username = a.Username,
+                authType = a.AuthType,
+                provider = a.Provider,
+                createdAt = a.CreatedAt,
+                updatedAt = a.UpdatedAt
             }));
         });
 
@@ -45,7 +45,7 @@ public static class AccountsApi
             if (string.IsNullOrEmpty(body.Password) &&
                 !body.AuthType.Equals("oauth2", StringComparison.OrdinalIgnoreCase))
             {
-                return Results.BadRequest(new { Error = "Password is required" });
+                return Results.BadRequest(new { error = "Password is required" });
             }
 
             var id = Guid.NewGuid().ToString();
@@ -55,7 +55,7 @@ public static class AccountsApi
                 body.SmtpHost, body.SmtpPort, body.SmtpUseSsl,
                 body.Username, body.AuthType, credentialsEnc, body.Provider, null);
 
-            return Results.Created($"/api/accounts/{id}", new { Id = id });
+            return Results.Created($"/api/accounts/{id}", new { id });
         });
 
         app.MapPut("/api/accounts/{id}", async (string id, HttpContext ctx,
@@ -72,7 +72,7 @@ public static class AccountsApi
             repo.Update(id, body.Name, body.ImapHost, body.ImapPort,
                 body.SmtpHost, body.SmtpPort, body.SmtpUseSsl, body.Username);
 
-            return Results.Ok(new { Id = id, Updated = true });
+            return Results.Ok(new { id, updated = true });
         });
 
         app.MapDelete("/api/accounts/{id}", (string id, AccountRepository repo,
@@ -85,7 +85,7 @@ public static class AccountsApi
             // Clean up OAuth tokens first
             oauthTokenRepo.Delete(id);
             repo.Delete(id);
-            return Results.Ok(new { Id = id, Deleted = true });
+            return Results.Ok(new { id, deleted = true });
         });
 
         app.MapPost("/api/accounts/{id}/test", async (string id, AccountRepository repo,
@@ -123,14 +123,14 @@ public static class AccountsApi
 
                 logger.LogInformation("Account test successful for {AccountName} ({AccountId})",
                     account.Name, id);
-                return Results.Ok(new { Success = true, Message = "Connection successful" });
+                return Results.Ok(new { success = true, message = "Connection successful" });
             }
             catch (Exception ex)
             {
                 var detail = ex.InnerException?.Message ?? ex.Message;
                 logger.LogError(ex, "Account test failed for {AccountName} ({AccountId}): {Error}",
                     account.Name, id, detail);
-                return Results.Json(new { Success = false, Message = $"{ex.GetType().Name}: {detail}" }, statusCode: 502);
+                return Results.Json(new { success = false, message = $"{ex.GetType().Name}: {detail}" }, statusCode: 502);
             }
         });
 

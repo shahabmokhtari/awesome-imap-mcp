@@ -16,7 +16,7 @@ public static class SettingsApi
             // Return config with sensitive fields redacted
             return Results.Ok(new
             {
-                Server = new
+                server = new
                 {
                     config.Server.Transport,
                     config.Server.HttpPort,
@@ -26,7 +26,7 @@ public static class SettingsApi
                     config.Server.DashboardAutoOpen,
                     config.Server.LogLevel
                 },
-                Cache = new
+                cache = new
                 {
                     config.Cache.DbPath,
                     config.Cache.MaxSizeMb,
@@ -34,7 +34,7 @@ public static class SettingsApi
                     config.Cache.MaxBodyAgeDays,
                     config.Cache.ImapFallbackTtlHours
                 },
-                Queue = new
+                queue = new
                 {
                     config.Queue.P0FlushInterval,
                     config.Queue.P1FlushInterval,
@@ -42,7 +42,7 @@ public static class SettingsApi
                     config.Queue.SendUndoWindow,
                     config.Queue.MaxRetries
                 },
-                Llm = new
+                llm = new
                 {
                     config.Llm.Enabled,
                     config.Llm.Provider,
@@ -54,20 +54,20 @@ public static class SettingsApi
                         kvp => kvp.Key,
                         kvp => string.IsNullOrEmpty(kvp.Value) ? "" : "***")
                 },
-                Sync = new
+                sync = new
                 {
                     config.Sync.Enabled,
                     config.Sync.PollInterval,
                     config.Sync.MaxMessagesPerSync
                 },
-                Metrics = new
+                metrics = new
                 {
                     config.Metrics.Enabled,
                     config.Metrics.Port,
                     config.Metrics.Path,
                     config.Metrics.InternalRetentionDays
                 },
-                AccountCount = accountRepo.GetAll().Count
+                accountCount = accountRepo.GetAll().Count
             });
         });
 
@@ -75,7 +75,7 @@ public static class SettingsApi
         {
             var updates = await ctx.Request.ReadFromJsonAsync<SettingsUpdateRequest>().ConfigureAwait(false);
             if (updates is null)
-                return Results.BadRequest(new { Error = "Invalid request body" });
+                return Results.BadRequest(new { error = "Invalid request body" });
 
             var changed = new List<string>();
 
@@ -158,18 +158,18 @@ public static class SettingsApi
                 {
                     return Results.Ok(new
                     {
-                        Updated = changed,
-                        Persisted = false,
-                        Warning = $"Settings applied in-memory but could not save to disk: {ex.Message}. Some changes may require a restart."
+                        updated = changed,
+                        persisted = false,
+                        warning = $"Settings applied in-memory but could not save to disk: {ex.Message}. Some changes may require a restart."
                     });
                 }
             }
 
             return Results.Ok(new
             {
-                Updated = changed,
-                Persisted = persisted,
-                Message = changed.Count > 0
+                updated = changed,
+                persisted,
+                message = changed.Count > 0
                     ? "Settings updated. Some changes (ports, transport) require a restart to take effect."
                     : "No changes applied."
             });
