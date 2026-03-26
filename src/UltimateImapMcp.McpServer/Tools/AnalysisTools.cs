@@ -19,18 +19,20 @@ public class AnalysisTools(
 
     [McpServerTool, Description(
         "Analyze an email using LLM. Returns spam score, category, priority, summary, or custom analysis. " +
+        "Provide either 'messageId' (database ID) alone, or 'accountId' + 'uid' (with optional 'folderId'). " +
         "If using in-context mode, returns the email data with instructions for you to perform the analysis.")]
     public async Task<string> AnalyzeEmail(
-        [Description("Account ID")] string accountId,
-        [Description("Message UID")] int uid,
-        [Description("Folder ID (integer)")] int folderId,
+        [Description("Database message ID (if provided, accountId/uid/folderId are ignored)")] int? messageId = null,
+        [Description("Account ID")] string? accountId = null,
+        [Description("Message UID")] int? uid = null,
+        [Description("Folder ID (integer, optional)")] int? folderId = null,
         [Description("Analysis type: spam_score, category, priority, summary, custom")] string type = "summary")
     {
         try
         {
-            var msg = messageRepo.GetByUid(accountId, folderId, uid);
+            var msg = ResolveMessage(messageId, accountId, folderId, uid);
             if (msg is null)
-                return Error($"Message UID {uid} not found in folder {folderId} for account '{accountId}'.");
+                return Error("Message not found. Provide 'messageId' or 'accountId'+'uid'.");
 
             var analysisType = ParseAnalysisType(type);
 
@@ -65,9 +67,9 @@ public class AnalysisTools(
 
             return JsonSerializer.Serialize(new
             {
-                account_id = accountId,
-                folder_id = folderId,
-                uid,
+                account_id = msg.AccountId,
+                folder_id = msg.FolderId,
+                uid = msg.Uid,
                 analysis_type = type,
                 background = analyzer.SupportsBackgroundAnalysis,
                 model = result.ModelUsed,
@@ -248,6 +250,28 @@ public class AnalysisTools(
         "custom" => AnalysisType.Custom,
         _ => throw new ArgumentException($"Unknown analysis type: '{type}'. Use: spam_score, category, priority, summary, custom")
     };
+
+    /// <summary>Resolves a message from various parameter combinations.</summary>
+    private MessageRecord? ResolveMessage(int? messageId, string? accountId, int? folderId, int? uid)
+    {
+        if (messageId is not null)
+            return messageRepo.GetById(messageId.Value);
+
+        if (string.IsNullOrEmpty(accountId) || uid is null)
+            return null;
+
+        if (folderId is not null)
+            return messageRepo.GetByUid(accountId, folderId.Value, uid.Value);
+
+        // Search across all folders for this account+uid
+        foreach (var folder in folderRepo.GetByAccount(accountId))
+        {
+            var msg = messageRepo.GetByUid(accountId, folder.Id, uid.Value);
+            if (msg is not null) return msg;
+        }
+
+        return null;
+    }
 
     private static string Error(string message) =>
         JsonSerializer.Serialize(new { error = message }, JsonOptions);

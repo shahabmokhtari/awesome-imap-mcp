@@ -79,6 +79,17 @@ public class MessageRepository(AppDatabase db)
         return reader.Read() ? ReadRecord(reader) : null;
     }
 
+    /// <summary>Look up a message by its database primary key (globally unique).</summary>
+    public MessageRecord? GetById(int id)
+    {
+        using var conn = db.GetReadConnection();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT * FROM messages WHERE id = $id;";
+        cmd.Parameters.AddWithValue("$id", id);
+        using var reader = cmd.ExecuteReader();
+        return reader.Read() ? ReadRecord(reader) : null;
+    }
+
     public List<MessageRecord> SearchFts(string query, string? accountId = null,
         int? folderId = null, int maxResults = 20)
     {

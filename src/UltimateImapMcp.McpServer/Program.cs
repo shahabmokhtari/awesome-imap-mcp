@@ -204,11 +204,10 @@ builder.Services.AddSingleton<IEmailAnalyzer>(sp =>
 
         "acp_claude" or "acp_copilot" when llmConfig.Enabled =>
             new AcpEmailAnalyzer(
-                new AcpClient(
-                    llmConfig.Acp.Command,
-                    llmConfig.Acp.Args.ToArray(),
-                    loggerFactory.CreateLogger<AcpClient>()),
-                loggerFactory.CreateLogger<AcpEmailAnalyzer>()),
+                llmConfig.Acp.Command,
+                llmConfig.Acp.Args.ToArray(),
+                loggerFactory.CreateLogger<AcpEmailAnalyzer>(),
+                loggerFactory.CreateLogger<AcpClient>()),
 
         "in_context" => new InContextAnalyzer(),
 
