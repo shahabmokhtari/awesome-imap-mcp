@@ -60,11 +60,9 @@ public static class LlmApi
             }
 
             // Resolve API key: request body → provider-specific → global
-            string? resolvedKey = null;
-            if (!string.IsNullOrEmpty(body.ApiKey))
-                resolvedKey = body.ApiKey;
-            else
-                resolvedKey = llmConfig.ResolveApiKey(effectiveProvider);
+            var resolvedKey = !string.IsNullOrEmpty(body.ApiKey)
+                ? body.ApiKey
+                : llmConfig.ResolveApiKey(effectiveProvider);
 
             var effectiveConfig = new LlmConfig
             {
@@ -89,11 +87,7 @@ public static class LlmApi
                     duration_ms = sw.ElapsedMilliseconds,
                 });
             }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 return Results.Json(new
                 {
@@ -195,9 +189,7 @@ public static class LlmApi
             if (braceMatch.Success)
             {
                 var models = braceMatch.Groups[1].Value
-                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                    .Where(s => s.Length > 0)
-                    .ToArray();
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
                 if (models.Length > 0) return models;
             }
 

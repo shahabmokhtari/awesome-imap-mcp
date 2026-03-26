@@ -39,7 +39,7 @@ public static class AccountsApi
         {
             var body = await ctx.Request.ReadFromJsonAsync<CreateAccountRequest>().ConfigureAwait(false);
             if (body is null)
-                return Results.BadRequest("Invalid request body");
+                return Results.BadRequest(new { error = "Invalid request body" });
 
             // Password is required unless auth_type is "oauth2"
             if (string.IsNullOrEmpty(body.Password) &&
@@ -67,7 +67,7 @@ public static class AccountsApi
 
             var body = await ctx.Request.ReadFromJsonAsync<UpdateAccountRequest>().ConfigureAwait(false);
             if (body is null)
-                return Results.BadRequest("Invalid request body");
+                return Results.BadRequest(new { error = "Invalid request body" });
 
             repo.Update(id, body.Name, body.ImapHost, body.ImapPort,
                 body.SmtpHost, body.SmtpPort, body.SmtpUseSsl, body.Username);

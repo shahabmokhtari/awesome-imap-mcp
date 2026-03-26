@@ -121,11 +121,7 @@ public static class MessagesApi
                 await using var backend = backendFactory.CreateSyncBackend(accountId);
                 await backend.FetchMessageBodyAsync(accountId, folder.Path, uid).ConfigureAwait(false);
             }
-            catch (OperationCanceledException)
-            {
-                throw; // Let ASP.NET handle request cancellation / shutdown
-            }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 var logger = loggerFactory.CreateLogger("MessagesApi");
                 logger.LogError(ex, "fetch-body failed for account={AccountId} folder={FolderId} uid={Uid}", accountId, folderId, uid);

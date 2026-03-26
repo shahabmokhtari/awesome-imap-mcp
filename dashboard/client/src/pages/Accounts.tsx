@@ -46,7 +46,9 @@ function AccountRow({ account }: { account: Record<string, unknown> }) {
       setConfirmDelete(true)
       return
     }
-    deleteAccount.mutate(account.id as string)
+    deleteAccount.mutate(account.id as string, {
+      onError: (err) => setRecentError(err.message),
+    })
   }
 
   return (

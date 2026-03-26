@@ -195,8 +195,9 @@ public static class ToolsApi
                     // Recover partial types from assemblies with unresolvable dependencies
                     types = ex.Types.Where(t => t is not null).ToArray()!;
                 }
-                catch (Exception)
+                catch (Exception ex)
                 {
+                    System.Diagnostics.Debug.WriteLine($"[ToolsApi] Failed to load types from {assembly.GetName().Name}: {ex.Message}");
                     continue;
                 }
 

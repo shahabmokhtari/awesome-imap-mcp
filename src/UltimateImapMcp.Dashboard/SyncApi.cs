@@ -37,12 +37,18 @@ public static class SyncApi
                     await syncManager.TriggerSyncAsync(account.Id).ConfigureAwait(false);
                     triggered++;
                 }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
                 catch (Exception ex)
                 {
                     errors.Add($"{account.Name}: {ex.Message}");
                 }
             }
 
+            if (errors.Count > 0)
+                return Results.Json(new { triggered, total = accounts.Count, errors }, statusCode: 207);
             return Results.Ok(new { triggered, total = accounts.Count, errors });
         });
 
@@ -50,7 +56,7 @@ public static class SyncApi
         {
             var body = await ctx.Request.ReadFromJsonAsync<SyncTriggerRequest>().ConfigureAwait(false);
             if (body is null || string.IsNullOrEmpty(body.AccountId))
-                return Results.BadRequest("accountId is required");
+                return Results.BadRequest(new { error = "accountId is required" });
 
             try
             {

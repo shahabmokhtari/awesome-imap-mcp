@@ -169,6 +169,28 @@ public class ConfigLoaderTests
     }
 
     [Fact]
+    public void SaveToFile_StripsGlobalApiKey_PreservesProviderKeys()
+    {
+        var config = new AppConfig
+        {
+            Llm = new LlmConfig
+            {
+                ApiKey = "resolved-secret-should-not-persist",
+                ProviderApiKeys = new() { ["openai"] = "sk-persist-me" }
+            }
+        };
+        var tmpFile = Path.GetTempFileName();
+        try
+        {
+            ConfigLoader.SaveToFile(config, tmpFile);
+            var reloaded = ConfigLoader.LoadFromFile(tmpFile);
+            Assert.Null(reloaded.Llm.ApiKey);
+            Assert.Equal("sk-persist-me", reloaded.Llm.ProviderApiKeys["openai"]);
+        }
+        finally { File.Delete(tmpFile); }
+    }
+
+    [Fact]
     public void SaveToFile_PreservesGlobalSyncConfig()
     {
         var config = new AppConfig

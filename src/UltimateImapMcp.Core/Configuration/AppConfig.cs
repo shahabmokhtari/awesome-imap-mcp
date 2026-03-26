@@ -263,10 +263,9 @@ public class LlmConfig
         // Check provider-specific key first (case-insensitive lookup)
         if (provider is not null)
         {
-            var normalized = provider.ToLowerInvariant();
             foreach (var kvp in ProviderApiKeys)
             {
-                if (string.Equals(kvp.Key, normalized, StringComparison.OrdinalIgnoreCase)
+                if (string.Equals(kvp.Key, provider, StringComparison.OrdinalIgnoreCase)
                     && !string.IsNullOrEmpty(kvp.Value) && kvp.Value != "***")
                     return kvp.Value;
             }

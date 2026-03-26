@@ -50,7 +50,7 @@ public static class SettingsApi
                     config.Llm.DailyTokenBudget,
                     config.Llm.MonthlyCostLimit,
                     config.Llm.AutoAnalyzeNew,
-                    ProviderApiKeys = config.Llm.ProviderApiKeys.ToDictionary(
+                    providerApiKeys = config.Llm.ProviderApiKeys.ToDictionary(
                         kvp => kvp.Key,
                         kvp => string.IsNullOrEmpty(kvp.Value) ? "" : "***")
                 },

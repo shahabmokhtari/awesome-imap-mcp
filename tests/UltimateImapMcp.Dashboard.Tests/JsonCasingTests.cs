@@ -129,7 +129,8 @@ public class JsonCasingTests
                 model = "gpt-4",
                 dailyTokenBudget = 100000,
                 monthlyCostLimit = 10.0,
-                autoAnalyzeNew = false
+                autoAnalyzeNew = false,
+                providerApiKeys = new Dictionary<string, string> { ["openai"] = "***", ["anthropic"] = "***" }
             },
             sync = new
             {
@@ -435,6 +436,36 @@ public class JsonCasingTests
     public void LlmTestErrorResponse_serializes_to_camelCase()
     {
         AssertCamelCase(new { error = "API key invalid", model = "gpt-4o" });
+    }
+
+    // ---------------------------------------------------------------
+    // Shorthand PascalCase property patterns (mirrors production code)
+    // ---------------------------------------------------------------
+
+    [Fact]
+    public void SettingsGetResponse_shorthandPascalCase_correctedByCamelCasePolicy()
+    {
+        // Mirrors SettingsApi.cs which uses config.Llm.Enabled (produces PascalCase "Enabled")
+        var fakeConfig = new { Enabled = false, Provider = "openai", Model = "gpt-4" };
+        AssertCamelCase(new
+        {
+            llm = new
+            {
+                fakeConfig.Enabled,
+                fakeConfig.Provider,
+                fakeConfig.Model,
+            }
+        });
+    }
+
+    [Fact]
+    public void ProviderApiKeys_PascalCaseProperty_correctedByCamelCasePolicy()
+    {
+        // Verifies that explicit PascalCase assignment like ProviderApiKeys = ... is fixed by CamelCase policy
+        AssertCamelCase(new
+        {
+            ProviderApiKeys = new Dictionary<string, string> { ["openai"] = "***" }
+        });
     }
 
     // ---------------------------------------------------------------
