@@ -63,6 +63,12 @@ public class ServerConfig
 
     [JsonPropertyName("log_dir")]
     public string? LogDir { get; set; }
+
+    [JsonPropertyName("heartbeat_interval")]
+    public int HeartbeatInterval { get; set; } = 10;
+
+    [JsonPropertyName("heartbeat_stale_after")]
+    public int HeartbeatStaleAfter { get; set; } = 5;
 }
 
 /// <summary>IMAP/SMTP account configuration.</summary>
