@@ -616,6 +616,7 @@ function LlmSectionCard({
         skipFields={new Set([
           ...(hasModels ? [] : ['model']),
           'providerApiKeys',
+          ...(isKeyless ? ['dailyTokenBudget', 'monthlyCostLimit'] : []),
         ])}
         onFormChange={handleFormChange}
       />

@@ -404,6 +404,7 @@ export function useClearCache() {
     mutationFn: () => apiFetch<{ deleted: number }>('/api/cache', { method: 'DELETE' }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['messages'] })
+      qc.invalidateQueries({ queryKey: ['folders'] })
       qc.invalidateQueries({ queryKey: ['sync-status'] })
     },
     onError: (error) => {
@@ -419,6 +420,7 @@ export function useClearAccountCache() {
       apiFetch<{ deleted: number }>(`/api/cache/${encodeURIComponent(accountId)}`, { method: 'DELETE' }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['messages'] })
+      qc.invalidateQueries({ queryKey: ['folders'] })
       qc.invalidateQueries({ queryKey: ['sync-status'] })
     },
     onError: (error) => {
@@ -436,6 +438,7 @@ export function useClearFolderCache() {
         { method: 'DELETE' }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['messages'] })
+      qc.invalidateQueries({ queryKey: ['folders'] })
       qc.invalidateQueries({ queryKey: ['sync-status'] })
     },
     onError: (error) => {
