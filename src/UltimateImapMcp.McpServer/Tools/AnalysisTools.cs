@@ -31,7 +31,7 @@ public class AnalysisTools(
     {
         try
         {
-            var msg = ResolveMessage(messageId, accountId, folderId, uid);
+            var msg = messageRepo.Resolve(messageId, accountId, folderId, uid, folderRepo);
             if (msg is null)
                 return Error("Message not found. Provide 'messageId' or 'accountId'+'uid'.");
 
@@ -252,28 +252,6 @@ public class AnalysisTools(
         "custom" => AnalysisType.Custom,
         _ => throw new ArgumentException($"Unknown analysis type: '{type}'. Use: spam_score, category, priority, summary, custom")
     };
-
-    /// <summary>Resolves a message from various parameter combinations.</summary>
-    private MessageRecord? ResolveMessage(int? messageId, string? accountId, int? folderId, int? uid)
-    {
-        if (messageId is not null)
-            return messageRepo.GetById(messageId.Value);
-
-        if (string.IsNullOrEmpty(accountId) || uid is null)
-            return null;
-
-        if (folderId is not null)
-            return messageRepo.GetByUid(accountId, folderId.Value, uid.Value);
-
-        // Search across all folders for this account+uid
-        foreach (var folder in folderRepo.GetByAccount(accountId))
-        {
-            var msg = messageRepo.GetByUid(accountId, folder.Id, uid.Value);
-            if (msg is not null) return msg;
-        }
-
-        return null;
-    }
 
     private static string Error(string message) =>
         JsonSerializer.Serialize(new { error = message }, JsonOptions);

@@ -35,10 +35,18 @@ public class SearchTools(MessageRepository messageRepo, FolderRepository folderR
         {
             // Parse dates to epoch
             long? fromEpoch = null, toEpoch = null;
-            if (fromDate is not null && DateTimeOffset.TryParse(fromDate, out var fd))
+            if (fromDate is not null)
+            {
+                if (!DateTimeOffset.TryParse(fromDate, out var fd))
+                    return Error($"Invalid fromDate format: '{fromDate}'. Use ISO 8601 (e.g., 2026-01-01).");
                 fromEpoch = fd.ToUnixTimeSeconds();
-            if (toDate is not null && DateTimeOffset.TryParse(toDate, out var td))
+            }
+            if (toDate is not null)
+            {
+                if (!DateTimeOffset.TryParse(toDate, out var td))
+                    return Error($"Invalid toDate format: '{toDate}'. Use ISO 8601 (e.g., 2026-03-25).");
                 toEpoch = td.ToUnixTimeSeconds();
+            }
 
             // Resolve folder ID if folder path provided
             int? folderId = null;
@@ -86,7 +94,7 @@ public class SearchTools(MessageRepository messageRepo, FolderRepository folderR
                 results = mapped,
             }, JsonOptions);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             return Error($"Search failed: {ex.Message}");
         }

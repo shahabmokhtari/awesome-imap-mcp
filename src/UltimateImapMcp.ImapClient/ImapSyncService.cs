@@ -388,7 +388,10 @@ public sealed class ImapSyncService
                                 snippet = MessageParser.GenerateSnippet(textPart.Text);
                         }
                     }
-                    catch { snippet = subjectText is not null ? MessageParser.GenerateSnippet(subjectText) : null; }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        snippet = subjectText is not null ? MessageParser.GenerateSnippet(subjectText) : null;
+                    }
 
                     _messageRepo.Insert(accountId, folder.Id, uid, messageId, inReplyTo, referencesHdr,
                         threadId, subjectText, fromAddress, fromEmail, toJson, ccJson,
