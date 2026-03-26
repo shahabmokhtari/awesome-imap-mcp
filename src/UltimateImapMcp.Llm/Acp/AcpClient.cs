@@ -236,14 +236,26 @@ public class AcpClient : IAsyncDisposable
 
         try
         {
-            var line = await (_process?.StandardOutput.ReadLineAsync(timeoutCts.Token)
-                ?? throw new InvalidOperationException("ACP agent process is not running")).ConfigureAwait(false);
+            // Read lines until we find a valid JSON-RPC response (starts with '{').
+            // Some ACP bridges (e.g., claude-code-acp) emit debug logs to stdout.
+            while (true)
+            {
+                var line = await (_process?.StandardOutput.ReadLineAsync(timeoutCts.Token)
+                    ?? throw new InvalidOperationException("ACP agent process is not running")).ConfigureAwait(false);
 
-            if (line is null)
-                throw new InvalidOperationException("ACP agent process closed stdout unexpectedly");
+                if (line is null)
+                    throw new InvalidOperationException("ACP agent process closed stdout unexpectedly");
 
-            _logger.LogDebug("ACP <- {Response}", line);
-            return JsonDocument.Parse(line);
+                // Skip non-JSON lines (debug output from bridge)
+                if (!line.TrimStart().StartsWith('{'))
+                {
+                    _logger.LogTrace("ACP (non-JSON): {Line}", line);
+                    continue;
+                }
+
+                _logger.LogDebug("ACP <- {Response}", line);
+                return JsonDocument.Parse(line);
+            }
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
@@ -296,6 +308,13 @@ public class AcpClient : IAsyncDisposable
 
             if (string.IsNullOrWhiteSpace(line))
                 continue;
+
+            // Skip non-JSON lines (debug output from ACP bridge)
+            if (!line.TrimStart().StartsWith('{'))
+            {
+                _logger.LogTrace("ACP (non-JSON): {Line}", line);
+                continue;
+            }
 
             _logger.LogDebug("ACP event <- {Line}", line);
 
