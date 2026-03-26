@@ -221,8 +221,8 @@ public sealed class ImapSyncService
                         : null;
                 }
 
-                // Insert message record.
-                _messageRepo.Insert(
+                // Insert or link message record (deduplicates across folders).
+                var dbMsgId = _messageRepo.InsertOrLink(
                     accountId,
                     folder.Id,
                     uid,
@@ -244,10 +244,9 @@ public sealed class ImapSyncService
                     snippet);
 
                 // Attachment metadata stubs.
-                if (hasAttachments)
+                if (hasAttachments && dbMsgId > 0)
                 {
-                    // Retrieve the DB record we just inserted to get its ID.
-                    var dbMsg = _messageRepo.GetByUid(accountId, folder.Id, uid);
+                    var dbMsg = _messageRepo.GetById(dbMsgId);
                     if (dbMsg is not null)
                     {
                         foreach (var att in attachments)
@@ -393,14 +392,17 @@ public sealed class ImapSyncService
                         snippet = subjectText is not null ? MessageParser.GenerateSnippet(subjectText) : null;
                     }
 
-                    _messageRepo.Insert(accountId, folder.Id, uid, messageId, inReplyTo, referencesHdr,
+                    var dbMsgId = _messageRepo.InsertOrLink(accountId, folder.Id, uid, messageId, inReplyTo, referencesHdr,
                         threadId, subjectText, fromAddress, fromEmail, toJson, ccJson,
                         bccAddresses: null, date, dateEpoch, flags,
                         sizeBytes: summary.Size.HasValue ? (int?)summary.Size.Value : null,
                         hasAttachments, snippet);
 
-                    var inserted = _messageRepo.GetByUid(accountId, folder.Id, uid);
-                    if (inserted is not null) results.Add(inserted);
+                    if (dbMsgId > 0)
+                    {
+                        var inserted = _messageRepo.GetById(dbMsgId);
+                        if (inserted is not null) results.Add(inserted);
+                    }
                 }
             }
 

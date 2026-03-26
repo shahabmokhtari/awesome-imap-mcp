@@ -164,7 +164,7 @@ internal sealed class ZohoSyncBackend : IEmailSyncBackend
                     ? JsonSerializer.Serialize(new[] { msg.CcAddress })
                     : null;
 
-                _messageRepo.Insert(
+                _messageRepo.InsertOrLink(
                     accountId,
                     dbFolder.Id,
                     uid,
