@@ -260,9 +260,17 @@ public class LlmConfig
     /// <summary>Resolve the API key from config or environment variable, optionally checking provider-specific keys first.</summary>
     public string? ResolveApiKey(string? provider = null)
     {
-        // Check provider-specific key first
-        if (provider is not null && ProviderApiKeys.TryGetValue(provider, out var providerKey) && !string.IsNullOrEmpty(providerKey))
-            return providerKey;
+        // Check provider-specific key first (case-insensitive lookup)
+        if (provider is not null)
+        {
+            var normalized = provider.ToLowerInvariant();
+            foreach (var kvp in ProviderApiKeys)
+            {
+                if (string.Equals(kvp.Key, normalized, StringComparison.OrdinalIgnoreCase)
+                    && !string.IsNullOrEmpty(kvp.Value) && kvp.Value != "***")
+                    return kvp.Value;
+            }
+        }
 
         // Fall back to global key
         if (!string.IsNullOrEmpty(ApiKey)) return ApiKey;

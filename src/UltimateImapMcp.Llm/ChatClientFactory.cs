@@ -22,7 +22,8 @@ public static class ChatClientFactory
     /// Creates an IChatClient from LLM configuration.
     /// For "anthropic" provider, uses OpenAI-compatible endpoint.
     /// For "openai" provider, uses native OpenAI client.
-    /// For ACP/in_context providers, throws — callers should check <see cref="RequiresApiKey"/> first.
+    /// For ACP/in_context providers, throws <see cref="InvalidOperationException"/>.
+    /// Guard by calling <see cref="RequiresApiKey"/>: only call Create when it returns true.
     /// </summary>
     public static IChatClient Create(LlmConfig config)
     {

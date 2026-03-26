@@ -102,4 +102,88 @@ public class ConfigLoaderTests
         }
         finally { File.Delete(tmpFile); }
     }
+
+    [Fact]
+    public void Load_GlobalSyncConfig_DeserializesCorrectly()
+    {
+        var json = """
+        {
+          "sync": { "enabled": false, "poll_interval": 120, "max_messages_per_sync": 250 }
+        }
+        """;
+        var tmpFile = Path.GetTempFileName();
+        File.WriteAllText(tmpFile, json);
+        try
+        {
+            var config = ConfigLoader.LoadFromFile(tmpFile);
+            Assert.False(config.Sync.Enabled);
+            Assert.Equal(120, config.Sync.PollInterval);
+            Assert.Equal(250, config.Sync.MaxMessagesPerSync);
+        }
+        finally { File.Delete(tmpFile); }
+    }
+
+    [Fact]
+    public void Load_ProviderApiKeys_DeserializesCorrectly()
+    {
+        var json = """
+        {
+          "llm": {
+            "enabled": true,
+            "provider": "openai",
+            "provider_api_keys": { "openai": "sk-test", "anthropic": "ant-test" }
+          }
+        }
+        """;
+        var tmpFile = Path.GetTempFileName();
+        File.WriteAllText(tmpFile, json);
+        try
+        {
+            var config = ConfigLoader.LoadFromFile(tmpFile);
+            Assert.Equal("sk-test", config.Llm.ProviderApiKeys["openai"]);
+            Assert.Equal("ant-test", config.Llm.ProviderApiKeys["anthropic"]);
+        }
+        finally { File.Delete(tmpFile); }
+    }
+
+    [Fact]
+    public void SaveToFile_PreservesProviderApiKeys()
+    {
+        var config = new AppConfig
+        {
+            Llm = new LlmConfig
+            {
+                Provider = "openai",
+                ProviderApiKeys = new() { ["openai"] = "sk-abc", ["anthropic"] = "ant-xyz" }
+            }
+        };
+        var tmpFile = Path.GetTempFileName();
+        try
+        {
+            ConfigLoader.SaveToFile(config, tmpFile);
+            var reloaded = ConfigLoader.LoadFromFile(tmpFile);
+            Assert.Equal("sk-abc", reloaded.Llm.ProviderApiKeys["openai"]);
+            Assert.Equal("ant-xyz", reloaded.Llm.ProviderApiKeys["anthropic"]);
+        }
+        finally { File.Delete(tmpFile); }
+    }
+
+    [Fact]
+    public void SaveToFile_PreservesGlobalSyncConfig()
+    {
+        var config = new AppConfig
+        {
+            Sync = new GlobalSyncConfig { Enabled = false, PollInterval = 120, MaxMessagesPerSync = 250 }
+        };
+        var tmpFile = Path.GetTempFileName();
+        try
+        {
+            ConfigLoader.SaveToFile(config, tmpFile);
+            var reloaded = ConfigLoader.LoadFromFile(tmpFile);
+            Assert.False(reloaded.Sync.Enabled);
+            Assert.Equal(120, reloaded.Sync.PollInterval);
+            Assert.Equal(250, reloaded.Sync.MaxMessagesPerSync);
+        }
+        finally { File.Delete(tmpFile); }
+    }
 }

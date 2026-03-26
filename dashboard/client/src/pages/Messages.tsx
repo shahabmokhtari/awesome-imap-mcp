@@ -532,6 +532,11 @@ export default function Messages() {
                     {clearFolderCache.isPending ? 'Clearing...' : 'Clear Cache'}
                   </button>
                 )}
+                {clearFolderCache.error && (
+                  <span className="ml-2 text-xs text-red-600" title={clearFolderCache.error.message}>
+                    Clear failed
+                  </span>
+                )}
               </div>
               {messages.map((msg) => (
                 <MessageRow

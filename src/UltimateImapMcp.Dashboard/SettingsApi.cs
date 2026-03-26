@@ -121,12 +121,21 @@ public static class SettingsApi
                 if (l.AutoAnalyzeNew is { } aan) { config.Llm.AutoAnalyzeNew = aan; changed.Add("llm.auto_analyze_new"); }
                 if (l.ProviderApiKeys is not null)
                 {
+                    var anyKeyWritten = false;
                     foreach (var (provider, key) in l.ProviderApiKeys)
                     {
-                        if (key == "***") continue; // Skip unchanged keys
-                        config.Llm.ProviderApiKeys[provider] = key;
+                        if (key == "***") continue; // Skip unchanged (redacted) keys
+                        if (string.IsNullOrEmpty(key))
+                        {
+                            config.Llm.ProviderApiKeys.Remove(provider);
+                        }
+                        else
+                        {
+                            config.Llm.ProviderApiKeys[provider] = key;
+                        }
+                        anyKeyWritten = true;
                     }
-                    changed.Add("llm.provider_api_keys");
+                    if (anyKeyWritten) changed.Add("llm.provider_api_keys");
                 }
             }
 
@@ -134,15 +143,27 @@ public static class SettingsApi
             if (updates.Sync is { } sy)
             {
                 if (sy.Enabled is { } se) { config.Sync.Enabled = se; changed.Add("sync.enabled"); }
-                if (sy.PollInterval is { } pi) { config.Sync.PollInterval = pi; changed.Add("sync.poll_interval"); }
-                if (sy.MaxMessagesPerSync is { } mms) { config.Sync.MaxMessagesPerSync = mms; changed.Add("sync.max_messages_per_sync"); }
+                if (sy.PollInterval is { } pi)
+                {
+                    if (pi <= 0) return Results.BadRequest(new { error = "sync.poll_interval must be > 0" });
+                    config.Sync.PollInterval = pi; changed.Add("sync.poll_interval");
+                }
+                if (sy.MaxMessagesPerSync is { } mms)
+                {
+                    if (mms <= 0) return Results.BadRequest(new { error = "sync.max_messages_per_sync must be > 0" });
+                    config.Sync.MaxMessagesPerSync = mms; changed.Add("sync.max_messages_per_sync");
+                }
             }
 
             // Metrics settings
             if (updates.Metrics is { } m)
             {
                 if (m.Enabled is { } me) { config.Metrics.Enabled = me; changed.Add("metrics.enabled"); }
-                if (m.InternalRetentionDays is { } ird) { config.Metrics.InternalRetentionDays = ird; changed.Add("metrics.internal_retention_days"); }
+                if (m.InternalRetentionDays is { } ird)
+                {
+                    if (ird <= 0) return Results.BadRequest(new { error = "metrics.internal_retention_days must be > 0" });
+                    config.Metrics.InternalRetentionDays = ird; changed.Add("metrics.internal_retention_days");
+                }
             }
 
             // Persist to disk if we know the source file
@@ -156,12 +177,12 @@ public static class SettingsApi
                 }
                 catch (Exception ex)
                 {
-                    return Results.Ok(new
+                    return Results.Json(new
                     {
                         updated = changed,
                         persisted = false,
-                        warning = $"Settings applied in-memory but could not save to disk: {ex.Message}. Some changes may require a restart."
-                    });
+                        warning = $"Settings applied in-memory but could not save to disk: {ex.Message}. Changes will be lost on restart."
+                    }, statusCode: 207);
                 }
             }
 

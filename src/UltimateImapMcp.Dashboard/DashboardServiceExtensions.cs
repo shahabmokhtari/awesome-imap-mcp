@@ -9,8 +9,9 @@ namespace UltimateImapMcp.Dashboard;
 public static class DashboardServiceExtensions
 {
     /// <summary>
-    /// Registers all dashboard services including the conditional DashboardHost,
-    /// EventBus, and hub relay. Call only when dashboard_enabled is true.
+    /// Registers the DashboardHost background service and the shared EventBus.
+    /// The DashboardHost checks dashboard_enabled internally, but conventionally
+    /// this method is only called when the dashboard is enabled.
     /// </summary>
     public static IServiceCollection AddDashboard(this IServiceCollection services, AppConfig config)
     {
