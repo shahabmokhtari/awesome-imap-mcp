@@ -115,7 +115,7 @@ function LogRow({ log, expanded, onToggle }: { log: LogEntry; expanded: boolean;
 export default function Logs() {
   const [selectedLevels, setSelectedLevels] = useState<Set<string>>(new Set())
   const [scope, setScope] = useState<string>('All')
-  const [instanceId, setInstanceId] = useState<string>('')
+  const [instanceId, setInstanceId] = useState<string>('__live__')
   const [search, setSearch] = useState('')
   const [searchInput, setSearchInput] = useState('')
   const [page, setPage] = useState(1)
@@ -126,10 +126,13 @@ export default function Logs() {
 
   const levelsParam = selectedLevels.size > 0 ? Array.from(selectedLevels).join(',') : undefined
 
+  const isLive = instanceId === '__live__'
+
   const { data, isLoading, error } = useLogs({
     levels: levelsParam,
     scope: scope === 'All' ? undefined : scope,
-    instance_id: instanceId || undefined,
+    instance_id: isLive ? undefined : (instanceId || undefined),
+    live_only: isLive ? true : undefined,
     search: search || undefined,
     page,
     page_size: pageSize,
@@ -192,6 +195,7 @@ export default function Logs() {
             onChange={e => handleInstanceChange(e.target.value)}
             className="text-sm border border-gray-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
+            <option value="__live__">Live instances</option>
             <option value="">All instances</option>
             {instances?.map(id => (
               <option key={id} value={id}>{id}</option>
