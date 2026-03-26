@@ -188,7 +188,15 @@ builder.Services.AddSingleton<LlmUsageRepository>();
 builder.Services.AddSingleton<LlmAnalysisRepository>();
 builder.Services.AddSingleton<BudgetTracker>();
 
-// Register IEmailAnalyzer based on config
+// Register ACP pool as singleton (shared across email analyzer and dashboard)
+if (config.Llm.Enabled && config.Llm.Provider.StartsWith("acp_", StringComparison.OrdinalIgnoreCase))
+{
+    builder.Services.AddSingleton<IAcpClientPool>(sp =>
+        new AcpClientPool(
+            config.Llm.Acp,
+            sp.GetRequiredService<ILoggerFactory>()));
+}
+
 builder.Services.AddSingleton<IEmailAnalyzer>(sp =>
 {
     var llmConfig = sp.GetRequiredService<LlmConfig>();
@@ -202,12 +210,10 @@ builder.Services.AddSingleton<IEmailAnalyzer>(sp =>
                 llmConfig.Model,
                 loggerFactory.CreateLogger<ApiEmailAnalyzer>()),
 
-        "acp_claude" or "acp_copilot" when llmConfig.Enabled =>
+        var p when (p is "acp_claude" or "acp_copilot") && llmConfig.Enabled =>
             new AcpEmailAnalyzer(
-                llmConfig.Acp.Command,
-                llmConfig.Acp.Args.ToArray(),
-                loggerFactory.CreateLogger<AcpEmailAnalyzer>(),
-                loggerFactory.CreateLogger<AcpClient>()),
+                sp.GetRequiredService<IAcpClientPool>(),
+                loggerFactory.CreateLogger<AcpEmailAnalyzer>()),
 
         "in_context" => new InContextAnalyzer(),
 
