@@ -11,14 +11,15 @@ public class ListEmailsTool(MessageRepository messageRepo, FolderRepository fold
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
     [McpServerTool, Description(
-        "List emails in a folder sorted by date (newest first). " +
+        "List emails in a folder sorted by date (newest first by default). " +
         "Use this to browse a mailbox without searching. " +
         "For keyword-based search, use search_emails instead.")]
     public string ListEmails(
         [Description("Account ID")] string accountId,
         [Description("Folder path (default: INBOX)")] string folderPath = "INBOX",
         [Description("Number of emails to return (default: 20, max: 100)")] int limit = 20,
-        [Description("Offset for pagination (default: 0)")] int offset = 0)
+        [Description("Offset for pagination (default: 0)")] int offset = 0,
+        [Description("Sort order: date_desc (default), date_asc, from, subject")] string orderBy = "date_desc")
     {
         if (limit < 1) limit = 1;
         if (limit > 100) limit = 100;
@@ -30,7 +31,14 @@ public class ListEmailsTool(MessageRepository messageRepo, FolderRepository fold
                 new { error = $"Folder '{folderPath}' not found for account '{accountId}'." },
                 JsonOptions);
 
-        var messages = messageRepo.GetByFolder(accountId, folder.Id, limit, offset);
+        var messages = messageRepo.SearchAdvanced(new SearchFilter
+        {
+            AccountId = accountId,
+            FolderId = folder.Id,
+            OrderBy = orderBy,
+            MaxResults = limit,
+            Offset = offset,
+        });
 
         var mapped = messages.Select(m => new
         {
@@ -50,6 +58,7 @@ public class ListEmailsTool(MessageRepository messageRepo, FolderRepository fold
             folder = folderPath,
             count = mapped.Count,
             offset,
+            order_by = orderBy,
             results = mapped
         }, JsonOptions);
     }

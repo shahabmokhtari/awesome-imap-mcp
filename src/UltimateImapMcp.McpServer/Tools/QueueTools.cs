@@ -11,7 +11,8 @@ public class QueueTools(QueueManager queueManager)
     private readonly QueueManager _queueManager = queueManager;
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
-    [McpServerTool, Description("Confirm a pending send operation, allowing it to be executed immediately.")]
+    [McpServerTool, Description(
+        "Confirm a pending send operation to execute it immediately. Use list_pending to see available operations.")]
     public string ConfirmSend(
         [Description("Pending operation ID")] string pendingId)
     {
@@ -24,7 +25,8 @@ public class QueueTools(QueueManager queueManager)
         }, JsonOptions);
     }
 
-    [McpServerTool, Description("Cancel a pending or confirmed operation before it is executed.")]
+    [McpServerTool, Description(
+        "Cancel a pending operation before it executes. Cannot cancel already-executed operations.")]
     public string CancelOperation(
         [Description("Pending operation ID")] string pendingId)
     {
@@ -37,7 +39,9 @@ public class QueueTools(QueueManager queueManager)
         }, JsonOptions);
     }
 
-    [McpServerTool, Description("List all pending and confirmed operations, optionally filtered by account.")]
+    [McpServerTool, Description(
+        "List all pending and confirmed operations, optionally filtered by account. " +
+        "Use this to check operation status or find pending_ids for confirm/cancel.")]
     public string ListPending(
         [Description("Account ID to filter by (optional, omit for all accounts)")] string? accountId = null)
     {

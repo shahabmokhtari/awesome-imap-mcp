@@ -12,7 +12,7 @@ public class ReportTools(MessageRepository messageRepo, LlmAnalysisRepository an
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
     [McpServerTool, Description(
-        "Generate a mailbox report with volume stats, folder sizes, and top-level stats for an account.")]
+        "Generate a comprehensive mailbox report with per-folder volume stats, attachment counts, and total storage used.")]
     public string MailboxReport(
         [Description("Account ID")] string accountId,
         [Description("Number of days to include (default: 30)")] int days = 30)
@@ -54,7 +54,8 @@ public class ReportTools(MessageRepository messageRepo, LlmAnalysisRepository an
     }
 
     [McpServerTool, Description(
-        "Get top email senders by message count for an account. Returns sender email, count, and total size.")]
+        "Get top email senders ranked by message count. " +
+        "Falls back to all-time data if no messages exist in the specified date window.")]
     public string TopSenders(
         [Description("Account ID")] string accountId,
         [Description("Number of days to include (default: 30)")] int days = 30,
@@ -87,7 +88,7 @@ public class ReportTools(MessageRepository messageRepo, LlmAnalysisRepository an
     }
 
     [McpServerTool, Description(
-        "Get category breakdown from LLM analysis results. Shows how many emails fall into each category.")]
+        "Get category breakdown from LLM analysis results. Shows how many emails fall into each category (inbox/promotion/social/update).")]
     public string CategoryBreakdown(
         [Description("Account ID (optional, all accounts if omitted)")] string? accountId = null)
     {
