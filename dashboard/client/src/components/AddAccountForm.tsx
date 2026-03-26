@@ -274,6 +274,7 @@ export default function AddAccountForm({ onComplete, onCancel }: AddAccountFormP
   const handleSaveOnly = () => {
     createAccount.mutate(form, {
       onSuccess: () => onComplete(),
+      onError: (err) => setTestResult({ success: false, message: err.message }),
     })
   }
 

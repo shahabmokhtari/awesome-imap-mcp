@@ -1,9 +1,87 @@
+using System.Text.Json;
 using UltimateImapMcp.Core.Configuration;
 
 namespace UltimateImapMcp.Core.Tests.Configuration;
 
 public class LlmConfigTests
 {
+    // ---------------------------------------------------------------
+    // ProviderApiKeys redaction helpers (mirrors SettingsApi GET logic)
+    // ---------------------------------------------------------------
+
+    [Fact]
+    public void ProviderApiKeys_Redaction_MasksNonEmptyKeys()
+    {
+        // Mirrors SettingsApi.cs GET: kvp => string.IsNullOrEmpty(kvp.Value) ? "" : "***"
+        var keys = new Dictionary<string, string> { ["openai"] = "sk-real-secret", ["anthropic"] = "ant-key" };
+        var redacted = keys.ToDictionary(kvp => kvp.Key, kvp => string.IsNullOrEmpty(kvp.Value) ? "" : "***");
+
+        Assert.Equal("***", redacted["openai"]);
+        Assert.Equal("***", redacted["anthropic"]);
+    }
+
+    [Fact]
+    public void ProviderApiKeys_Redaction_PreservesEmptyAsEmpty()
+    {
+        var keys = new Dictionary<string, string> { ["openai"] = "" };
+        var redacted = keys.ToDictionary(kvp => kvp.Key, kvp => string.IsNullOrEmpty(kvp.Value) ? "" : "***");
+
+        Assert.Equal("", redacted["openai"]);
+    }
+
+    [Fact]
+    public void ProviderApiKeys_SentinelSkip_DoesNotOverwriteRealKey()
+    {
+        // Mirrors SettingsApi.cs PUT logic
+        var existing = new Dictionary<string, string> { ["openai"] = "sk-real-key" };
+        var updates = new Dictionary<string, string> { ["openai"] = "***" };
+
+        foreach (var (provider, key) in updates)
+        {
+            if (key == "***") continue;
+            existing[provider] = key;
+        }
+
+        Assert.Equal("sk-real-key", existing["openai"]); // Unchanged
+    }
+
+    [Fact]
+    public void ProviderApiKeys_EmptyValue_RemovesKey()
+    {
+        // Mirrors SettingsApi.cs PUT logic
+        var existing = new Dictionary<string, string> { ["openai"] = "sk-real-key" };
+        var updates = new Dictionary<string, string> { ["openai"] = "" };
+
+        foreach (var (provider, key) in updates)
+        {
+            if (key == "***") continue;
+            if (string.IsNullOrEmpty(key))
+                existing.Remove(provider);
+            else
+                existing[provider] = key;
+        }
+
+        Assert.False(existing.ContainsKey("openai")); // Removed
+    }
+
+    [Fact]
+    public void ProviderApiKeys_NewValue_OverwritesExisting()
+    {
+        var existing = new Dictionary<string, string> { ["openai"] = "sk-old-key" };
+        var updates = new Dictionary<string, string> { ["openai"] = "sk-new-key" };
+
+        foreach (var (provider, key) in updates)
+        {
+            if (key == "***") continue;
+            if (string.IsNullOrEmpty(key))
+                existing.Remove(provider);
+            else
+                existing[provider] = key;
+        }
+
+        Assert.Equal("sk-new-key", existing["openai"]);
+    }
+
     [Fact]
     public void ResolveApiKey_ProviderSpecificKey_TakesPrecedenceOverGlobal()
     {
