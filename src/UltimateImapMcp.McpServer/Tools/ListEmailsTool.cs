@@ -53,13 +53,25 @@ public class ListEmailsTool(MessageRepository messageRepo, FolderRepository fold
             thread_id = m.ThreadId
         }).ToList();
 
+        var backfillDone = folder.OldestSyncedUid <= 1;
+
         return JsonSerializer.Serialize(new
         {
             folder = folderPath,
             count = mapped.Count,
             offset,
             order_by = orderBy,
-            results = mapped
+            results = mapped,
+            cache_info = new
+            {
+                source = "cache",
+                backfill_complete = backfillDone,
+                total_on_server = folder.MessageCount,
+                cached_in_results = mapped.Count,
+                hint = backfillDone
+                    ? (string?)null
+                    : "Only recently synced messages shown. Older messages are being backfilled. Use search_emails with server_search=true for complete results."
+            }
         }, JsonOptions);
     }
 }

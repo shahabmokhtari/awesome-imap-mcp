@@ -43,7 +43,12 @@ public class ReportTools(MessageRepository messageRepo, LlmAnalysisRepository an
                     size_bytes = v.TotalSizeBytes,
                     size_mb = Math.Round(v.TotalSizeBytes / (1024.0 * 1024.0), 2),
                     with_attachments = v.WithAttachments
-                }).ToList()
+                }).ToList(),
+                cache_info = new
+                {
+                    source = "cache",
+                    hint = "Reports are based on cached messages only. Run sync_now to ensure latest data."
+                }
             }, JsonOptions);
         }
         catch (Exception ex)
@@ -77,7 +82,12 @@ public class ReportTools(MessageRepository messageRepo, LlmAnalysisRepository an
                     message_count = s.MessageCount,
                     total_size_bytes = s.TotalSizeBytes,
                     total_size_mb = Math.Round(s.TotalSizeBytes / (1024.0 * 1024.0), 2)
-                }).ToList()
+                }).ToList(),
+                cache_info = new
+                {
+                    source = "cache",
+                    hint = "Reports are based on cached messages only. Run sync_now to ensure latest data."
+                }
             }, JsonOptions);
         }
         catch (Exception ex)
@@ -104,7 +114,12 @@ public class ReportTools(MessageRepository messageRepo, LlmAnalysisRepository an
                 {
                     category = b.CategoryResult,
                     count = b.Count
-                }).ToList()
+                }).ToList(),
+                cache_info = new
+                {
+                    source = "cache",
+                    hint = "Reports are based on cached messages only. Run sync_now to ensure latest data."
+                }
             }, JsonOptions);
         }
         catch (Exception ex)

@@ -87,11 +87,43 @@ public class SearchTools(MessageRepository messageRepo, FolderRepository folderR
 
             var mapped = results.Select(m => FormatMessage(m, summaryOnly, maxBodyLength)).ToList();
 
+            // Build cache info for local cache searches
+            object? cacheInfo = null;
+            if (serverSearch)
+            {
+                cacheInfo = new { source = "server" };
+            }
+            else
+            {
+                FolderRecord? targetFolder = null;
+                if (accountId is not null)
+                {
+                    targetFolder = folderId is not null
+                        ? folderRepo.GetByAccount(accountId).FirstOrDefault(f => f.Id == folderId)
+                        : folder is not null
+                            ? folderRepo.GetByPath(accountId, folder)
+                            : folderRepo.GetByAccount(accountId).FirstOrDefault(f => f.Role == "inbox");
+                }
+
+                var backfillDone = targetFolder is not null && targetFolder.OldestSyncedUid <= 1;
+                cacheInfo = new
+                {
+                    source = "cache",
+                    backfill_complete = backfillDone,
+                    total_on_server = targetFolder?.MessageCount ?? 0,
+                    cached_in_results = mapped.Count,
+                    hint = backfillDone
+                        ? (string?)null
+                        : "Older messages may exist on server. Use server_search=true or wait for backfill sync to complete."
+                };
+            }
+
             return JsonSerializer.Serialize(new
             {
                 count = mapped.Count,
                 source = serverSearch ? "server" : "cache",
                 results = mapped,
+                cache_info = cacheInfo,
             }, JsonOptions);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
