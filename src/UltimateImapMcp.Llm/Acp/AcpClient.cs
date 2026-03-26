@@ -236,25 +236,45 @@ public class AcpClient : IAsyncDisposable
 
         try
         {
-            // Read lines until we find a valid JSON-RPC response (starts with '{').
-            // Some ACP bridges (e.g., claude-code-acp) emit debug logs to stdout.
+            // Read character-by-character, tracking JSON brace depth.
+            // This handles debug output mixed with JSON and multi-line JSON.
+            var reader = _process?.StandardOutput
+                ?? throw new InvalidOperationException("ACP agent process is not running");
+
+            var buffer = new char[1];
+            var json = new StringBuilder();
+            var depth = 0;
+            var inString = false;
+            var escape = false;
+
             while (true)
             {
-                var line = await (_process?.StandardOutput.ReadLineAsync(timeoutCts.Token)
-                    ?? throw new InvalidOperationException("ACP agent process is not running")).ConfigureAwait(false);
-
-                if (line is null)
+                var read = await reader.ReadAsync(buffer.AsMemory(), timeoutCts.Token).ConfigureAwait(false);
+                if (read == 0)
                     throw new InvalidOperationException("ACP agent process closed stdout unexpectedly");
 
-                // Skip non-JSON lines (debug output from bridge)
-                if (!line.TrimStart().StartsWith('{'))
-                {
-                    _logger.LogTrace("ACP (non-JSON): {Line}", line);
-                    continue;
-                }
+                var c = buffer[0];
 
-                _logger.LogDebug("ACP <- {Response}", line);
-                return JsonDocument.Parse(line);
+                // Haven't found start of JSON yet — skip until '{'
+                if (depth == 0 && c != '{')
+                    continue;
+
+                json.Append(c);
+
+                if (escape) { escape = false; continue; }
+                if (c == '\\' && inString) { escape = true; continue; }
+                if (c == '"') { inString = !inString; continue; }
+                if (inString) continue;
+
+                if (c == '{') depth++;
+                else if (c == '}') depth--;
+
+                if (depth == 0)
+                {
+                    var result = json.ToString();
+                    _logger.LogDebug("ACP <- {Response}", result);
+                    return JsonDocument.Parse(result);
+                }
             }
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
@@ -266,76 +286,90 @@ public class AcpClient : IAsyncDisposable
 
     private async IAsyncEnumerable<AcpEvent> ReadEventsAsync([EnumeratorCancellation] CancellationToken ct = default)
     {
-        if (_process?.StandardOutput is null)
+        var reader = _process?.StandardOutput;
+        if (reader is null)
             yield break;
 
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeoutCts.CancelAfter(_timeout);
 
+        // Read character-by-character, extracting complete JSON objects
+        var buffer = new char[1];
+        var json = new StringBuilder();
+        var depth = 0;
+        var inString = false;
+        var escape = false;
+
         while (!timeoutCts.IsCancellationRequested)
         {
-            string? line;
+            int read;
             var timedOut = false;
             try
             {
-                line = await _process.StandardOutput.ReadLineAsync(timeoutCts.Token).ConfigureAwait(false);
+                read = await reader.ReadAsync(buffer.AsMemory(), timeoutCts.Token).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (!ct.IsCancellationRequested)
             {
                 timedOut = true;
-                line = null;
+                read = 0;
             }
 
             if (timedOut)
             {
-                yield return new AcpEvent
+                yield return new AcpEvent { Type = AcpEventType.Error, Error = "ACP agent response timed out" };
+                yield break;
+            }
+
+            if (read == 0)
+            {
+                yield return new AcpEvent { Type = AcpEventType.Error, Error = "ACP agent process closed stdout" };
+                yield break;
+            }
+
+            var c = buffer[0];
+
+            // Haven't found start of JSON yet — skip
+            if (depth == 0 && c != '{')
+                continue;
+
+            json.Append(c);
+
+            if (escape) { escape = false; continue; }
+            if (c == '\\' && inString) { escape = true; continue; }
+            if (c == '"') { inString = !inString; continue; }
+            if (inString) continue;
+
+            if (c == '{') depth++;
+            else if (c == '}') depth--;
+
+            if (depth == 0)
+            {
+                var result = json.ToString();
+                json.Clear();
+                inString = false;
+                escape = false;
+
+                _logger.LogDebug("ACP event <- {Json}", result);
+
+                AcpEvent acpEvent;
+                try
                 {
-                    Type = AcpEventType.Error,
-                    Error = "ACP agent response timed out"
-                };
-                yield break;
-            }
-
-            if (line is null)
-            {
-                yield return new AcpEvent
+                    var doc = JsonDocument.Parse(result);
+                    acpEvent = ParseEvent(doc);
+                }
+                catch (JsonException ex)
                 {
-                    Type = AcpEventType.Error,
-                    Error = "ACP agent process closed stdout"
-                };
-                yield break;
+                    _logger.LogWarning(ex, "Failed to parse ACP event JSON");
+                    continue;
+                }
+
+                // Reset timeout on each event
+                timeoutCts.CancelAfter(_timeout);
+                yield return acpEvent;
+
+                if (acpEvent.Type is AcpEventType.Complete or AcpEventType.Error)
+                    yield break;
             }
-
-            if (string.IsNullOrWhiteSpace(line))
-                continue;
-
-            // Skip non-JSON lines (debug output from ACP bridge)
-            if (!line.TrimStart().StartsWith('{'))
-            {
-                _logger.LogTrace("ACP (non-JSON): {Line}", line);
-                continue;
-            }
-
-            _logger.LogDebug("ACP event <- {Line}", line);
-
-            AcpEvent acpEvent;
-            try
-            {
-                var doc = JsonDocument.Parse(line);
-                acpEvent = ParseEvent(doc);
-            }
-            catch (JsonException ex)
-            {
-                _logger.LogWarning(ex, "Failed to parse ACP event: {Line}", line);
-                continue;
-            }
-
-            // Reset timeout on each event
-            timeoutCts.CancelAfter(_timeout);
-            yield return acpEvent;
-
-            if (acpEvent.Type is AcpEventType.Complete or AcpEventType.Error)
-                yield break;
         }
     }
 
