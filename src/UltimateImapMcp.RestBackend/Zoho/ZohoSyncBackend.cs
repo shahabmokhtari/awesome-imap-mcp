@@ -75,6 +75,7 @@ internal sealed class ZohoSyncBackend : IEmailSyncBackend
                 _folderRepo.UpdateSyncState(
                     dbFolder.Id,
                     dbFolder.LastSyncedUid,
+                    dbFolder.OldestSyncedUid,
                     zf.MessageCount,
                     zf.UnreadMessageCount);
             }
@@ -197,7 +198,7 @@ internal sealed class ZohoSyncBackend : IEmailSyncBackend
 
         // Update folder sync state
         _folderRepo.UpdateSyncState(dbFolder.Id, maxUid,
-            dbFolder.MessageCount, dbFolder.UnreadCount);
+            dbFolder.OldestSyncedUid, dbFolder.MessageCount, dbFolder.UnreadCount);
 
         // Store cursor for next sync
         _folderRepo.UpdateSyncCursor(dbFolder.Id, startIndex.ToString());

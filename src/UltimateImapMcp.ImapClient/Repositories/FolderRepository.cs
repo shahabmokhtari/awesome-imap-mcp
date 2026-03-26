@@ -6,6 +6,7 @@ public record FolderRecord(
     int Id, string AccountId, string Path, string? DisplayName,
     string? Role, string Delimiter, string? Flags,
     int MessageCount, int UnreadCount, long LastSyncedUid,
+    long OldestSyncedUid,
     string? LastSyncedAt, bool SyncEnabled, bool IdleEnabled, int PollInterval,
     string? SyncCursor = null);
 
@@ -54,18 +55,20 @@ public class FolderRepository(AppDatabase db)
         return list;
     }
 
-    public void UpdateSyncState(int folderId, long lastSyncedUid, int messageCount, int unreadCount)
+    public void UpdateSyncState(int folderId, long lastSyncedUid, long oldestSyncedUid, int messageCount, int unreadCount)
     {
         db.ExecuteWrite(conn =>
         {
             using var cmd = conn.CreateCommand();
             cmd.CommandText = """
-                UPDATE folders SET last_synced_uid = $uid, message_count = $msgCount,
-                    unread_count = $unreadCount, last_synced_at = datetime('now')
+                UPDATE folders SET last_synced_uid = $uid, oldest_synced_uid = $oldestUid,
+                    message_count = $msgCount, unread_count = $unreadCount,
+                    last_synced_at = datetime('now')
                 WHERE id = $id;
                 """;
             cmd.Parameters.AddWithValue("$id", folderId);
             cmd.Parameters.AddWithValue("$uid", lastSyncedUid);
+            cmd.Parameters.AddWithValue("$oldestUid", oldestSyncedUid);
             cmd.Parameters.AddWithValue("$msgCount", messageCount);
             cmd.Parameters.AddWithValue("$unreadCount", unreadCount);
             cmd.ExecuteNonQuery();
@@ -95,7 +98,7 @@ public class FolderRepository(AppDatabase db)
         db.ExecuteWrite(conn =>
         {
             using var cmd = conn.CreateCommand();
-            cmd.CommandText = "UPDATE folders SET last_synced_uid = 0 WHERE account_id = $a;";
+            cmd.CommandText = "UPDATE folders SET last_synced_uid = 0, oldest_synced_uid = 0 WHERE account_id = $a;";
             cmd.Parameters.AddWithValue("$a", accountId);
             cmd.ExecuteNonQuery();
         });
@@ -107,7 +110,7 @@ public class FolderRepository(AppDatabase db)
         db.ExecuteWrite(conn =>
         {
             using var cmd = conn.CreateCommand();
-            cmd.CommandText = "UPDATE folders SET last_synced_uid = 0 WHERE id = $id AND account_id = $a;";
+            cmd.CommandText = "UPDATE folders SET last_synced_uid = 0, oldest_synced_uid = 0 WHERE id = $id AND account_id = $a;";
             cmd.Parameters.AddWithValue("$id", folderId);
             cmd.Parameters.AddWithValue("$a", accountId);
             cmd.ExecuteNonQuery();
@@ -120,7 +123,7 @@ public class FolderRepository(AppDatabase db)
         db.ExecuteWrite(conn =>
         {
             using var cmd = conn.CreateCommand();
-            cmd.CommandText = "UPDATE folders SET last_synced_uid = 0;";
+            cmd.CommandText = "UPDATE folders SET last_synced_uid = 0, oldest_synced_uid = 0;";
             cmd.ExecuteNonQuery();
         });
     }
@@ -136,6 +139,7 @@ public class FolderRepository(AppDatabase db)
         MessageCount: r.GetInt32(r.GetOrdinal("message_count")),
         UnreadCount: r.GetInt32(r.GetOrdinal("unread_count")),
         LastSyncedUid: r.GetInt64(r.GetOrdinal("last_synced_uid")),
+        OldestSyncedUid: r.GetInt64(r.GetOrdinal("oldest_synced_uid")),
         LastSyncedAt: r.IsDBNull(r.GetOrdinal("last_synced_at")) ? null : r.GetString(r.GetOrdinal("last_synced_at")),
         SyncEnabled: r.GetInt32(r.GetOrdinal("sync_enabled")) == 1,
         IdleEnabled: r.GetInt32(r.GetOrdinal("idle_enabled")) == 1,

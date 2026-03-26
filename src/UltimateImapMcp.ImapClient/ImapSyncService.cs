@@ -97,8 +97,9 @@ public sealed class ImapSyncService
     // ------------------------------------------------------------------
 
     /// <summary>
-    /// Fetches all messages with UID > <see cref="FolderRecord.LastSyncedUid"/> and
-    /// stores metadata plus attachment stubs in the repository.
+    /// Bidirectional sync: first fetches new messages (UID &gt; last_synced_uid),
+    /// then backfills older messages (UID &lt; oldest_synced_uid) in reverse order,
+    /// newest-of-old first, in batches of 100.
     /// </summary>
     public async Task SyncFolderMessagesAsync(
         ImapClientLib client,
@@ -109,10 +110,7 @@ public sealed class ImapSyncService
         ArgumentNullException.ThrowIfNull(client);
         ArgumentNullException.ThrowIfNull(folder);
 
-        // Open the folder read-only.
         var imapFolder = await client.GetFolderAsync(folder.Path, ct).ConfigureAwait(false);
-
-        // Skip non-selectable folders (namespace containers like [Gmail])
         if (imapFolder.Attributes.HasFlag(FolderAttributes.NoSelect)
             || imapFolder.Attributes.HasFlag(FolderAttributes.NonExistent))
             return;
@@ -121,155 +119,53 @@ public sealed class ImapSyncService
 
         try
         {
-            // Build a UID range starting just above the last synced UID.
-            var startUid = new UniqueId((uint)(folder.LastSyncedUid + 1));
-            var range = new UniqueIdRange(startUid, UniqueId.MaxValue);
-
-            IList<UniqueId> uids = await imapFolder
-                .SearchAsync(SearchQuery.Uids(range), ct)
-                .ConfigureAwait(false);
-
-            if (uids.Count == 0)
-            {
-                // Nothing new. Update counts from folder status.
-                _folderRepo.UpdateSyncState(
-                    folder.Id,
-                    folder.LastSyncedUid,
-                    imapFolder.Count,
-                    imapFolder.Unread);
-                return;
-            }
-
-            // Fetch summaries with all fields we need.
-            var fetchRequest = new FetchRequest(
-                MessageSummaryItems.UniqueId |
-                MessageSummaryItems.Envelope |
-                MessageSummaryItems.Flags |
-                MessageSummaryItems.Size |
-                MessageSummaryItems.BodyStructure,
-                new[] { "References" });
-
-            IList<IMessageSummary> summaries = await imapFolder
-                .FetchAsync(uids, fetchRequest, ct)
-                .ConfigureAwait(false);
-
             var maxUid = folder.LastSyncedUid;
-            var unreadDelta = 0;
+            var minUid = folder.OldestSyncedUid;
 
-            foreach (var summary in summaries)
+            // Phase 1: Forward sync — fetch new messages (UID > last_synced_uid)
             {
-                ct.ThrowIfCancellationRequested();
+                var startUid = new UniqueId((uint)(maxUid + 1));
+                var range = new UniqueIdRange(startUid, UniqueId.MaxValue);
+                var newUids = await imapFolder.SearchAsync(SearchQuery.Uids(range), ct).ConfigureAwait(false);
 
-                var uid = (long)summary.UniqueId.Id;
-                if (uid > maxUid) maxUid = uid;
-
-                // Envelope data.
-                var envelope = summary.Envelope;
-                var messageId = envelope?.MessageId;
-                var inReplyTo = envelope?.InReplyTo;
-                var subject = envelope?.Subject;
-                var date = envelope?.Date?.ToString("o") ?? DateTimeOffset.UtcNow.ToString("o");
-                var dateEpoch = envelope?.Date?.ToUnixTimeSeconds();
-
-                var fromAddress = envelope?.From.FirstOrDefault()?.ToString();
-                var fromEmail = fromAddress is not null
-                    ? MessageParser.ExtractEmailFromAddress(fromAddress)
-                    : null;
-
-                var toJson = SerializeAddressList(envelope?.To);
-                var ccJson = SerializeAddressList(envelope?.Cc);
-
-                // References header (already on summary.References or fallback to Headers).
-                var referencesHdr = summary.References?.Count > 0
-                    ? string.Join(" ", summary.References)
-                    : summary.Headers?["References"];
-
-                // Thread ID.
-                var threadId = ThreadBuilder.ComputeThreadId(messageId, referencesHdr);
-
-                // Flags.
-                var flags = BuildFlagsString(summary.Flags, summary.Keywords);
-                var isUnread = summary.Flags.HasValue &&
-                               (summary.Flags.Value & MessageFlags.Seen) == 0;
-                if (isUnread) unreadDelta++;
-
-                // Attachments detection.
-                var attachments = summary.Attachments?.ToList() ?? [];
-                var hasAttachments = attachments.Count > 0;
-
-                // Snippet: try fetching the plain-text body part; fall back to subject.
-                string? snippet = null;
-                try
+                if (newUids.Count > 0)
                 {
-                    var textBodyPart = summary.TextBody;
-                    if (textBodyPart is not null)
-                    {
-                        var mimeEntity = await imapFolder
-                            .GetBodyPartAsync(summary.UniqueId, textBodyPart, ct)
-                            .ConfigureAwait(false);
-
-                        if (mimeEntity is TextPart textPart)
-                            snippet = MessageParser.GenerateSnippet(textPart.Text);
-                    }
-                }
-                catch (Exception ex) when (ex is MailKit.Net.Imap.ImapProtocolException
-                    or IOException or OperationCanceledException or InvalidOperationException)
-                {
-                    // Non-critical – fall back to subject.
-                    snippet = subject is not null
-                        ? MessageParser.GenerateSnippet(subject)
-                        : null;
-                }
-
-                // Insert or link message record (deduplicates across folders).
-                var dbMsgId = _messageRepo.InsertOrLink(
-                    accountId,
-                    folder.Id,
-                    uid,
-                    messageId,
-                    inReplyTo,
-                    referencesHdr,
-                    threadId,
-                    subject,
-                    fromAddress,
-                    fromEmail,
-                    toJson,
-                    ccJson,
-                    bccAddresses: null,
-                    date,
-                    dateEpoch,
-                    flags,
-                    sizeBytes: summary.Size.HasValue ? (int?)summary.Size.Value : null,
-                    hasAttachments,
-                    snippet);
-
-                // Attachment metadata stubs.
-                if (hasAttachments && dbMsgId > 0)
-                {
-                    var dbMsg = _messageRepo.GetById(dbMsgId);
-                    if (dbMsg is not null)
-                    {
-                        foreach (var att in attachments)
-                        {
-                            _attachmentRepo.Insert(
-                                dbMsg.Id,
-                                att.FileName,
-                                att.ContentType?.MimeType,
-                                sizeBytes: att.Octets > 0 ? (int?)att.Octets : null,
-                                att.ContentId,
-                                isInline: att.ContentDisposition?.Disposition
-                                    ?.Equals("inline", StringComparison.OrdinalIgnoreCase) ?? false);
-                        }
-                    }
+                    await FetchAndStoreMessagesAsync(imapFolder, accountId, folder.Id, newUids, ct).ConfigureAwait(false);
+                    maxUid = Math.Max(maxUid, newUids.Max(u => (long)u.Id));
+                    // If this is the first sync, also set minUid to the smallest fetched
+                    if (minUid == 0)
+                        minUid = newUids.Min(u => (long)u.Id);
+                    else
+                        minUid = Math.Min(minUid, newUids.Min(u => (long)u.Id));
                 }
             }
 
-            // Update folder sync state.
+            // Phase 2: Backfill — fetch older messages (UID < oldest_synced_uid)
+            // Only backfill if we have a starting point and there are older messages
+            if (minUid > 1)
+            {
+                var endUid = new UniqueId((uint)(minUid - 1));
+                var backfillRange = new UniqueIdRange(UniqueId.MinValue, endUid);
+                var oldUids = await imapFolder.SearchAsync(SearchQuery.Uids(backfillRange), ct).ConfigureAwait(false);
+
+                if (oldUids.Count > 0)
+                {
+                    // Fetch in reverse order (newest of the old first), batch of 100
+                    var batch = oldUids.OrderByDescending(u => u.Id).Take(100).ToList();
+                    await FetchAndStoreMessagesAsync(imapFolder, accountId, folder.Id, batch, ct).ConfigureAwait(false);
+                    minUid = batch.Min(u => (long)u.Id);
+                }
+                else
+                {
+                    // No more older messages — mark backfill complete (set oldest to 1)
+                    minUid = 1;
+                }
+            }
+
+            // Update folder sync state
             _folderRepo.UpdateSyncState(
-                folder.Id,
-                maxUid,
-                imapFolder.Count,
-                imapFolder.Unread);
+                folder.Id, maxUid, minUid,
+                imapFolder.Count, imapFolder.Unread);
         }
         finally
         {
@@ -335,69 +231,14 @@ public sealed class ImapSyncService
                     missingUids.Add(uid);
             }
 
-            // Fetch and cache missing messages
+            // Fetch and cache missing messages using the shared helper
             if (missingUids.Count > 0)
             {
-                var fetchRequest = new FetchRequest(
-                    MessageSummaryItems.UniqueId | MessageSummaryItems.Envelope |
-                    MessageSummaryItems.Flags | MessageSummaryItems.Size |
-                    MessageSummaryItems.BodyStructure,
-                    new[] { "References" });
+                var insertedIds = await FetchAndStoreMessagesAsync(imapFolder, accountId, folder.Id, missingUids, ct)
+                    .ConfigureAwait(false);
 
-                var summaries = await imapFolder.FetchAsync(missingUids, fetchRequest, ct).ConfigureAwait(false);
-
-                foreach (var summary in summaries)
+                foreach (var dbMsgId in insertedIds)
                 {
-                    ct.ThrowIfCancellationRequested();
-
-                    var uid = (long)summary.UniqueId.Id;
-                    var envelope = summary.Envelope;
-                    var messageId = envelope?.MessageId;
-                    var inReplyTo = envelope?.InReplyTo;
-                    var subjectText = envelope?.Subject;
-                    var date = envelope?.Date?.ToString("o") ?? DateTimeOffset.UtcNow.ToString("o");
-                    var dateEpoch = envelope?.Date?.ToUnixTimeSeconds();
-
-                    var fromAddress = envelope?.From.FirstOrDefault()?.ToString();
-                    var fromEmail = fromAddress is not null
-                        ? MessageParser.ExtractEmailFromAddress(fromAddress)
-                        : null;
-
-                    var toJson = SerializeAddressList(envelope?.To);
-                    var ccJson = SerializeAddressList(envelope?.Cc);
-
-                    var referencesHdr = summary.References?.Count > 0
-                        ? string.Join(" ", summary.References)
-                        : summary.Headers?["References"];
-                    var threadId = ThreadBuilder.ComputeThreadId(messageId, referencesHdr);
-
-                    var flags = BuildFlagsString(summary.Flags, summary.Keywords);
-                    var hasAttachments = summary.Attachments?.Any() ?? false;
-
-                    string? snippet = null;
-                    try
-                    {
-                        var textBodyPart = summary.TextBody;
-                        if (textBodyPart is not null)
-                        {
-                            var mimeEntity = await imapFolder
-                                .GetBodyPartAsync(summary.UniqueId, textBodyPart, ct)
-                                .ConfigureAwait(false);
-                            if (mimeEntity is MimeKit.TextPart textPart)
-                                snippet = MessageParser.GenerateSnippet(textPart.Text);
-                        }
-                    }
-                    catch (Exception ex) when (ex is not OperationCanceledException)
-                    {
-                        snippet = subjectText is not null ? MessageParser.GenerateSnippet(subjectText) : null;
-                    }
-
-                    var dbMsgId = _messageRepo.InsertOrLink(accountId, folder.Id, uid, messageId, inReplyTo, referencesHdr,
-                        threadId, subjectText, fromAddress, fromEmail, toJson, ccJson,
-                        bccAddresses: null, date, dateEpoch, flags,
-                        sizeBytes: summary.Size.HasValue ? (int?)summary.Size.Value : null,
-                        hasAttachments, snippet);
-
                     if (dbMsgId > 0)
                     {
                         var inserted = _messageRepo.GetById(dbMsgId);
@@ -412,6 +253,141 @@ public sealed class ImapSyncService
         {
             await imapFolder.CloseAsync(false, ct).ConfigureAwait(false);
         }
+    }
+
+    // ------------------------------------------------------------------
+    // Shared fetch helper
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// Fetches message summaries for the given UIDs and stores them via InsertOrLink.
+    /// Returns the list of database message IDs for inserted/linked messages.
+    /// </summary>
+    private async Task<List<int>> FetchAndStoreMessagesAsync(
+        IMailFolder imapFolder, string accountId, int folderId,
+        IList<UniqueId> uids, CancellationToken ct)
+    {
+        var fetchRequest = new FetchRequest(
+            MessageSummaryItems.UniqueId |
+            MessageSummaryItems.Envelope |
+            MessageSummaryItems.Flags |
+            MessageSummaryItems.Size |
+            MessageSummaryItems.BodyStructure,
+            new[] { "References" });
+
+        IList<IMessageSummary> summaries = await imapFolder
+            .FetchAsync(uids, fetchRequest, ct)
+            .ConfigureAwait(false);
+
+        var insertedIds = new List<int>();
+
+        foreach (var summary in summaries)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            var uid = (long)summary.UniqueId.Id;
+
+            // Envelope data.
+            var envelope = summary.Envelope;
+            var messageId = envelope?.MessageId;
+            var inReplyTo = envelope?.InReplyTo;
+            var subject = envelope?.Subject;
+            var date = envelope?.Date?.ToString("o") ?? DateTimeOffset.UtcNow.ToString("o");
+            var dateEpoch = envelope?.Date?.ToUnixTimeSeconds();
+
+            var fromAddress = envelope?.From.FirstOrDefault()?.ToString();
+            var fromEmail = fromAddress is not null
+                ? MessageParser.ExtractEmailFromAddress(fromAddress)
+                : null;
+
+            var toJson = SerializeAddressList(envelope?.To);
+            var ccJson = SerializeAddressList(envelope?.Cc);
+
+            // References header (already on summary.References or fallback to Headers).
+            var referencesHdr = summary.References?.Count > 0
+                ? string.Join(" ", summary.References)
+                : summary.Headers?["References"];
+
+            // Thread ID.
+            var threadId = ThreadBuilder.ComputeThreadId(messageId, referencesHdr);
+
+            // Flags.
+            var flags = BuildFlagsString(summary.Flags, summary.Keywords);
+
+            // Attachments detection.
+            var attachments = summary.Attachments?.ToList() ?? [];
+            var hasAttachments = attachments.Count > 0;
+
+            // Snippet: try fetching the plain-text body part; fall back to subject.
+            string? snippet = null;
+            try
+            {
+                var textBodyPart = summary.TextBody;
+                if (textBodyPart is not null)
+                {
+                    var mimeEntity = await imapFolder
+                        .GetBodyPartAsync(summary.UniqueId, textBodyPart, ct)
+                        .ConfigureAwait(false);
+
+                    if (mimeEntity is TextPart textPart)
+                        snippet = MessageParser.GenerateSnippet(textPart.Text);
+                }
+            }
+            catch (Exception ex) when (ex is MailKit.Net.Imap.ImapProtocolException
+                or IOException or OperationCanceledException or InvalidOperationException)
+            {
+                // Non-critical -- fall back to subject.
+                snippet = subject is not null
+                    ? MessageParser.GenerateSnippet(subject)
+                    : null;
+            }
+
+            // Insert or link message record (deduplicates across folders).
+            var dbMsgId = _messageRepo.InsertOrLink(
+                accountId,
+                folderId,
+                uid,
+                messageId,
+                inReplyTo,
+                referencesHdr,
+                threadId,
+                subject,
+                fromAddress,
+                fromEmail,
+                toJson,
+                ccJson,
+                bccAddresses: null,
+                date,
+                dateEpoch,
+                flags,
+                sizeBytes: summary.Size.HasValue ? (int?)summary.Size.Value : null,
+                hasAttachments,
+                snippet);
+
+            insertedIds.Add(dbMsgId);
+
+            // Attachment metadata stubs.
+            if (hasAttachments && dbMsgId > 0)
+            {
+                var dbMsg = _messageRepo.GetById(dbMsgId);
+                if (dbMsg is not null)
+                {
+                    foreach (var att in attachments)
+                    {
+                        _attachmentRepo.Insert(
+                            dbMsg.Id,
+                            att.FileName,
+                            att.ContentType?.MimeType,
+                            sizeBytes: att.Octets > 0 ? (int?)att.Octets : null,
+                            att.ContentId,
+                            isInline: att.ContentDisposition?.Disposition
+                                ?.Equals("inline", StringComparison.OrdinalIgnoreCase) ?? false);
+                    }
+                }
+            }
+        }
+
+        return insertedIds;
     }
 
     // ------------------------------------------------------------------
