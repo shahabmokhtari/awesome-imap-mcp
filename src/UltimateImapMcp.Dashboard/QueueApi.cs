@@ -20,16 +20,16 @@ public static class QueueApi
         {
             var success = queueManager.Cancel(id);
             return success
-                ? Results.Ok(new { Id = id, Cancelled = true })
-                : Results.BadRequest(new { Error = "Operation cannot be cancelled" });
+                ? Results.Ok(new { id, cancelled = true })
+                : Results.BadRequest(new { error = "Operation cannot be cancelled" });
         });
 
         app.MapPost("/api/queue/{id}/confirm", (string id, QueueManager queueManager) =>
         {
             var success = queueManager.Confirm(id);
             return success
-                ? Results.Ok(new { Id = id, Confirmed = true })
-                : Results.BadRequest(new { Error = "Operation cannot be confirmed" });
+                ? Results.Ok(new { id, confirmed = true })
+                : Results.BadRequest(new { error = "Operation cannot be confirmed" });
         });
 
         return app;

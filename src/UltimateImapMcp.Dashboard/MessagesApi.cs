@@ -14,19 +14,19 @@ public static class MessagesApi
         {
             var accountId = ctx.Request.Query["account_id"].FirstOrDefault();
             if (string.IsNullOrEmpty(accountId))
-                return Results.BadRequest(new { Error = "account_id is required" });
+                return Results.BadRequest(new { error = "account_id is required" });
 
             var folders = folderRepo.GetByAccount(accountId);
             var result = folders.Select(f => new
             {
-                f.Id,
-                f.Path,
-                DisplayName = f.DisplayName ?? f.Path,
-                f.Role,
-                f.MessageCount,
-                f.UnreadCount,
-                f.SyncEnabled,
-                f.LastSyncedAt,
+                id = f.Id,
+                path = f.Path,
+                displayName = f.DisplayName ?? f.Path,
+                role = f.Role,
+                messageCount = f.MessageCount,
+                unreadCount = f.UnreadCount,
+                syncEnabled = f.SyncEnabled,
+                lastSyncedAt = f.LastSyncedAt,
             });
 
             return Results.Ok(result);
@@ -37,11 +37,11 @@ public static class MessagesApi
         {
             var accountId = ctx.Request.Query["account_id"].FirstOrDefault();
             if (string.IsNullOrEmpty(accountId))
-                return Results.BadRequest(new { Error = "account_id is required" });
+                return Results.BadRequest(new { error = "account_id is required" });
 
             var folderIdStr = ctx.Request.Query["folder_id"].FirstOrDefault();
             if (string.IsNullOrEmpty(folderIdStr) || !int.TryParse(folderIdStr, out var folderId))
-                return Results.BadRequest(new { Error = "folder_id is required and must be an integer" });
+                return Results.BadRequest(new { error = "folder_id is required and must be an integer" });
 
             var limitStr = ctx.Request.Query["limit"].FirstOrDefault();
             var limit = 50;
@@ -56,17 +56,17 @@ public static class MessagesApi
 
             var result = messages.Select(m => new
             {
-                m.Id,
-                m.Uid,
-                Subject = m.Subject ?? "(no subject)",
-                FromAddress = m.FromAddress ?? "",
-                FromEmail = m.FromEmail ?? "",
-                m.DateEpoch,
-                Date = m.Date,
-                Flags = m.Flags ?? "",
-                Snippet = m.Snippet ?? "",
-                m.HasAttachments,
-                FolderPath = folderPath,
+                id = m.Id,
+                uid = m.Uid,
+                subject = m.Subject ?? "(no subject)",
+                fromAddress = m.FromAddress ?? "",
+                fromEmail = m.FromEmail ?? "",
+                dateEpoch = m.DateEpoch,
+                date = m.Date,
+                flags = m.Flags ?? "",
+                snippet = m.Snippet ?? "",
+                hasAttachments = m.HasAttachments,
+                folderPath,
             });
 
             return Results.Ok(result);
@@ -78,26 +78,26 @@ public static class MessagesApi
         {
             var message = messageRepo.GetByUid(accountId, folderId, uid);
             if (message is null)
-                return Results.NotFound(new { Error = "Message not found" });
+                return Results.NotFound(new { error = "Message not found" });
 
             return Results.Ok(new
             {
-                message.Id,
-                message.Uid,
-                Subject = message.Subject ?? "(no subject)",
-                FromAddress = message.FromAddress ?? "",
-                FromEmail = message.FromEmail ?? "",
-                ToAddresses = message.ToAddresses ?? "",
-                CcAddresses = message.CcAddresses ?? "",
-                message.DateEpoch,
-                Date = message.Date,
-                Flags = message.Flags ?? "",
-                Snippet = message.Snippet ?? "",
-                message.HasAttachments,
-                BodyText = message.BodyText,
-                BodyHtml = message.BodyHtml,
-                message.BodyFetched,
-                message.ThreadId,
+                id = message.Id,
+                uid = message.Uid,
+                subject = message.Subject ?? "(no subject)",
+                fromAddress = message.FromAddress ?? "",
+                fromEmail = message.FromEmail ?? "",
+                toAddresses = message.ToAddresses ?? "",
+                ccAddresses = message.CcAddresses ?? "",
+                dateEpoch = message.DateEpoch,
+                date = message.Date,
+                flags = message.Flags ?? "",
+                snippet = message.Snippet ?? "",
+                hasAttachments = message.HasAttachments,
+                bodyText = message.BodyText,
+                bodyHtml = message.BodyHtml,
+                bodyFetched = message.BodyFetched,
+                threadId = message.ThreadId,
             });
         });
 
@@ -145,7 +145,7 @@ public static class MessagesApi
             var accountId = ctx.Request.Query["account_id"].FirstOrDefault();
             var query = ctx.Request.Query["query"].FirstOrDefault();
             if (string.IsNullOrEmpty(query))
-                return Results.BadRequest(new { Error = "query is required" });
+                return Results.BadRequest(new { error = "query is required" });
 
             var limitStr = ctx.Request.Query["limit"].FirstOrDefault();
             var limit = 20;
@@ -170,18 +170,18 @@ public static class MessagesApi
 
             var result = messages.Select(m => new
             {
-                m.Id,
-                m.Uid,
-                m.FolderId,
-                Subject = m.Subject ?? "(no subject)",
-                FromAddress = m.FromAddress ?? "",
-                FromEmail = m.FromEmail ?? "",
-                m.DateEpoch,
-                Date = m.Date,
-                Flags = m.Flags ?? "",
-                Snippet = m.Snippet ?? "",
-                m.HasAttachments,
-                FolderPath = folderPaths.TryGetValue(m.FolderId, out var path) ? path : "",
+                id = m.Id,
+                uid = m.Uid,
+                folderId = m.FolderId,
+                subject = m.Subject ?? "(no subject)",
+                fromAddress = m.FromAddress ?? "",
+                fromEmail = m.FromEmail ?? "",
+                dateEpoch = m.DateEpoch,
+                date = m.Date,
+                flags = m.Flags ?? "",
+                snippet = m.Snippet ?? "",
+                hasAttachments = m.HasAttachments,
+                folderPath = folderPaths.TryGetValue(m.FolderId, out var path) ? path : "",
             });
 
             return Results.Ok(result);

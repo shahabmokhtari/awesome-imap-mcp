@@ -23,7 +23,7 @@ export default function PinLogin({ onSuccess }: PinLoginProps) {
       const data = await res.json()
 
       if (!res.ok) {
-        setError(data.Error || data.error || 'Invalid PIN')
+        setError(data.error || 'Invalid PIN')
         return
       }
 

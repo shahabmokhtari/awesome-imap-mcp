@@ -9,7 +9,7 @@ async function apiFetch<T>(url: string, options?: RequestInit): Promise<T> {
   const res = await fetch(url, { ...options, headers: { ...headers, ...options?.headers } })
   if (!res.ok) {
     const body = await res.json().catch(() => null)
-    throw new Error(body?.error || body?.Error || body?.message || `API error: ${res.status}`)
+    throw new Error(body?.error || body?.message || `API error: ${res.status}`)
   }
   return res.json()
 }

@@ -21,21 +21,21 @@ public static class PinAuthMiddleware
         app.MapGet("/api/auth/status", (DashboardAuthRepository authRepo) =>
         {
             var hasPinSet = authRepo.HasPinSet();
-            return Results.Ok(new { HasPinSet = hasPinSet });
+            return Results.Ok(new { hasPinSet });
         });
 
         app.MapPost("/api/auth/setup", async (HttpContext ctx, DashboardAuthRepository authRepo, AppConfig config,
             ILogger<DashboardAuthRepository> logger) =>
         {
             if (authRepo.HasPinSet())
-                return Results.BadRequest(new { Error = "PIN already set. Use /api/auth/login." });
+                return Results.BadRequest(new { error = "PIN already set. Use /api/auth/login." });
 
             var body = await ctx.Request.ReadFromJsonAsync<PinRequest>().ConfigureAwait(false);
             if (body is null || string.IsNullOrWhiteSpace(body.Pin))
-                return Results.BadRequest(new { Error = "PIN is required" });
+                return Results.BadRequest(new { error = "PIN is required" });
 
             if (body.Pin.Length < 4 || body.Pin.Length > 6 || !body.Pin.All(char.IsDigit))
-                return Results.BadRequest(new { Error = "PIN must be 4-6 digits" });
+                return Results.BadRequest(new { error = "PIN must be 4-6 digits" });
 
             var hash = BCrypt.Net.BCrypt.HashPassword(body.Pin);
             authRepo.UpsertPin(hash);
@@ -49,24 +49,24 @@ public static class PinAuthMiddleware
             }
 
             var token = authRepo.CreateSession(TimeSpan.FromMinutes(30));
-            return Results.Ok(new { Token = token, Message = "PIN set successfully" });
+            return Results.Ok(new { token, message = "PIN set successfully" });
         });
 
         app.MapPost("/api/auth/login", async (HttpContext ctx, DashboardAuthRepository authRepo) =>
         {
             var body = await ctx.Request.ReadFromJsonAsync<PinRequest>().ConfigureAwait(false);
             if (body is null || string.IsNullOrWhiteSpace(body.Pin))
-                return Results.BadRequest(new { Error = "PIN is required" });
+                return Results.BadRequest(new { error = "PIN is required" });
 
             var auth = authRepo.GetPinAuth();
             if (auth is null)
-                return Results.BadRequest(new { Error = "No PIN set. Use /api/auth/setup first." });
+                return Results.BadRequest(new { error = "No PIN set. Use /api/auth/setup first." });
 
             if (!BCrypt.Net.BCrypt.Verify(body.Pin, auth.Hash))
-                return Results.Json(new { Error = "Invalid PIN" }, statusCode: 401);
+                return Results.Json(new { error = "Invalid PIN" }, statusCode: 401);
 
             var token = authRepo.CreateSession(TimeSpan.FromMinutes(30));
-            return Results.Ok(new { Token = token });
+            return Results.Ok(new { token });
         });
 
         app.MapPost("/api/auth/change-pin", async (HttpContext ctx, DashboardAuthRepository authRepo) =>
@@ -76,35 +76,35 @@ public static class PinAuthMiddleware
             if (authRepo.HasPinSet())
             {
                 if (authHeader is null || !authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
-                    return Results.Json(new { Error = "Authentication required" }, statusCode: 401);
+                    return Results.Json(new { error = "Authentication required" }, statusCode: 401);
                 var sessionToken = authHeader["Bearer ".Length..].Trim();
                 if (!authRepo.ValidateSession(sessionToken))
-                    return Results.Json(new { Error = "Invalid or expired session" }, statusCode: 401);
+                    return Results.Json(new { error = "Invalid or expired session" }, statusCode: 401);
             }
 
             var body = await ctx.Request.ReadFromJsonAsync<ChangePinRequest>().ConfigureAwait(false);
             if (body is null || string.IsNullOrWhiteSpace(body.NewPin))
-                return Results.BadRequest(new { Error = "new_pin is required" });
+                return Results.BadRequest(new { error = "new_pin is required" });
 
             if (body.NewPin.Length < 4 || body.NewPin.Length > 6 || !body.NewPin.All(char.IsDigit))
-                return Results.BadRequest(new { Error = "PIN must be 4-6 digits" });
+                return Results.BadRequest(new { error = "PIN must be 4-6 digits" });
 
             // If PIN already set, require old pin
             if (authRepo.HasPinSet())
             {
                 if (string.IsNullOrWhiteSpace(body.OldPin))
-                    return Results.BadRequest(new { Error = "old_pin is required when changing an existing PIN" });
+                    return Results.BadRequest(new { error = "old_pin is required when changing an existing PIN" });
 
                 var auth = authRepo.GetPinAuth();
                 if (auth is null || !BCrypt.Net.BCrypt.Verify(body.OldPin, auth.Hash))
-                    return Results.Json(new { Error = "Invalid current PIN" }, statusCode: 401);
+                    return Results.Json(new { error = "Invalid current PIN" }, statusCode: 401);
             }
 
             var hash = BCrypt.Net.BCrypt.HashPassword(body.NewPin);
             authRepo.UpsertPin(hash);
 
             var token = authRepo.CreateSession(TimeSpan.FromMinutes(30));
-            return Results.Ok(new { Token = token, Message = "PIN updated successfully" });
+            return Results.Ok(new { token, message = "PIN updated successfully" });
         });
 
         app.MapPost("/api/auth/logout", (HttpContext ctx, DashboardAuthRepository authRepo) =>
@@ -115,7 +115,7 @@ public static class PinAuthMiddleware
                 var token = authHeader["Bearer ".Length..].Trim();
                 authRepo.DeleteSession(token);
             }
-            return Results.Ok(new { Message = "Logged out" });
+            return Results.Ok(new { message = "Logged out" });
         });
 
         return app;
@@ -160,7 +160,7 @@ public static class PinAuthMiddleware
                 ctx.Response.StatusCode = 401;
                 ctx.Response.ContentType = "application/json";
                 await ctx.Response.WriteAsync(
-                    JsonSerializer.Serialize(new { Error = "Authentication required" })).ConfigureAwait(false);
+                    JsonSerializer.Serialize(new { error = "Authentication required" })).ConfigureAwait(false);
                 return;
             }
 
@@ -170,7 +170,7 @@ public static class PinAuthMiddleware
                 ctx.Response.StatusCode = 401;
                 ctx.Response.ContentType = "application/json";
                 await ctx.Response.WriteAsync(
-                    JsonSerializer.Serialize(new { Error = "Invalid or expired session" })).ConfigureAwait(false);
+                    JsonSerializer.Serialize(new { error = "Invalid or expired session" })).ConfigureAwait(false);
                 return;
             }
 
