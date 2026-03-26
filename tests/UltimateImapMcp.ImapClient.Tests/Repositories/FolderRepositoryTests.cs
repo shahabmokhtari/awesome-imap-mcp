@@ -53,10 +53,11 @@ public class FolderRepositoryTests : IDisposable
     {
         _repo.Insert("test", "INBOX", "Inbox", "inbox", "/");
         var folder = _repo.GetByPath("test", "INBOX")!;
-        _repo.UpdateSyncState(folder.Id, lastSyncedUid: 42, messageCount: 100, unreadCount: 5);
+        _repo.UpdateSyncState(folder.Id, lastSyncedUid: 42, oldestSyncedUid: 10, messageCount: 100, unreadCount: 5);
 
         var updated = _repo.GetByPath("test", "INBOX")!;
         Assert.Equal(42, updated.LastSyncedUid);
+        Assert.Equal(10, updated.OldestSyncedUid);
         Assert.Equal(100, updated.MessageCount);
         Assert.Equal(5, updated.UnreadCount);
         Assert.NotNull(updated.LastSyncedAt);
