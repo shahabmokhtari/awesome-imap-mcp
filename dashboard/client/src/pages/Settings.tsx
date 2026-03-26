@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useSettings, useUpdateSettings, useAuthStatus, useChangePin, useSetupPin, useLlmModels, useTestLlm, useServerInfo, useShutdownServer } from '../hooks/useApi'
+import { useSettings, useUpdateSettings, useAuthStatus, useChangePin, useSetupPin, useLlmModels, useTestLlm, useServerInfo, useShutdownServer, useInstances, useShutdownInstance, type InstanceHeartbeat } from '../hooks/useApi'
 
 /** Fields that require a server restart when changed. */
 const RESTART_FIELDS = new Set([
@@ -176,14 +176,65 @@ function SectionCard({
 // Server Controls card
 // ---------------------------------------------------------------------------
 
-function formatUptime(seconds: number): string {
-  const h = Math.floor(seconds / 3600)
-  const m = Math.floor((seconds % 3600) / 60)
-  return h > 0 ? `${h}h ${m}m` : `${m}m`
+function formatUptimeFromStart(startedAt: string): string {
+  const ms = Date.now() - new Date(startedAt).getTime()
+  const s = Math.floor(ms / 1000)
+  if (s < 60) return `${s}s`
+  const m = Math.floor(s / 60)
+  if (m < 60) return `${m}m ${s % 60}s`
+  const h = Math.floor(m / 60)
+  return `${h}h ${m % 60}m`
+}
+
+function truncatePath(cwd: string): string {
+  const parts = cwd.replace(/\\/g, '/').split('/').filter(Boolean)
+  return parts.slice(-3).join('/') || cwd
+}
+
+function InstanceRow({ instance, isCurrent, onShutdown }: {
+  instance: InstanceHeartbeat
+  isCurrent: boolean
+  onShutdown: (id: string) => void
+}) {
+  const cwdDisplay = truncatePath(instance.cwd) + (isCurrent ? ' (this)' : '')
+
+  return (
+    <tr className="border-b border-gray-100 last:border-0">
+      <td className="px-3 py-2 text-sm font-mono text-gray-900">{instance.processId}</td>
+      <td className="px-3 py-2 text-sm font-mono text-gray-700 max-w-[180px] truncate" title={instance.cwd}>
+        {cwdDisplay}
+      </td>
+      <td className="px-3 py-2 text-sm text-gray-700">{instance.transport}</td>
+      <td className="px-3 py-2 text-sm">
+        <div className="flex flex-wrap gap-1">
+          {instance.isLeader && (
+            <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">Leader</span>
+          )}
+          {instance.isDashboardHost && (
+            <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">Dashboard</span>
+          )}
+        </div>
+      </td>
+      <td className="px-3 py-2 text-sm text-gray-700">{formatUptimeFromStart(instance.startedAt)}</td>
+      <td className="px-3 py-2 text-sm text-gray-700">{(instance.cpuTimeMs / 1000).toFixed(1)}s</td>
+      <td className="px-3 py-2 text-sm text-gray-700">{instance.memoryMb} MB</td>
+      <td className="px-3 py-2">
+        <button
+          onClick={() => onShutdown(instance.instanceId)}
+          disabled={isCurrent}
+          className="px-2 py-1 text-xs bg-red-50 text-red-700 border border-red-200 rounded hover:bg-red-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          Shutdown
+        </button>
+      </td>
+    </tr>
+  )
 }
 
 function ServerControlsCard() {
   const { data: serverInfo } = useServerInfo()
+  const { data: instancesData, isLoading: instancesLoading } = useInstances()
+  const shutdownInstance = useShutdownInstance()
   const shutdownMutation = useShutdownServer()
   const [confirming, setConfirming] = useState(false)
   const [shutdownSent, setShutdownSent] = useState(false)
@@ -199,19 +250,53 @@ function ServerControlsCard() {
     })
   }
 
+  const handleShutdownInstance = (instanceId: string) => {
+    if (!window.confirm(`Shutdown instance ${instanceId}?`)) return
+    shutdownInstance.mutate(instanceId)
+  }
+
   return (
     <div className="bg-white rounded-lg shadow p-5">
       <h3 className="text-lg font-medium text-gray-800 mb-4">Server Controls</h3>
 
-      {serverInfo && (
+      {instancesLoading && (
+        <div className="text-sm text-gray-500 mb-4">Loading instances...</div>
+      )}
+
+      {instancesData && instancesData.instances.length > 0 && (
+        <div className="mb-5 overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="border-b border-gray-200">
+                <th className="px-3 py-2 text-xs font-medium text-gray-500 uppercase">PID</th>
+                <th className="px-3 py-2 text-xs font-medium text-gray-500 uppercase">CWD</th>
+                <th className="px-3 py-2 text-xs font-medium text-gray-500 uppercase">Transport</th>
+                <th className="px-3 py-2 text-xs font-medium text-gray-500 uppercase">Role</th>
+                <th className="px-3 py-2 text-xs font-medium text-gray-500 uppercase">Uptime</th>
+                <th className="px-3 py-2 text-xs font-medium text-gray-500 uppercase">CPU</th>
+                <th className="px-3 py-2 text-xs font-medium text-gray-500 uppercase">Mem</th>
+                <th className="px-3 py-2 text-xs font-medium text-gray-500 uppercase">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {instancesData.instances.map(instance => (
+                <InstanceRow
+                  key={instance.instanceId}
+                  instance={instance}
+                  isCurrent={instance.instanceId === instancesData.current}
+                  onShutdown={handleShutdownInstance}
+                />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {serverInfo && !instancesData && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
           <div>
             <span className="block text-xs text-gray-500">Instance ID</span>
             <span className="text-sm font-mono text-gray-900 break-all">{serverInfo.instance_id}</span>
-          </div>
-          <div>
-            <span className="block text-xs text-gray-500">Uptime</span>
-            <span className="text-sm text-gray-900">{formatUptime(serverInfo.uptime_seconds)}</span>
           </div>
           <div>
             <span className="block text-xs text-gray-500">PID</span>
