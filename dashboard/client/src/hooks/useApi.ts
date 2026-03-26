@@ -45,6 +45,19 @@ export function useTriggerSync() {
   })
 }
 
+export function useTriggerSyncAll() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<{ triggered: number; total: number; errors: string[] }>('/api/sync/trigger-all', {
+        method: 'POST',
+      }),
+    onSuccess: () => {
+      setTimeout(() => qc.invalidateQueries({ queryKey: ['sync-status'] }), 2000)
+    },
+  })
+}
+
 export function useQueue(status?: string) {
   const url = status ? `/api/queue?status=${encodeURIComponent(status)}` : '/api/queue'
   return useQuery({

@@ -27,6 +27,9 @@ public class AppConfig
     [JsonPropertyName("llm")]
     public LlmConfig Llm { get; set; } = new();
 
+    [JsonPropertyName("sync")]
+    public GlobalSyncConfig Sync { get; set; } = new();
+
     [JsonPropertyName("metrics")]
     public MetricsConfig Metrics { get; set; } = new();
 
@@ -178,6 +181,19 @@ public class CacheConfig
 
     [JsonPropertyName("vacuum_on_startup")]
     public bool VacuumOnStartup { get; set; } = false;
+}
+
+/// <summary>Global sync defaults (used when per-account sync config is not set).</summary>
+public class GlobalSyncConfig
+{
+    [JsonPropertyName("enabled")]
+    public bool Enabled { get; set; } = true;
+
+    [JsonPropertyName("poll_interval")]
+    public int PollInterval { get; set; } = 300;
+
+    [JsonPropertyName("max_messages_per_sync")]
+    public int MaxMessagesPerSync { get; set; } = 500;
 }
 
 /// <summary>Async operation queue settings.</summary>

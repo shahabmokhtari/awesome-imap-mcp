@@ -116,7 +116,7 @@ public class SyncManager(
         // IDLE requires its own dedicated connection (separate from the shared one)
         while (!idleCts.Token.IsCancellationRequested)
         {
-            if (!coordinator.IsLeader)
+            if (!coordinator.IsLeader || !appConfig.Sync.Enabled)
             {
                 try
                 {
@@ -258,7 +258,7 @@ public class SyncManager(
 
         while (!ct.IsCancellationRequested)
         {
-            if (!coordinator.IsLeader)
+            if (!coordinator.IsLeader || !appConfig.Sync.Enabled)
             {
                 try
                 {
