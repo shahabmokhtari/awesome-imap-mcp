@@ -98,7 +98,12 @@ public class MessageTools(
                 content_id = a.ContentId,
                 local_path = a.LocalPath,
                 downloaded_at = a.DownloadedAt
-            }).ToList()
+            }).ToList(),
+            cache_info = new
+            {
+                source = msg.BodyFetched ? "cache" : "server_fetch",
+                body_available = msg.BodyFetched,
+            }
         }, JsonOptions);
     }
 
@@ -143,11 +148,19 @@ public class MessageTools(
             };
         }).ToList();
 
+        var bodiesFetched = messages.Count(m => m.BodyFetched);
+
         return JsonSerializer.Serialize(new
         {
             thread_id = threadId,
             message_count = mapped.Count,
-            messages = mapped
+            messages = mapped,
+            cache_info = new
+            {
+                source = "cache",
+                messages_with_body = bodiesFetched,
+                messages_total = messages.Count,
+            }
         }, JsonOptions);
     }
 
