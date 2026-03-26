@@ -1,29 +1,64 @@
 using System.ComponentModel;
 using System.Text.Json;
 using ModelContextProtocol.Server;
+using UltimateImapMcp.Core.Email;
 using UltimateImapMcp.ImapClient.Repositories;
 
 namespace UltimateImapMcp.McpServer.Tools;
 
 [McpServerToolType]
-public class MessageTools(MessageRepository messageRepo, AttachmentRepository attachmentRepo)
+public class MessageTools(
+    MessageRepository messageRepo,
+    AttachmentRepository attachmentRepo,
+    FolderRepository folderRepo,
+    IEmailBackendFactory backendFactory)
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
     [McpServerTool, Description(
-        "Get a single email message by account, folder, and UID. " +
-        "Returns full message content including body if cached.")]
-    public string GetMessage(
-        [Description("Account ID")] string accountId,
-        [Description("Folder ID (integer)")] int folderId,
-        [Description("Message UID")] int uid,
+        "Get a single email message. Provide either 'messageId' (database ID) alone, " +
+        "or 'accountId' + 'uid' (with optional 'folderId'). " +
+        "Automatically fetches message body from server if not yet cached.")]
+    public async Task<string> GetMessage(
+        [Description("Database message ID (if provided, other ID params are ignored)")] int? messageId = null,
+        [Description("Account ID")] string? accountId = null,
+        [Description("Folder ID (integer, optional if messageId is provided)")] int? folderId = null,
+        [Description("Message UID")] int? uid = null,
         [Description("Max body length (0=unlimited, default: 0)")] int maxBodyLength = 0)
     {
-        var msg = messageRepo.GetByUid(accountId, folderId, uid);
+        var msg = ResolveMessage(messageId, accountId, folderId, uid);
         if (msg is null)
-            return JsonSerializer.Serialize(
-                new { error = $"Message UID {uid} not found in folder {folderId} for account '{accountId}'." },
-                JsonOptions);
+            return Error("Message not found. Provide 'messageId' or 'accountId'+'uid'.");
+
+        // Auto-fetch body if not yet cached
+        if (!msg.BodyFetched)
+        {
+            try
+            {
+                var folder = folderRepo.GetByAccount(msg.AccountId)
+                    .FirstOrDefault(f => f.Id == msg.FolderId);
+                if (folder is not null)
+                {
+                    await using var backend = backendFactory.CreateSyncBackend(msg.AccountId);
+                    await backend.FetchMessageBodyAsync(msg.AccountId, folder.Path, msg.Uid).ConfigureAwait(false);
+                    // Re-read from DB after fetch
+                    msg = messageRepo.GetById(msg.Id) ?? msg;
+                }
+            }
+            catch (Exception ex)
+            {
+                // Non-fatal — return what we have with a note
+                return JsonSerializer.Serialize(new
+                {
+                    id = msg.Id, uid = msg.Uid,
+                    account_id = msg.AccountId, folder_id = msg.FolderId,
+                    subject = msg.Subject, from = msg.FromAddress,
+                    body_fetched = false,
+                    body_fetch_error = ex.Message,
+                    snippet = msg.Snippet
+                }, JsonOptions);
+            }
+        }
 
         var attachments = attachmentRepo.GetByMessageId(msg.Id);
 
@@ -112,4 +147,32 @@ public class MessageTools(MessageRepository messageRepo, AttachmentRepository at
             messages = mapped
         }, JsonOptions);
     }
+
+    /// <summary>Resolves a message from various parameter combinations.</summary>
+    private MessageRecord? ResolveMessage(int? messageId, string? accountId, int? folderId, int? uid)
+    {
+        // 1. Direct database ID lookup
+        if (messageId is not null)
+            return messageRepo.GetById(messageId.Value);
+
+        if (string.IsNullOrEmpty(accountId) || uid is null)
+            return null;
+
+        // 2. Full lookup with folder_id
+        if (folderId is not null)
+            return messageRepo.GetByUid(accountId, folderId.Value, uid.Value);
+
+        // 3. Search across all folders for this account+uid
+        var folders = folderRepo.GetByAccount(accountId);
+        foreach (var folder in folders)
+        {
+            var msg = messageRepo.GetByUid(accountId, folder.Id, uid.Value);
+            if (msg is not null) return msg;
+        }
+
+        return null;
+    }
+
+    private static string Error(string message) =>
+        JsonSerializer.Serialize(new { error = message }, JsonOptions);
 }
