@@ -385,6 +385,59 @@ public class JsonCasingTests
     }
 
     // ---------------------------------------------------------------
+    // Cache responses (CacheApi)
+    // ---------------------------------------------------------------
+
+    [Fact]
+    public void CacheClearAllResponse_serializes_to_camelCase()
+    {
+        AssertCamelCase(new { deleted = 42, message = "All cached messages cleared." });
+    }
+
+    [Fact]
+    public void CacheClearByAccountResponse_serializes_to_camelCase()
+    {
+        AssertCamelCase(new { deleted = 10, accountId = "acc-1", message = "Cache cleared for account." });
+    }
+
+    [Fact]
+    public void CacheClearByFolderResponse_serializes_to_camelCase()
+    {
+        AssertCamelCase(new { deleted = 5, accountId = "acc-1", folderId = 3, message = "Cache cleared for folder." });
+    }
+
+    // ---------------------------------------------------------------
+    // Fetch-body response (MessagesApi) — tests PascalCase shorthand
+    // ---------------------------------------------------------------
+
+    [Fact]
+    public void FetchBodyResponse_shorthandProperties_serializeToCamelCase()
+    {
+        // Mirrors the pattern where C# shorthand anonymous properties (message.Id, message.Uid)
+        // get PascalCase names from the source property. The global CamelCase policy corrects
+        // them at runtime, and this test ensures the policy does its job.
+        var fakeRecord = new { Id = 1, Uid = 100L };
+        AssertCamelCase(new
+        {
+            fakeRecord.Id, fakeRecord.Uid,
+            subject = "Test",
+            bodyText = "body",
+            bodyHtml = (string?)null,
+            bodyFetched = true,
+        });
+    }
+
+    // ---------------------------------------------------------------
+    // LLM test endpoint error response
+    // ---------------------------------------------------------------
+
+    [Fact]
+    public void LlmTestErrorResponse_serializes_to_camelCase()
+    {
+        AssertCamelCase(new { error = "API key invalid", model = "gpt-4o" });
+    }
+
+    // ---------------------------------------------------------------
     // Middleware direct-serialize responses
     // ---------------------------------------------------------------
 

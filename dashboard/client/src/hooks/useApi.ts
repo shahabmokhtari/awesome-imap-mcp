@@ -392,6 +392,9 @@ export function useFetchBody() {
     onSuccess: (_, params) => {
       qc.invalidateQueries({ queryKey: ['message', params.accountId, params.folderId, params.uid] })
     },
+    onError: (error) => {
+      console.error('[useFetchBody] failed:', error)
+    },
   })
 }
 
@@ -402,6 +405,9 @@ export function useClearCache() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['messages'] })
       qc.invalidateQueries({ queryKey: ['sync-status'] })
+    },
+    onError: (error) => {
+      console.error('[useClearCache] failed:', error)
     },
   })
 }
@@ -414,6 +420,9 @@ export function useClearAccountCache() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['messages'] })
       qc.invalidateQueries({ queryKey: ['sync-status'] })
+    },
+    onError: (error) => {
+      console.error('[useClearAccountCache] failed:', error)
     },
   })
 }
@@ -428,6 +437,9 @@ export function useClearFolderCache() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['messages'] })
       qc.invalidateQueries({ queryKey: ['sync-status'] })
+    },
+    onError: (error) => {
+      console.error('[useClearFolderCache] failed:', error)
     },
   })
 }

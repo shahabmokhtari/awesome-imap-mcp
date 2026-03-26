@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.Logging;
 using UltimateImapMcp.ImapClient.Repositories;
 
 namespace UltimateImapMcp.Dashboard;
@@ -106,7 +107,8 @@ public static class MessagesApi
             string accountId, int folderId, long uid,
             UltimateImapMcp.Core.Email.IEmailBackendFactory backendFactory,
             UltimateImapMcp.ImapClient.Repositories.FolderRepository folderRepo,
-            UltimateImapMcp.ImapClient.Repositories.MessageRepository messageRepo) =>
+            UltimateImapMcp.ImapClient.Repositories.MessageRepository messageRepo,
+            ILoggerFactory loggerFactory) =>
         {
             // Resolve folder path from folderId
             var folders = folderRepo.GetByAccount(accountId);
@@ -118,25 +120,32 @@ public static class MessagesApi
             {
                 await using var backend = backendFactory.CreateSyncBackend(accountId);
                 await backend.FetchMessageBodyAsync(accountId, folder.Path, uid).ConfigureAwait(false);
-
-                // Return updated message
-                var message = messageRepo.GetByUid(accountId, folderId, uid);
-                if (message is null)
-                    return Results.NotFound(new { error = "Message not found after fetch" });
-
-                return Results.Ok(new
-                {
-                    message.Id, message.Uid,
-                    subject = message.Subject ?? "(no subject)",
-                    bodyText = message.BodyText,
-                    bodyHtml = message.BodyHtml,
-                    bodyFetched = message.BodyFetched,
-                });
+            }
+            catch (OperationCanceledException)
+            {
+                throw; // Let ASP.NET handle request cancellation / shutdown
             }
             catch (Exception ex)
             {
-                return Results.Json(new { error = ex.Message }, statusCode: 500);
+                var logger = loggerFactory.CreateLogger("MessagesApi");
+                logger.LogError(ex, "fetch-body failed for account={AccountId} folder={FolderId} uid={Uid}", accountId, folderId, uid);
+                return Results.Json(new { error = "Failed to fetch message body. Check server logs for details." }, statusCode: 500);
             }
+
+            // Return updated message (outside try so read-back errors are distinct)
+            var message = messageRepo.GetByUid(accountId, folderId, uid);
+            if (message is null)
+                return Results.NotFound(new { error = "Message not found after fetch" });
+
+            return Results.Ok(new
+            {
+                id = message.Id,
+                uid = message.Uid,
+                subject = message.Subject ?? "(no subject)",
+                bodyText = message.BodyText,
+                bodyHtml = message.BodyHtml,
+                bodyFetched = message.BodyFetched,
+            });
         });
 
         // GET /api/messages/search?account_id=X&query=text&limit=20 — Full-text search

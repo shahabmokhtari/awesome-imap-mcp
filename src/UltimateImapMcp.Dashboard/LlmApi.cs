@@ -48,7 +48,7 @@ public static class LlmApi
 
             var effectiveProvider = body.Provider ?? llmConfig.Provider;
 
-            // ACP/in_context providers don't use ChatClient — return a helpful message
+            // Keyless providers (ACP agents, in_context) don't create a ChatClient — skip the test
             if (!ChatClientFactory.RequiresApiKey(effectiveProvider))
             {
                 return Results.Ok(new
@@ -89,15 +89,17 @@ public static class LlmApi
                     duration_ms = sw.ElapsedMilliseconds,
                 });
             }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
             catch (Exception ex)
             {
-                return Results.Ok(new
+                return Results.Json(new
                 {
-                    response = (string?)null,
-                    model = effectiveConfig.Model,
-                    duration_ms = 0L,
                     error = ex.Message,
-                });
+                    model = effectiveConfig.Model,
+                }, statusCode: 502);
             }
             finally
             {
@@ -144,6 +146,7 @@ public static class LlmApi
     /// <summary>
     /// Runs a CLI command and parses --model choices from its help output.
     /// Reads stdout and stderr concurrently to avoid pipe-buffer deadlocks.
+    /// Times out after 5 seconds to avoid hanging on unresponsive CLIs.
     /// </summary>
     private static async Task<string[]> DetectModelsFromCliAsync(string command, string[] args)
     {
@@ -163,18 +166,20 @@ public static class LlmApi
             using var process = Process.Start(psi);
             if (process is null) return [];
 
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
             // Read both streams concurrently to avoid deadlock from pipe buffer filling
-            var stdoutTask = process.StandardOutput.ReadToEndAsync();
-            var stderrTask = process.StandardError.ReadToEndAsync();
+            var stdoutTask = process.StandardOutput.ReadToEndAsync(cts.Token);
+            var stderrTask = process.StandardError.ReadToEndAsync(cts.Token);
 
             await Task.WhenAll(stdoutTask, stderrTask).ConfigureAwait(false);
-            await process.WaitForExitAsync().ConfigureAwait(false);
+            await process.WaitForExitAsync(cts.Token).ConfigureAwait(false);
 
             var combinedOutput = stdoutTask.Result + stderrTask.Result;
 
             // Parse model choices from help text. Supports two formats:
-            //   choices: "model1", "model2", ...  (parenthesized list)
-            //   {model1,model2,...}                (brace-delimited list)
+            //   choices: "model1", "model2", ...  (quoted list, typically inside CLI help parens)
+            //   {model1,model2,...}                (brace-delimited bare list)
             var match = Regex.Match(combinedOutput, @"--model.*?choices:\s*(""[^)]+)", RegexOptions.Singleline);
             if (match.Success)
             {
@@ -198,8 +203,10 @@ public static class LlmApi
 
             return [];
         }
-        catch
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException
+            or IOException or OperationCanceledException)
         {
+            // CLI not found, timed out, or failed to start — return empty list
             return [];
         }
     }

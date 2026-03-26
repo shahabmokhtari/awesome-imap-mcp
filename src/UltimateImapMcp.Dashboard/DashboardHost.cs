@@ -46,11 +46,12 @@ public sealed class DashboardHost : BackgroundService
         var port = _config.Server.DashboardPort;
         var isInitialLaunch = !PortUtils.IsPortInUse(port);
 
-        // Wait in standby if another instance owns the port
+        // Wait for the port to become free before starting; returns immediately if already available
         await PortUtils.WaitForPortWithBackoffAsync(port, _logger, "Dashboard", stoppingToken).ConfigureAwait(false);
 
-        // Clear sessions once on startup — force re-auth after server restart.
-        // This runs once in ExecuteAsync, not inside StartDashboard which retries on failure.
+        // Clear sessions once at startup so clients must re-authenticate after a server restart.
+        // Placed here rather than in StartDashboard, which is re-entered on crash recovery
+        // and standby takeover — sessions should not be wiped on each retry.
         var authRepo = new DashboardAuthRepository(
             _rootServices.GetRequiredService<UltimateImapMcp.Core.Database.AppDatabase>());
         authRepo.CleanExpiredSessions();

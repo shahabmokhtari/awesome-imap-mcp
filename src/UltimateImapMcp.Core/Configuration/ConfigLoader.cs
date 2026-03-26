@@ -94,12 +94,14 @@ public static partial class ConfigLoader
                 Provider = config.Llm.Provider,
                 Model = config.Llm.Model,
                 ApiKeyEnv = config.Llm.ApiKeyEnv,
-                // ApiKey deliberately omitted
+                // ApiKey deliberately omitted — may have been resolved from env var
                 DailyTokenBudget = config.Llm.DailyTokenBudget,
                 MonthlyCostLimit = config.Llm.MonthlyCostLimit,
                 AutoAnalyzeNew = config.Llm.AutoAnalyzeNew,
                 Acp = config.Llm.Acp,
+                ProviderApiKeys = config.Llm.ProviderApiKeys,
             },
+            Sync = config.Sync,
             Metrics = config.Metrics,
             OAuthProviders = config.OAuthProviders,
         };

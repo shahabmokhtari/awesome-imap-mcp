@@ -606,7 +606,6 @@ function LlmSectionCard({
         onFormChange={handleFormChange}
       />
 
-      {/* API key status / per-provider keys */}
       <div className="bg-white rounded-lg shadow p-5">
         <h3 className="text-lg font-medium text-gray-800 mb-4">API Keys</h3>
 

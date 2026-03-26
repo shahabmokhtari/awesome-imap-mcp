@@ -210,6 +210,78 @@ public class MessageRepositoryTests : IDisposable
         Assert.Equal("zephyrine@exotic-domain.com", results[0].FromEmail);
     }
 
+    // ---------------------------------------------------------------
+    // Delete methods
+    // ---------------------------------------------------------------
+
+    [Fact]
+    public void DeleteAll_RemovesAllMessages_ReturnsCount()
+    {
+        var folderId = _folderRepo.GetByPath("test", "INBOX")!.Id;
+        InsertTestMessage("test", folderId, 501, "msg-501");
+        InsertTestMessage("test", folderId, 502, "msg-502");
+
+        var deleted = _messageRepo.DeleteAll();
+        Assert.True(deleted >= 2);
+        Assert.Null(_messageRepo.GetByUid("test", folderId, 501));
+        Assert.Null(_messageRepo.GetByUid("test", folderId, 502));
+    }
+
+    [Fact]
+    public void DeleteByAccount_OnlyRemovesTargetAccount()
+    {
+        _accountRepo.Insert("other", "Other", "imap.other.com", 993,
+            null, 465, true, "u@other.com", "password", "enc", "generic", null);
+        _folderRepo.Insert("other", "INBOX", "Inbox", "inbox", "/");
+        var testFolderId = _folderRepo.GetByPath("test", "INBOX")!.Id;
+        var otherFolderId = _folderRepo.GetByPath("other", "INBOX")!.Id;
+
+        InsertTestMessage("test", testFolderId, 601, "msg-601");
+        InsertTestMessage("other", otherFolderId, 602, "msg-602");
+
+        var deleted = _messageRepo.DeleteByAccount("test");
+        Assert.True(deleted >= 1);
+        Assert.Null(_messageRepo.GetByUid("test", testFolderId, 601));
+        Assert.NotNull(_messageRepo.GetByUid("other", otherFolderId, 602));
+    }
+
+    [Fact]
+    public void DeleteByFolder_OnlyRemovesTargetFolder()
+    {
+        _folderRepo.Insert("test", "Sent", "Sent", "sent", "/");
+        var inboxId = _folderRepo.GetByPath("test", "INBOX")!.Id;
+        var sentId = _folderRepo.GetByPath("test", "Sent")!.Id;
+
+        InsertTestMessage("test", inboxId, 701, "msg-701");
+        InsertTestMessage("test", sentId, 702, "msg-702");
+
+        var deleted = _messageRepo.DeleteByFolder("test", inboxId);
+        Assert.True(deleted >= 1);
+        Assert.Null(_messageRepo.GetByUid("test", inboxId, 701));
+        Assert.NotNull(_messageRepo.GetByUid("test", sentId, 702));
+    }
+
+    [Fact]
+    public void DeleteByAccount_EmptyTable_ReturnsZero()
+    {
+        // Delete any seed data first
+        _messageRepo.DeleteAll();
+
+        var deleted = _messageRepo.DeleteByAccount("nonexistent");
+        Assert.Equal(0, deleted);
+    }
+
+    private void InsertTestMessage(string accountId, int folderId, long uid, string msgId)
+    {
+        _messageRepo.Insert(accountId, folderId, uid: uid, messageId: $"<{msgId}@test.com>",
+            inReplyTo: null, referencesHdr: null, threadId: $"t-{msgId}",
+            subject: $"Subject {msgId}", fromAddress: "Test <test@test.com>",
+            fromEmail: "test@test.com", toAddresses: "[]",
+            ccAddresses: null, bccAddresses: null, date: "2026-03-18T10:00:00Z",
+            dateEpoch: 1774040400, flags: "[]", sizeBytes: 1024,
+            hasAttachments: false, snippet: "test snippet");
+    }
+
     public void Dispose()
     {
         _db.Dispose();
