@@ -91,7 +91,7 @@ public class AcpClient : IAsyncDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
         await EnsureInitializedAsync(ct).ConfigureAwait(false);
 
-        var request = CreateRequest("sessions/create", new
+        var request = CreateRequest("session/new", new
         {
             workingDir
         });
@@ -114,7 +114,7 @@ public class AcpClient : IAsyncDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
         await EnsureInitializedAsync(ct).ConfigureAwait(false);
 
-        var request = CreateRequest("prompts/send", new
+        var request = CreateRequest("session/prompt", new
         {
             sessionId = session.SessionId,
             prompt = new { text = prompt }
@@ -134,9 +134,10 @@ public class AcpClient : IAsyncDisposable
             if (acpEvent.Type == AcpEventType.PermissionRequest)
             {
                 _logger.LogDebug("Auto-denying permission request from ACP agent");
-                var denyRequest = CreateRequest("permissions/deny", new
+                var denyRequest = CreateRequest("session/request_permission", new
                 {
-                    sessionId = session.SessionId
+                    sessionId = session.SessionId,
+                    allowed = false
                 });
                 await WriteRequestAsync(denyRequest, ct).ConfigureAwait(false);
             }
@@ -150,7 +151,7 @@ public class AcpClient : IAsyncDisposable
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
-        var request = CreateRequest("prompts/cancel", new
+        var request = CreateRequest("session/cancel", new
         {
             sessionId = session.SessionId
         });
@@ -159,25 +160,14 @@ public class AcpClient : IAsyncDisposable
     }
 
     /// <summary>
-    /// Deletes a session.
+    /// Cleans up a session. ACP doesn't define a delete method —
+    /// sessions are cleaned up when the process exits.
+    /// This is a no-op kept for interface compatibility.
     /// </summary>
-    public async Task DeleteSessionAsync(AcpSession session, CancellationToken ct = default)
+    public Task DeleteSessionAsync(AcpSession session, CancellationToken ct = default)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
-
-        var request = CreateRequest("sessions/delete", new
-        {
-            sessionId = session.SessionId
-        });
-
-        try
-        {
-            await SendRequestAsync(request, ct).ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to delete ACP session {SessionId}", session.SessionId);
-        }
+        _logger.LogDebug("Session {SessionId} cleanup requested (no-op, cleaned on process exit)", session.SessionId);
+        return Task.CompletedTask;
     }
 
     public async ValueTask DisposeAsync()
