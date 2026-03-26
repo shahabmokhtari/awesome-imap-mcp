@@ -116,6 +116,16 @@ function SetupGuard() {
     queryClient.clear()
   }, [queryClient])
 
+  const pinIsSet = authStatus?.hasPinSet === true
+
+  // If accounts request failed (likely 401 from stale token), clear token and reset auth state
+  useEffect(() => {
+    if (pinIsSet && accountsError && authed) {
+      localStorage.removeItem('dashboard_token')
+      setAuthed(false)
+    }
+  }, [pinIsSet, accountsError, authed])
+
   // Show loading only briefly while checking auth status
   if (authLoading) {
     return (
@@ -125,20 +135,10 @@ function SetupGuard() {
     )
   }
 
-  const pinIsSet = authStatus?.hasPinSet === true
-
   // If PIN is set and not authenticated, show login
   if (pinIsSet && !authed) {
     return <PinLogin onSuccess={handleLoginSuccess} />
   }
-
-  // If accounts request failed (likely 401 from stale token), clear token and reset auth state
-  useEffect(() => {
-    if (pinIsSet && accountsError && authed) {
-      localStorage.removeItem('dashboard_token')
-      setAuthed(false)
-    }
-  }, [pinIsSet, accountsError, authed])
 
   if (pinIsSet && accountsError) {
     return <PinLogin onSuccess={handleLoginSuccess} />
