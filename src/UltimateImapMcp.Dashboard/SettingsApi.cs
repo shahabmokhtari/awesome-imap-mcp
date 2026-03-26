@@ -52,7 +52,8 @@ public static class SettingsApi
                     config.Llm.AutoAnalyzeNew,
                     providerApiKeys = config.Llm.ProviderApiKeys.ToDictionary(
                         kvp => kvp.Key,
-                        kvp => string.IsNullOrEmpty(kvp.Value) ? "" : "***")
+                        kvp => string.IsNullOrEmpty(kvp.Value) ? "" : "***"),
+                    analysisPrompts = config.Llm.AnalysisPrompts
                 },
                 sync = new
                 {
@@ -136,6 +137,11 @@ public static class SettingsApi
                         anyKeyWritten = true;
                     }
                     if (anyKeyWritten) changed.Add("llm.provider_api_keys");
+                }
+                if (l.AnalysisPrompts is not null)
+                {
+                    config.Llm.AnalysisPrompts = l.AnalysisPrompts;
+                    changed.Add("llm.analysis_prompts");
                 }
             }
 
@@ -248,6 +254,7 @@ file record LlmSettingsUpdate
     public double? MonthlyCostLimit { get; init; }
     public bool? AutoAnalyzeNew { get; init; }
     public Dictionary<string, string>? ProviderApiKeys { get; init; }
+    public Dictionary<string, string>? AnalysisPrompts { get; init; }
 }
 
 file record SyncSettingsUpdate

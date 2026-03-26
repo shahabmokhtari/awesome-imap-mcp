@@ -254,6 +254,9 @@ public class LlmConfig
     [JsonPropertyName("provider_api_keys")]
     public Dictionary<string, string> ProviderApiKeys { get; set; } = new();
 
+    [JsonPropertyName("analysis_prompts")]
+    public Dictionary<string, string> AnalysisPrompts { get; set; } = new();
+
     [JsonPropertyName("acp")]
     public AcpConfig Acp { get; set; } = new();
 

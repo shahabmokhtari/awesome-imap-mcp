@@ -13,19 +13,21 @@ public class ApiEmailAnalyzer : IEmailAnalyzer
     private readonly IChatClient _chatClient;
     private readonly string _model;
     private readonly ILogger<ApiEmailAnalyzer> _logger;
+    private readonly Dictionary<string, string>? _customPrompts;
 
-    public ApiEmailAnalyzer(IChatClient chatClient, string model, ILogger<ApiEmailAnalyzer> logger)
+    public ApiEmailAnalyzer(IChatClient chatClient, string model, ILogger<ApiEmailAnalyzer> logger, Dictionary<string, string>? customPrompts = null)
     {
         _chatClient = chatClient;
         _model = model;
         _logger = logger;
+        _customPrompts = customPrompts;
     }
 
     public bool SupportsBackgroundAnalysis => true;
 
     public async Task<AnalysisResult> AnalyzeAsync(EmailContent email, AnalysisType type, CancellationToken ct = default)
     {
-        var systemPrompt = BuildSystemPrompt(type);
+        var systemPrompt = BuildSystemPrompt(type, _customPrompts);
         var userPrompt = BuildUserPrompt(email, type);
 
         var messages = new List<ChatMessage>
@@ -56,35 +58,57 @@ public class ApiEmailAnalyzer : IEmailAnalyzer
         };
     }
 
-    public static string BuildSystemPrompt(AnalysisType type) => type switch
+    public static string BuildSystemPrompt(AnalysisType type, Dictionary<string, string>? customPrompts = null)
     {
-        AnalysisType.SpamScore =>
-            "You are an email spam analysis assistant. Analyze the given email and return ONLY a JSON object " +
-            "with the following structure: { \"score\": <0-100 integer>, \"label\": \"spam\"|\"likely_spam\"|\"not_spam\", " +
-            "\"explanation\": \"<brief explanation>\" }. Score 0 = definitely not spam, 100 = definitely spam.",
+        // Check for user-configured prompt override
+        var typeKey = type switch
+        {
+            AnalysisType.SpamScore => "spam_score",
+            AnalysisType.Category => "category",
+            AnalysisType.Priority => "priority",
+            AnalysisType.Summary => "summary",
+            AnalysisType.Custom => "custom",
+            _ => null
+        };
 
-        AnalysisType.Category =>
-            "You are an email categorization assistant. Categorize the given email and return ONLY a JSON object " +
-            "with the following structure: { \"category\": \"newsletter\"|\"transactional\"|\"personal\"|\"work\"" +
-            "|\"spam\"|\"social\"|\"promotions\"|\"updates\", \"confidence\": <0.0-1.0>, " +
-            "\"explanation\": \"<brief explanation>\" }.",
+        if (typeKey is not null && customPrompts is not null
+            && customPrompts.TryGetValue(typeKey, out var customPrompt)
+            && !string.IsNullOrWhiteSpace(customPrompt))
+        {
+            return customPrompt;
+        }
 
-        AnalysisType.Priority =>
-            "You are an email priority assessment assistant. Assess the priority of the given email and return " +
-            "ONLY a JSON object with the following structure: { \"priority\": \"low\"|\"normal\"|\"high\"|\"urgent\", " +
-            "\"explanation\": \"<brief explanation>\" }.",
+        // Default prompts
+        return type switch
+        {
+            AnalysisType.SpamScore =>
+                "You are an email spam analysis assistant. Analyze the given email and return ONLY a JSON object " +
+                "with the following structure: { \"score\": <0-100 integer>, \"label\": \"spam\"|\"likely_spam\"|\"not_spam\", " +
+                "\"explanation\": \"<brief explanation>\" }. Score 0 = definitely not spam, 100 = definitely spam.",
 
-        AnalysisType.Summary =>
-            "You are an email summarization assistant. Summarize the given email and return ONLY a JSON object " +
-            "with the following structure: { \"summary\": \"<one paragraph summary>\", " +
-            "\"key_points\": [\"<point1>\", \"<point2>\", ...] }.",
+            AnalysisType.Category =>
+                "You are an email categorization assistant. Categorize the given email and return ONLY a JSON object " +
+                "with the following structure: { \"category\": \"newsletter\"|\"transactional\"|\"personal\"|\"work\"" +
+                "|\"spam\"|\"social\"|\"promotions\"|\"updates\", \"confidence\": <0.0-1.0>, " +
+                "\"explanation\": \"<brief explanation>\" }.",
 
-        AnalysisType.Custom =>
-            "You are an email analysis assistant. Analyze the given email according to the user's instructions " +
-            "and return ONLY a JSON object with your analysis results.",
+            AnalysisType.Priority =>
+                "You are an email priority assessment assistant. Assess the priority of the given email and return " +
+                "ONLY a JSON object with the following structure: { \"priority\": \"low\"|\"normal\"|\"high\"|\"urgent\", " +
+                "\"explanation\": \"<brief explanation>\" }.",
 
-        _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Unknown analysis type")
-    };
+            AnalysisType.Summary =>
+                "You are an email summarization assistant. Summarize the given email and return ONLY a JSON object " +
+                "with the following structure: { \"summary\": \"<one paragraph summary>\", " +
+                "\"key_points\": [\"<point1>\", \"<point2>\", ...] }.",
+
+            AnalysisType.Custom =>
+                "You are an email analysis assistant. Analyze the given email according to the user's instructions " +
+                "and return ONLY a JSON object with your analysis results.",
+
+            _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Unknown analysis type")
+        };
+    }
 
     public static string BuildUserPrompt(EmailContent email, AnalysisType type)
     {

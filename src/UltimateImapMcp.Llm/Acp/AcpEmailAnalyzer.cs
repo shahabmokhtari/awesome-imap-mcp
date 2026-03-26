@@ -10,11 +10,13 @@ public class AcpEmailAnalyzer : IEmailAnalyzer
 {
     private readonly IAcpClientPool _pool;
     private readonly ILogger<AcpEmailAnalyzer> _logger;
+    private readonly Dictionary<string, string>? _customPrompts;
 
-    public AcpEmailAnalyzer(IAcpClientPool pool, ILogger<AcpEmailAnalyzer> logger)
+    public AcpEmailAnalyzer(IAcpClientPool pool, ILogger<AcpEmailAnalyzer> logger, Dictionary<string, string>? customPrompts = null)
     {
         _pool = pool;
         _logger = logger;
+        _customPrompts = customPrompts;
     }
 
     public bool SupportsBackgroundAnalysis => true;
@@ -22,7 +24,7 @@ public class AcpEmailAnalyzer : IEmailAnalyzer
     public async Task<AnalysisResult> AnalyzeAsync(EmailContent email, AnalysisType type,
         CancellationToken ct = default)
     {
-        var prompt = BuildPrompt(email, type);
+        var prompt = BuildPrompt(email, type, _customPrompts);
         var result = await _pool.SendPromptAsync(prompt, ct: ct).ConfigureAwait(false);
 
         if (result.Error is not null)
@@ -46,9 +48,9 @@ public class AcpEmailAnalyzer : IEmailAnalyzer
         };
     }
 
-    private static string BuildPrompt(EmailContent email, AnalysisType type)
+    private static string BuildPrompt(EmailContent email, AnalysisType type, Dictionary<string, string>? customPrompts = null)
     {
-        var systemPrompt = ApiEmailAnalyzer.BuildSystemPrompt(type);
+        var systemPrompt = ApiEmailAnalyzer.BuildSystemPrompt(type, customPrompts);
         var body = email.Body ?? email.Snippet ?? "(no body)";
         if (body.Length > 4000)
             body = body[..4000] + "... [truncated]";

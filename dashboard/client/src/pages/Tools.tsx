@@ -364,7 +364,6 @@ function getToolCategory(name: string): string {
   return 'Other'
 }
 
-const CATEGORY_ORDER = ['Messages', 'Search', 'Compose', 'Organize', 'Folders', 'Accounts', 'Sync', 'Queue', 'Analysis', 'Reports', 'Other']
 
 // ---------------------------------------------------------------------------
 // Tool list sidebar
@@ -405,6 +404,16 @@ export default function Tools() {
   const { data: suggestions } = useToolSuggestions()
   const [selectedToolName, setSelectedToolName] = useState<string | undefined>(undefined)
   const [filterText, setFilterText] = useState('')
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
+
+  const toggleGroup = useCallback((category: string) => {
+    setCollapsedGroups(prev => {
+      const next = new Set(prev)
+      if (next.has(category)) next.delete(category)
+      else next.add(category)
+      return next
+    })
+  }, [])
 
   const filteredTools = tools?.filter((t) =>
     filterText
@@ -420,9 +429,13 @@ export default function Tools() {
       const cat = getToolCategory(tool.name)
       ;(groups[cat] ??= []).push(tool)
     }
-    return CATEGORY_ORDER
-      .filter(cat => groups[cat]?.length)
-      .map(cat => ({ category: cat, tools: groups[cat] }))
+    // Sort groups alphabetically, sort tools within each group alphabetically
+    return Object.keys(groups)
+      .sort()
+      .map(cat => ({
+        category: cat,
+        tools: groups[cat].sort((a, b) => a.name.localeCompare(b.name))
+      }))
   }, [filteredTools])
 
   const selectedTool = tools?.find((t) => t.name === selectedToolName)
@@ -469,10 +482,14 @@ export default function Tools() {
           <div className="flex-1 overflow-y-auto p-2 space-y-1">
             {grouped.map(({ category, tools: groupTools }) => (
               <div key={category}>
-                <div className="px-3 py-1.5 text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                  {category}
-                </div>
-                {groupTools.map((tool) => (
+                <button
+                  onClick={() => toggleGroup(category)}
+                  className="w-full px-3 py-1.5 text-xs font-semibold text-gray-400 uppercase tracking-wider flex items-center justify-between hover:text-gray-600"
+                >
+                  <span>{category}</span>
+                  <span className="text-[10px]">{collapsedGroups.has(category) ? '\u25B6' : '\u25BC'}</span>
+                </button>
+                {!collapsedGroups.has(category) && groupTools.map((tool) => (
                   <ToolListItem
                     key={tool.name}
                     tool={tool}
