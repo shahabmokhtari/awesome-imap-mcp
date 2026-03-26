@@ -97,9 +97,9 @@ public sealed class ImapSyncService
     // ------------------------------------------------------------------
 
     /// <summary>
-    /// Bidirectional sync: first fetches new messages (UID &gt; last_synced_uid),
-    /// then backfills older messages (UID &lt; oldest_synced_uid) in reverse order,
-    /// newest-of-old first, in batches of 100.
+    /// Bidirectional sync: derives current sync boundaries from the actual cached
+    /// messages in the DB (not stored columns), then fetches new messages forward
+    /// and backfills older messages in batches of 100.
     /// </summary>
     public async Task SyncFolderMessagesAsync(
         ImapClientLib client,
@@ -119,10 +119,11 @@ public sealed class ImapSyncService
 
         try
         {
-            var maxUid = folder.LastSyncedUid;
-            var minUid = folder.OldestSyncedUid;
+            // Derive sync boundaries from actual cached data — single source of truth
+            var maxUid = _messageRepo.GetMaxUid(accountId, folder.Id);
+            var minUid = _messageRepo.GetMinUid(accountId, folder.Id);
 
-            // Phase 1: Forward sync — fetch new messages (UID > last_synced_uid)
+            // Phase 1: Forward sync — fetch new messages (UID > max cached)
             {
                 var startUid = new UniqueId((uint)(maxUid + 1));
                 var range = new UniqueIdRange(startUid, UniqueId.MaxValue);
@@ -132,16 +133,12 @@ public sealed class ImapSyncService
                 {
                     await FetchAndStoreMessagesAsync(imapFolder, accountId, folder.Id, newUids, ct).ConfigureAwait(false);
                     maxUid = Math.Max(maxUid, newUids.Max(u => (long)u.Id));
-                    // If this is the first sync, also set minUid to the smallest fetched
                     if (minUid == 0)
                         minUid = newUids.Min(u => (long)u.Id);
-                    else
-                        minUid = Math.Min(minUid, newUids.Min(u => (long)u.Id));
                 }
             }
 
-            // Phase 2: Backfill — fetch older messages (UID < oldest_synced_uid)
-            // Only backfill if we have a starting point and there are older messages
+            // Phase 2: Backfill — fetch older messages (UID < min cached)
             if (minUid > 1)
             {
                 var endUid = new UniqueId((uint)(minUid - 1));
@@ -150,19 +147,17 @@ public sealed class ImapSyncService
 
                 if (oldUids.Count > 0)
                 {
-                    // Fetch in reverse order (newest of the old first), batch of 100
                     var batch = oldUids.OrderByDescending(u => u.Id).Take(100).ToList();
                     await FetchAndStoreMessagesAsync(imapFolder, accountId, folder.Id, batch, ct).ConfigureAwait(false);
                     minUid = batch.Min(u => (long)u.Id);
                 }
                 else
                 {
-                    // No more older messages — mark backfill complete (set oldest to 1)
-                    minUid = 1;
+                    minUid = 1; // Backfill complete
                 }
             }
 
-            // Update folder sync state
+            // Update folder state (for dashboard display and backfill tracking)
             _folderRepo.UpdateSyncState(
                 folder.Id, maxUid, minUid,
                 imapFolder.Count, imapFolder.Unread);

@@ -292,6 +292,21 @@ public class MessageRepository(AppDatabase db)
         return Convert.ToInt64(cmd.ExecuteScalar());
     }
 
+    /// <summary>Gets the minimum (oldest) cached UID for a folder. Returns 0 if no messages cached.</summary>
+    public long GetMinUid(string accountId, int folderId)
+    {
+        using var conn = db.GetReadConnection();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT COALESCE(MIN(mf.uid), 0) FROM message_folders mf
+            JOIN messages m ON m.id = mf.message_id
+            WHERE m.account_id = $a AND mf.folder_id = $f;
+            """;
+        cmd.Parameters.AddWithValue("$a", accountId);
+        cmd.Parameters.AddWithValue("$f", folderId);
+        return Convert.ToInt64(cmd.ExecuteScalar());
+    }
+
     /// <summary>
     /// Gets the most recent messages in a folder, ordered by date descending.
     /// </summary>
