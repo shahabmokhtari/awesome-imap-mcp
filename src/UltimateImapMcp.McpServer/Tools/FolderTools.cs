@@ -12,14 +12,16 @@ public class FolderTools(FolderRepository folderRepo, MessageRepository messageR
     // messageRepo is injected for future use by message-count tools
     private readonly MessageRepository _messageRepo = messageRepo;
 
-    [McpServerTool, Description("List folders for an email account with message and unread counts.")]
+    [McpServerTool, Description(
+        "List all folders for an email account with message counts, unread counts, and sync status.")]
     public string ListFolders([Description("Account ID")] string accountId)
     {
         var folders = folderRepo.GetByAccount(accountId);
         return JsonSerializer.Serialize(folders, JsonOptions);
     }
 
-    [McpServerTool, Description("Get detailed stats for a specific folder.")]
+    [McpServerTool, Description(
+        "Get detailed statistics for a specific folder including message count, size, and sync state.")]
     public string GetFolderStats(
         [Description("Account ID")] string accountId,
         [Description("Folder path")] string folderPath)

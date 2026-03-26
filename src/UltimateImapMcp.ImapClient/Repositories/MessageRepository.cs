@@ -29,6 +29,7 @@ public record SearchFilter
     public long? ToDateEpoch { get; init; }
     public string OrderBy { get; init; } = "date_desc";
     public int MaxResults { get; init; } = 50;
+    public int Offset { get; init; } = 0;
 }
 
 public class MessageRepository(AppDatabase db)
@@ -162,7 +163,7 @@ public class MessageRepository(AppDatabase db)
 
         var join = useFts ? "JOIN messages_fts ON messages_fts.rowid = m.id" : "";
 
-        cmd.CommandText = $"SELECT m.* FROM messages m {join} {where} {orderClause} LIMIT $limit;";
+        cmd.CommandText = $"SELECT m.* FROM messages m {join} {where} {orderClause} LIMIT $limit OFFSET $offset;";
 
         if (useFts) cmd.Parameters.AddWithValue("$query", filter.Query!);
         if (filter.AccountId is not null) cmd.Parameters.AddWithValue("$accountId", filter.AccountId);
@@ -173,6 +174,7 @@ public class MessageRepository(AppDatabase db)
         if (filter.FromDateEpoch is not null) cmd.Parameters.AddWithValue("$fromDate", filter.FromDateEpoch.Value);
         if (filter.ToDateEpoch is not null) cmd.Parameters.AddWithValue("$toDate", filter.ToDateEpoch.Value);
         cmd.Parameters.AddWithValue("$limit", filter.MaxResults);
+        cmd.Parameters.AddWithValue("$offset", filter.Offset);
 
         using var reader = cmd.ExecuteReader();
         var list = new List<MessageRecord>();

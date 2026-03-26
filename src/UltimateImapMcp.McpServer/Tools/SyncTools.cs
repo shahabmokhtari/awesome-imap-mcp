@@ -11,7 +11,9 @@ public class SyncTools(SyncManager syncManager, AccountRepository accountRepo)
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
-    [McpServerTool, Description("Trigger immediate sync for a folder or all folders.")]
+    [McpServerTool, Description(
+        "Trigger an immediate IMAP sync for one folder or all folders. " +
+        "New messages will appear in search and list results after sync completes.")]
     public async Task<string> SyncNow(
         [Description("Account ID")] string accountId,
         [Description("Folder path (optional, syncs all if omitted)")] string? folderPath = null)
@@ -45,7 +47,8 @@ public class SyncTools(SyncManager syncManager, AccountRepository accountRepo)
         }
     }
 
-    [McpServerTool, Description("Get sync status for all folders of an account.")]
+    [McpServerTool, Description(
+        "Get real-time sync status for all folders showing last sync time, message counts, and current sync state.")]
     public string GetSyncStatus([Description("Account ID")] string accountId)
     {
         var resolvedId = ResolveAccountId(accountId);

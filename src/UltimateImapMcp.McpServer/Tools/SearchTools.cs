@@ -13,7 +13,8 @@ public class SearchTools(MessageRepository messageRepo, FolderRepository folderR
 
     [McpServerTool, Description(
         "Search emails with flexible filters. Searches local cache by default. " +
-        "Use server_search=true to search directly on the IMAP server (slower but searches all mail).")]
+        "Use server_search=true to search directly on the IMAP server (slower but searches all mail). " +
+        "Combine query, from, to, subject, and date filters to narrow results.")]
     public async Task<string> SearchEmails(
         [Description("Search query text (FTS match for local, IMAP SEARCH for server)")] string? query = null,
         [Description("Account ID (required for server_search)")] string? accountId = null,
@@ -25,6 +26,7 @@ public class SearchTools(MessageRepository messageRepo, FolderRepository folderR
         [Description("End date (ISO 8601, e.g., 2026-03-25)")] string? toDate = null,
         [Description("Sort order: date_desc (default), date_asc, from, subject, size_desc")] string order = "date_desc",
         [Description("Max results (default 20)")] int maxResults = 20,
+        [Description("Offset for pagination (default: 0)")] int offset = 0,
         [Description("Summary only (default: true)")] bool summaryOnly = true,
         [Description("Search on IMAP server instead of local cache (default: false)")] bool serverSearch = false,
         [Description("Max body length when summary_only=false (0=unlimited)")] int maxBodyLength = 0)
@@ -71,6 +73,7 @@ public class SearchTools(MessageRepository messageRepo, FolderRepository folderR
                     ToDateEpoch = toEpoch,
                     OrderBy = order,
                     MaxResults = maxResults,
+                    Offset = offset,
                 });
             }
 

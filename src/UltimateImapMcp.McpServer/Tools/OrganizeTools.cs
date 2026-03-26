@@ -25,7 +25,8 @@ public class OrganizeTools(QueueManager queueManager)
         return result;
     }
 
-    [McpServerTool, Description("Delete one or more messages by UID from a folder.")]
+    [McpServerTool, Description(
+        "Delete one or more messages by UID. Messages are moved to trash on most IMAP servers. This operation is queued.")]
     public string DeleteMessages(
         [Description("Account ID")] string accountId,
         [Description("Comma-separated list of message UIDs")] string uids,
@@ -47,7 +48,8 @@ public class OrganizeTools(QueueManager queueManager)
         }
     }
 
-    [McpServerTool, Description("Move one or more messages from one folder to another.")]
+    [McpServerTool, Description(
+        "Move messages between folders (e.g., INBOX to Archive). This operation is queued.")]
     public string MoveMessages(
         [Description("Account ID")] string accountId,
         [Description("Comma-separated list of message UIDs")] string uids,
@@ -70,7 +72,7 @@ public class OrganizeTools(QueueManager queueManager)
         }
     }
 
-    [McpServerTool, Description("Mark one or more messages as read.")]
+    [McpServerTool, Description("Mark one or more messages as read. This operation is queued.")]
     public string MarkRead(
         [Description("Account ID")] string accountId,
         [Description("Comma-separated list of message UIDs")] string uids,
@@ -91,7 +93,7 @@ public class OrganizeTools(QueueManager queueManager)
         }
     }
 
-    [McpServerTool, Description("Mark one or more messages as unread.")]
+    [McpServerTool, Description("Mark one or more messages as unread. This operation is queued.")]
     public string MarkUnread(
         [Description("Account ID")] string accountId,
         [Description("Comma-separated list of message UIDs")] string uids,
@@ -112,7 +114,7 @@ public class OrganizeTools(QueueManager queueManager)
         }
     }
 
-    [McpServerTool, Description("Flag or unflag one or more messages.")]
+    [McpServerTool, Description("Flag or unflag one or more messages (starred/important marker). This operation is queued.")]
     public string FlagMessages(
         [Description("Account ID")] string accountId,
         [Description("Comma-separated list of message UIDs")] string uids,
@@ -135,7 +137,7 @@ public class OrganizeTools(QueueManager queueManager)
         }
     }
 
-    [McpServerTool, Description("Add or remove a label from one or more messages.")]
+    [McpServerTool, Description("Add or remove a label from one or more messages. This operation is queued.")]
     public string LabelMessages(
         [Description("Account ID")] string accountId,
         [Description("Comma-separated list of message UIDs")] string uids,

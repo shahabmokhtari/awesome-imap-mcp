@@ -16,22 +16,23 @@ public class MessageTools(
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
     [McpServerTool, Description(
-        "Get a single email message. Provide either 'messageId' (database ID) alone, " +
-        "or 'accountId' + 'uid' (with optional 'folderId'). " +
-        "Automatically fetches message body from server if not yet cached.")]
+        "Get a single email message with full details including body and attachments. " +
+        "Provide either 'messageId' (database ID) alone, or 'accountId' + 'uid' (with optional 'folderId'). " +
+        "Automatically fetches message body from server if not yet cached (unless fetchBody=false).")]
     public async Task<string> GetMessage(
         [Description("Database message ID (if provided, other ID params are ignored)")] int? messageId = null,
         [Description("Account ID")] string? accountId = null,
         [Description("Folder ID (integer, optional if messageId is provided)")] int? folderId = null,
         [Description("Message UID")] int? uid = null,
-        [Description("Max body length (0=unlimited, default: 0)")] int maxBodyLength = 0)
+        [Description("Max body length (0=unlimited, default: 0)")] int maxBodyLength = 0,
+        [Description("Fetch body from server if not cached (default: true). Set false for metadata only.")] bool fetchBody = true)
     {
         var msg = ResolveMessage(messageId, accountId, folderId, uid);
         if (msg is null)
             return Error("Message not found. Provide 'messageId' or 'accountId'+'uid'.");
 
-        // Auto-fetch body if not yet cached
-        if (!msg.BodyFetched)
+        // Auto-fetch body if not yet cached and fetchBody is enabled
+        if (!msg.BodyFetched && fetchBody)
         {
             try
             {
@@ -101,10 +102,11 @@ public class MessageTools(
     }
 
     [McpServerTool, Description(
-        "Get all messages in a conversation thread, ordered by date.")]
+        "Get all messages in a conversation thread, ordered by date. " +
+        "Returns summary by default; set summary_only=false to include full message bodies.")]
     public string GetThread(
         [Description("Thread ID (hash)")] string threadId,
-        [Description("Summary only (default: false)")] bool summaryOnly = false,
+        [Description("Summary only — omits body text (default: true)")] bool summaryOnly = true,
         [Description("Max body length in characters (0=unlimited, default: 0). Applied when summary_only=false.")] int maxBodyLength = 0)
     {
         var messages = messageRepo.GetByThreadId(threadId);

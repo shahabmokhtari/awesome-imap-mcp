@@ -10,7 +10,8 @@ public class AccountTools(AccountRepository accountRepo)
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
-    [McpServerTool, Description("List all configured email accounts and their status.")]
+    [McpServerTool, Description(
+        "List all configured email accounts with connection status, message counts, and sync state.")]
     public string ListAccounts()
     {
         var accounts = accountRepo.GetAll()
@@ -26,7 +27,8 @@ public class AccountTools(AccountRepository accountRepo)
         return JsonSerializer.Serialize(accounts, JsonOptions);
     }
 
-    [McpServerTool, Description("Get detailed status for a specific email account.")]
+    [McpServerTool, Description(
+        "Get detailed status for an email account including IMAP/SMTP config, sync progress, and folder counts.")]
     public string GetAccountStatus([Description("Account ID or name")] string accountId)
     {
         var account = accountRepo.ResolveAccount(accountId);

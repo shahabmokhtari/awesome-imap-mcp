@@ -12,15 +12,18 @@ public class ComposeTools(QueueManager queueManager)
     private readonly QueueManager _queueManager = queueManager;
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
-    [McpServerTool, Description("Compose and send a new email. Returns a pending_id and confirm_mode.")]
+    [McpServerTool, Description(
+        "Compose and send a new email. The message is queued and may require confirmation depending on account settings. " +
+        "Returns a pending_id for tracking.")]
     public string SendEmail(
         [Description("Account ID")] string accountId,
         [Description("Recipient email address(es), comma-separated")] string to,
         [Description("Email subject")] string subject,
         [Description("Email body (plain text)")] string body,
-        [Description("CC recipient(s), comma-separated (optional)")] string? cc = null)
+        [Description("CC recipient(s), comma-separated (optional)")] string? cc = null,
+        [Description("BCC recipient(s), comma-separated")] string? bcc = null)
     {
-        var payload = JsonSerializer.Serialize(new { to, subject, body, cc });
+        var payload = JsonSerializer.Serialize(new { to, subject, body, cc, bcc });
         var result = _queueManager.EnqueueSend(accountId, payload);
 
         return JsonSerializer.Serialize(new
@@ -33,7 +36,9 @@ public class ComposeTools(QueueManager queueManager)
         }, JsonOptions);
     }
 
-    [McpServerTool, Description("Reply to an existing email message.")]
+    [McpServerTool, Description(
+        "Reply to an existing email. Set reply_all=true to include all original recipients. " +
+        "The original message is automatically quoted.")]
     public string ReplyTo(
         [Description("Account ID")] string accountId,
         [Description("Message UID to reply to")] int uid,
@@ -54,7 +59,9 @@ public class ComposeTools(QueueManager queueManager)
         }, JsonOptions);
     }
 
-    [McpServerTool, Description("Forward an email message to one or more recipients.")]
+    [McpServerTool, Description(
+        "Forward an email to new recipients. The original message content is automatically included. " +
+        "Add optional body text as a preamble.")]
     public string Forward(
         [Description("Account ID")] string accountId,
         [Description("Message UID to forward")] int uid,

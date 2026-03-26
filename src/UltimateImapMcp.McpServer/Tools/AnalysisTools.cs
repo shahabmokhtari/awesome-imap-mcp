@@ -18,9 +18,10 @@ public class AnalysisTools(
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
     [McpServerTool, Description(
-        "Analyze an email using LLM. Returns spam score, category, priority, summary, or custom analysis. " +
-        "Provide either 'messageId' (database ID) alone, or 'accountId' + 'uid' (with optional 'folderId'). " +
-        "If using in-context mode, returns the email data with instructions for you to perform the analysis.")]
+        "Analyze an email using the configured LLM provider. " +
+        "Types: 'summary' (key points), 'spam_score' (0-100 spam likelihood), 'category' (inbox/promotion/social/update), " +
+        "'priority' (high/medium/low), 'custom' (freeform). " +
+        "Provide messageId alone, or accountId + uid.")]
     public async Task<string> AnalyzeEmail(
         [Description("Database message ID (if provided, accountId/uid/folderId are ignored)")] int? messageId = null,
         [Description("Account ID")] string? accountId = null,
@@ -87,7 +88,8 @@ public class AnalysisTools(
     }
 
     [McpServerTool, Description(
-        "Analyze multiple emails in a folder. Returns analysis results for up to `limit` messages.")]
+        "Batch-analyze emails in a folder using LLM. Processes up to 'limit' messages sequentially. " +
+        "Respects the configured daily token budget.")]
     public async Task<string> AnalyzeFolder(
         [Description("Account ID")] string accountId,
         [Description("Folder path (e.g., INBOX)")] string folderPath,
@@ -176,7 +178,7 @@ public class AnalysisTools(
     }
 
     [McpServerTool, Description(
-        "Get stored LLM analysis results. Filter by account, type, or get all.")]
+        "Get stored LLM analysis results. Filter by account, type, or get all cached analyses.")]
     public string GetAnalysis(
         [Description("Account ID (optional, all accounts if omitted)")] string? accountId = null,
         [Description("Analysis type filter (optional): spam_score, category, priority, summary, custom")] string? type = null,
