@@ -269,6 +269,15 @@ if (transport is "http" or "both")
 
 var host = builder.Build();
 
+// Wire dashboard active status to coordinator
+{
+    var coordinator = host.Services.GetRequiredService<IInstanceCoordinator>() as InstanceCoordinator;
+    var dashboardHost = host.Services.GetServices<IHostedService>()
+        .OfType<UltimateImapMcp.Dashboard.DashboardHost>().FirstOrDefault();
+    if (coordinator is not null && dashboardHost is not null)
+        coordinator.SetDashboardActiveProvider(() => dashboardHost.IsActivelyServing);
+}
+
 // Wire sync events to the dashboard event bus (if dashboard is enabled)
 {
     var syncMgr = host.Services.GetRequiredService<SyncManager>();

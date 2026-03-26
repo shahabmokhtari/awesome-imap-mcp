@@ -23,6 +23,8 @@ public sealed class InstanceCoordinator : BackgroundService, IInstanceCoordinato
     public bool IsLeader { get; private set; }
     public string InstanceId => _instanceInfo.Id;
 
+    private Func<bool>? _dashboardActiveProvider;
+
     public InstanceCoordinator(
         HealthDatabase healthDb,
         InstanceInfo instanceInfo,
@@ -39,6 +41,9 @@ public sealed class InstanceCoordinator : BackgroundService, IInstanceCoordinato
         _logger = logger;
         _startedAt = DateTime.UtcNow.ToString("o");
     }
+
+    /// <summary>Set a callback that returns whether the dashboard is actively serving.</summary>
+    public void SetDashboardActiveProvider(Func<bool> provider) => _dashboardActiveProvider = provider;
 
     /// <summary>
     /// Determines the leader instance from a list of heartbeats.
@@ -149,12 +154,16 @@ public sealed class InstanceCoordinator : BackgroundService, IInstanceCoordinato
         try { accountCount = _accountCountProvider(); }
         catch { /* best effort */ }
 
+        // IsDashboardHost = actually serving (not just enabled in config)
+        var isDashboardActive = _config.Server.DashboardEnabled
+            && (_dashboardActiveProvider?.Invoke() ?? false);
+
         _healthDb.UpsertHeartbeat(
             _instanceInfo.Id,
             Environment.ProcessId,
             Environment.CurrentDirectory,
             _config.Server.Transport,
-            _config.Server.DashboardEnabled,
+            isDashboardActive,
             _startedAt,
             now,
             accountCount,

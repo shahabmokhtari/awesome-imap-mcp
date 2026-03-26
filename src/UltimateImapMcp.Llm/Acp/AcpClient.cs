@@ -387,59 +387,41 @@ public class AcpClient : IAsyncDisposable
             };
         }
 
-        // Check for session/prompt result (final response with stopReason)
-        if (root.TryGetProperty("result", out var result))
+        // Check for session/update notification (streaming events — no "id" field)
+        if (root.TryGetProperty("method", out var method))
         {
-            if (result.TryGetProperty("stopReason", out _))
+            var methodName = method.GetString();
+            if (methodName == "session/update"
+                && root.TryGetProperty("params", out var @params)
+                && @params.TryGetProperty("update", out var update))
             {
-                return new AcpEvent { Type = AcpEventType.Complete };
-            }
+                var updateType = update.TryGetProperty("sessionUpdate", out var su)
+                    ? su.GetString() : null;
 
-            // Legacy: check for type-based result
-            var eventType = result.TryGetProperty("type", out var t) ? t.GetString() : null;
-            if (eventType is not null)
-            {
-                return eventType switch
+                return updateType switch
                 {
-                    "text_delta" => new AcpEvent
-                    {
-                        Type = AcpEventType.TextDelta,
-                        Text = result.TryGetProperty("text", out var text) ? text.GetString() : null
-                    },
-                    "complete" => new AcpEvent { Type = AcpEventType.Complete },
-                    "error" => new AcpEvent
-                    {
-                        Type = AcpEventType.Error,
-                        Error = result.TryGetProperty("message", out var errMsg) ? errMsg.GetString() : null
-                    },
-                    _ => new AcpEvent { Type = AcpEventType.TextDelta, Text = result.ToString() }
+                    "agent_message_chunk" => ParseAgentMessageChunk(update),
+                    "agent_message_start" => new AcpEvent { Type = AcpEventType.TextDelta, Text = "" },
+                    "agent_message_end" => new AcpEvent { Type = AcpEventType.TextDelta, Text = "" },
+                    "tool_use" or "tool_use_start" => new AcpEvent { Type = AcpEventType.ToolUse },
+                    "tool_result" => new AcpEvent { Type = AcpEventType.TextDelta, Text = "" },
+                    "permission_request" => new AcpEvent { Type = AcpEventType.PermissionRequest },
+                    _ => new AcpEvent { Type = AcpEventType.TextDelta, Text = "" }
                 };
             }
 
+            // Other notifications — ignore
+            return new AcpEvent { Type = AcpEventType.TextDelta, Text = "" };
+        }
+
+        // JSON-RPC response (has "id" field) — this is the final session/prompt result
+        if (root.TryGetProperty("id", out _) && root.TryGetProperty("result", out _))
+        {
+            // The session/prompt result signals completion (all text was in session/update events)
             return new AcpEvent { Type = AcpEventType.Complete };
         }
 
-        // Check for session/update notification (streaming events)
-        if (root.TryGetProperty("method", out var method) && method.GetString() == "session/update"
-            && root.TryGetProperty("params", out var @params)
-            && @params.TryGetProperty("update", out var update))
-        {
-            var updateType = update.TryGetProperty("sessionUpdate", out var su)
-                ? su.GetString() : null;
-
-            return updateType switch
-            {
-                "agent_message_chunk" => ParseAgentMessageChunk(update),
-                "agent_message_start" => new AcpEvent { Type = AcpEventType.TextDelta, Text = "" },
-                "agent_message_end" => new AcpEvent { Type = AcpEventType.TextDelta, Text = "" },
-                "tool_use" or "tool_use_start" => new AcpEvent { Type = AcpEventType.ToolUse },
-                "tool_result" => new AcpEvent { Type = AcpEventType.TextDelta, Text = "" },
-                "permission_request" => new AcpEvent { Type = AcpEventType.PermissionRequest },
-                _ => new AcpEvent { Type = AcpEventType.TextDelta, Text = "" }
-            };
-        }
-
-        // Fallback
+        // Fallback — treat unknown as no-op
         return new AcpEvent { Type = AcpEventType.TextDelta, Text = "" };
     }
 
