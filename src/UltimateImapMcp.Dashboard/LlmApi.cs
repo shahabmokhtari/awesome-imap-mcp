@@ -46,13 +46,32 @@ public static class LlmApi
             if (body is null || string.IsNullOrWhiteSpace(body.Prompt))
                 return Results.BadRequest(new { error = "prompt is required" });
 
+            var effectiveProvider = body.Provider ?? llmConfig.Provider;
+
+            // ACP/in_context providers don't use ChatClient — return a helpful message
+            if (!ChatClientFactory.RequiresApiKey(effectiveProvider))
+            {
+                return Results.Ok(new
+                {
+                    response = $"Provider '{effectiveProvider}' uses an external agent and cannot be tested via the API. It does not require an API key.",
+                    model = body.Model ?? llmConfig.Model,
+                    duration_ms = 0L,
+                });
+            }
+
+            // Resolve API key: request body → provider-specific → global
+            string? resolvedKey = null;
+            if (!string.IsNullOrEmpty(body.ApiKey))
+                resolvedKey = body.ApiKey;
+            else
+                resolvedKey = llmConfig.ResolveApiKey(effectiveProvider);
+
             var effectiveConfig = new LlmConfig
             {
                 Enabled = true,
-                Provider = body.Provider ?? llmConfig.Provider,
+                Provider = effectiveProvider,
                 Model = body.Model ?? llmConfig.Model,
-                ApiKey = llmConfig.ApiKey,
-                ApiKeyEnv = llmConfig.ApiKeyEnv,
+                ApiKey = resolvedKey,
             };
 
             IChatClient? client = null;
@@ -191,4 +210,5 @@ file record LlmTestRequest
     public string? Prompt { get; init; }
     public string? Provider { get; init; }
     public string? Model { get; init; }
+    public string? ApiKey { get; init; }
 }

@@ -49,7 +49,10 @@ public static class SettingsApi
                     config.Llm.Model,
                     config.Llm.DailyTokenBudget,
                     config.Llm.MonthlyCostLimit,
-                    config.Llm.AutoAnalyzeNew
+                    config.Llm.AutoAnalyzeNew,
+                    ProviderApiKeys = config.Llm.ProviderApiKeys.ToDictionary(
+                        kvp => kvp.Key,
+                        kvp => string.IsNullOrEmpty(kvp.Value) ? "" : "***")
                 },
                 Sync = new
                 {
@@ -116,6 +119,15 @@ public static class SettingsApi
                 if (l.DailyTokenBudget is { } dtb) { config.Llm.DailyTokenBudget = dtb; changed.Add("llm.daily_token_budget"); }
                 if (l.MonthlyCostLimit is { } mcl) { config.Llm.MonthlyCostLimit = mcl; changed.Add("llm.monthly_cost_limit"); }
                 if (l.AutoAnalyzeNew is { } aan) { config.Llm.AutoAnalyzeNew = aan; changed.Add("llm.auto_analyze_new"); }
+                if (l.ProviderApiKeys is not null)
+                {
+                    foreach (var (provider, key) in l.ProviderApiKeys)
+                    {
+                        if (key == "***") continue; // Skip unchanged keys
+                        config.Llm.ProviderApiKeys[provider] = key;
+                    }
+                    changed.Add("llm.provider_api_keys");
+                }
             }
 
             // Sync settings
@@ -214,6 +226,7 @@ file record LlmSettingsUpdate
     public int? DailyTokenBudget { get; init; }
     public double? MonthlyCostLimit { get; init; }
     public bool? AutoAnalyzeNew { get; init; }
+    public Dictionary<string, string>? ProviderApiKeys { get; init; }
 }
 
 file record SyncSettingsUpdate

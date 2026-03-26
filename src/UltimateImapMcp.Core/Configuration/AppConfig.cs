@@ -251,12 +251,28 @@ public class LlmConfig
     [JsonPropertyName("auto_analyze_new")]
     public bool AutoAnalyzeNew { get; set; } = false;
 
+    [JsonPropertyName("provider_api_keys")]
+    public Dictionary<string, string> ProviderApiKeys { get; set; } = new();
+
     [JsonPropertyName("acp")]
     public AcpConfig Acp { get; set; } = new();
 
-    /// <summary>Resolve the API key from config or environment variable.</summary>
-    public string? ResolveApiKey() =>
-        ApiKey ?? (ApiKeyEnv is not null ? Environment.GetEnvironmentVariable(ApiKeyEnv) : null);
+    /// <summary>Resolve the API key from config or environment variable, optionally checking provider-specific keys first.</summary>
+    public string? ResolveApiKey(string? provider = null)
+    {
+        // Check provider-specific key first
+        if (provider is not null && ProviderApiKeys.TryGetValue(provider, out var providerKey) && !string.IsNullOrEmpty(providerKey))
+            return providerKey;
+
+        // Fall back to global key
+        if (!string.IsNullOrEmpty(ApiKey)) return ApiKey;
+        if (!string.IsNullOrEmpty(ApiKeyEnv))
+        {
+            var envValue = Environment.GetEnvironmentVariable(ApiKeyEnv);
+            if (!string.IsNullOrEmpty(envValue)) return envValue;
+        }
+        return null;
+    }
 }
 
 /// <summary>Agent Client Protocol configuration for spawning LLM agents.</summary>
