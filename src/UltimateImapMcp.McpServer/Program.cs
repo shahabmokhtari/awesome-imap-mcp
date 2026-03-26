@@ -6,6 +6,7 @@ using UltimateImapMcp.Core;
 using UltimateImapMcp.Core.Configuration;
 using UltimateImapMcp.Core.Database;
 using UltimateImapMcp.Core.Encryption;
+using UltimateImapMcp.Core.Coordination;
 using UltimateImapMcp.Core.Logging;
 using UltimateImapMcp.Core.OAuth;
 using UltimateImapMcp.Core.Providers;
@@ -76,6 +77,18 @@ if (args.Contains("--dashboard-auto-open"))
 var dbPath = ConfigLoader.ResolveDbPath(config.Cache.DbPath);
 var database = new AppDatabase(dbPath);
 MigrationRunner.Migrate(database);
+
+var healthDbPath = Path.Combine(Path.GetDirectoryName(dbPath)!, "health.db");
+var healthDatabase = new HealthDatabase(healthDbPath);
+builder.Services.AddSingleton(healthDatabase);
+
+builder.Services.AddSingleton<Func<int>>(sp =>
+{
+    var repo = sp.GetRequiredService<AccountRepository>();
+    return () => { try { return repo.GetAll().Count; } catch { return 0; } };
+});
+builder.Services.AddSingleton<IInstanceCoordinator, InstanceCoordinator>();
+builder.Services.AddHostedService(sp => (InstanceCoordinator)sp.GetRequiredService<IInstanceCoordinator>());
 
 // Clean up orphaned OAuth tokens from previously deleted accounts
 new OAuthTokenRepository(database).CleanOrphans();
