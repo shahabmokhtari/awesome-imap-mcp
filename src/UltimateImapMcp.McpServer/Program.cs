@@ -202,18 +202,22 @@ builder.Services.AddSingleton<IEmailAnalyzer>(sp =>
     var llmConfig = sp.GetRequiredService<LlmConfig>();
     var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
 
+    var prompts = llmConfig.AnalysisPrompts.Count > 0 ? llmConfig.AnalysisPrompts : null;
+
     return llmConfig.Provider.ToLowerInvariant() switch
     {
         "anthropic" or "openai" when llmConfig.Enabled =>
             new ApiEmailAnalyzer(
                 ChatClientFactory.Create(llmConfig),
                 llmConfig.Model,
-                loggerFactory.CreateLogger<ApiEmailAnalyzer>()),
+                loggerFactory.CreateLogger<ApiEmailAnalyzer>(),
+                prompts),
 
         var p when (p is "acp_claude" or "acp_copilot") && llmConfig.Enabled =>
             new AcpEmailAnalyzer(
                 sp.GetRequiredService<IAcpClientPool>(),
-                loggerFactory.CreateLogger<AcpEmailAnalyzer>()),
+                loggerFactory.CreateLogger<AcpEmailAnalyzer>(),
+                prompts),
 
         "in_context" => new InContextAnalyzer(),
 

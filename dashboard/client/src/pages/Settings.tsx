@@ -573,6 +573,11 @@ function LlmSectionCard({
   const [providerKeys, setProviderKeys] = useState<Record<string, string>>({ ...providerApiKeys })
   const [keysDirty, setKeysDirty] = useState(false)
 
+  // Analysis prompts state
+  const analysisPrompts = (values.analysisPrompts ?? {}) as Record<string, string>
+  const [prompts, setPrompts] = useState<Record<string, string>>({ ...analysisPrompts })
+  const [promptsDirty, setPromptsDirty] = useState(false)
+
   // Sync provider from upstream when settings are reloaded
   useEffect(() => {
     setCurrentProvider(values.provider as string | undefined)
@@ -583,19 +588,33 @@ function LlmSectionCard({
     setKeysDirty(false)
   }, [values.providerApiKeys])
 
+  useEffect(() => {
+    setPrompts({ ...(values.analysisPrompts ?? {}) as Record<string, string> })
+    setPromptsDirty(false)
+  }, [values.analysisPrompts])
+
+  const handlePromptChange = useCallback((type: string, value: string) => {
+    setPrompts(prev => ({ ...prev, [type]: value }))
+    setPromptsDirty(true)
+  }, [])
+
   const handleFormChange = useCallback((form: Record<string, unknown>) => {
     const provider = form.provider as string | undefined
     setCurrentProvider(prev => prev === provider ? prev : provider)
   }, [])
 
-  // Wrap onSave to include providerApiKeys
+  // Wrap onSave to include providerApiKeys and analysisPrompts
   const handleSave = useCallback((section: string, data: Record<string, unknown>) => {
     if (keysDirty) {
       data.providerApiKeys = providerKeys
     }
+    if (promptsDirty) {
+      data.analysisPrompts = prompts
+    }
     onSave(section, data)
     setKeysDirty(false)
-  }, [onSave, providerKeys, keysDirty])
+    setPromptsDirty(false)
+  }, [onSave, providerKeys, keysDirty, prompts, promptsDirty])
 
   const handleKeyChange = useCallback((provider: string, value: string) => {
     setProviderKeys(prev => {
@@ -616,6 +635,7 @@ function LlmSectionCard({
         skipFields={new Set([
           ...(hasModels ? [] : ['model']),
           'providerApiKeys',
+          'analysisPrompts',
           ...(isKeyless ? ['dailyTokenBudget', 'monthlyCostLimit'] : []),
         ])}
         onFormChange={handleFormChange}
@@ -653,6 +673,32 @@ function LlmSectionCard({
               </p>
             )}
           </div>
+        )}
+      </div>
+
+      <div className="bg-white rounded-lg shadow p-5">
+        <h3 className="text-lg font-medium text-gray-800 mb-2">Analysis Prompts</h3>
+        <p className="text-sm text-gray-500 mb-4">
+          Customize the default prompts used for email analysis. Leave blank to use built-in defaults.
+        </p>
+        {(['summary', 'spam_score', 'category', 'priority', 'custom'] as const).map(type => (
+          <div key={type} className="mb-4">
+            <label className="block text-sm font-medium text-gray-600 mb-1 capitalize">
+              {type.replace('_', ' ')} prompt
+            </label>
+            <textarea
+              rows={3}
+              value={prompts[type] ?? ''}
+              onChange={e => handlePromptChange(type, e.target.value)}
+              placeholder={`Default ${type.replace('_', ' ')} prompt (leave blank for built-in)`}
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+        ))}
+        {promptsDirty && (
+          <p className="text-xs text-amber-600">
+            Prompt changes will be saved when you click &quot;Save Changes&quot; in the LLM section above.
+          </p>
         )}
       </div>
     </div>
