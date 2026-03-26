@@ -292,7 +292,7 @@ function ServerControlsCard() {
         </div>
       )}
 
-      {serverInfo && !instancesData && (
+      {serverInfo && !instancesData && !instancesLoading && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
           <div>
             <span className="block text-xs text-gray-500">Instance ID</span>
