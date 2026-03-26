@@ -40,7 +40,8 @@ public class MessageRepository(AppDatabase db)
         string? toAddresses, string? ccAddresses, string? bccAddresses,
         string date, long? dateEpoch, string? flags, int? sizeBytes,
         bool hasAttachments, string? snippet,
-        string? bodyText = null, string? bodyHtml = null, string? rawHeaders = null)
+        string? bodyText = null, string? bodyHtml = null, string? rawHeaders = null,
+        bool synced = true)
     {
         db.ExecuteWrite(conn =>
         {
@@ -49,11 +50,11 @@ public class MessageRepository(AppDatabase db)
                 INSERT OR IGNORE INTO messages (account_id, folder_id, uid, message_id,
                     in_reply_to, references_hdr, thread_id, subject, from_address, from_email,
                     to_addresses, cc_addresses, bcc_addresses, date, date_epoch, flags,
-                    size_bytes, has_attachments, body_text, body_html, body_fetched, snippet, raw_headers)
+                    size_bytes, has_attachments, body_text, body_html, body_fetched, snippet, raw_headers, synced)
                 VALUES ($accountId, $folderId, $uid, $messageId,
                     $inReplyTo, $referencesHdr, $threadId, $subject, $fromAddress, $fromEmail,
                     $toAddresses, $ccAddresses, $bccAddresses, $date, $dateEpoch, $flags,
-                    $sizeBytes, $hasAttachments, $bodyText, $bodyHtml, $bodyFetched, $snippet, $rawHeaders);
+                    $sizeBytes, $hasAttachments, $bodyText, $bodyHtml, $bodyFetched, $snippet, $rawHeaders, $synced);
                 """;
             cmd.Parameters.AddWithValue("$accountId", accountId);
             cmd.Parameters.AddWithValue("$folderId", folderId);
@@ -78,6 +79,7 @@ public class MessageRepository(AppDatabase db)
             cmd.Parameters.AddWithValue("$bodyFetched", (bodyText != null || bodyHtml != null) ? 1 : 0);
             cmd.Parameters.AddWithValue("$snippet", (object?)snippet ?? DBNull.Value);
             cmd.Parameters.AddWithValue("$rawHeaders", (object?)rawHeaders ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$synced", synced ? 1 : 0);
             cmd.ExecuteNonQuery();
 
             // Also link to the folder in the junction table
@@ -107,7 +109,7 @@ public class MessageRepository(AppDatabase db)
         string? subject, string? fromAddress, string? fromEmail,
         string? toAddresses, string? ccAddresses, string? bccAddresses,
         string? date, long? dateEpoch, string? flags, int? sizeBytes,
-        bool hasAttachments, string? snippet)
+        bool hasAttachments, string? snippet, bool synced = true)
     {
         // Check if this RFC message_id already exists for this account
         if (!string.IsNullOrEmpty(messageId))
@@ -124,7 +126,8 @@ public class MessageRepository(AppDatabase db)
         // New message — insert it
         Insert(accountId, folderId, uid, messageId, inReplyTo, referencesHdr, threadId,
             subject, fromAddress, fromEmail, toAddresses, ccAddresses, bccAddresses,
-            date ?? DateTimeOffset.UtcNow.ToString("o"), dateEpoch, flags, sizeBytes, hasAttachments, snippet);
+            date ?? DateTimeOffset.UtcNow.ToString("o"), dateEpoch, flags, sizeBytes, hasAttachments, snippet,
+            synced: synced);
 
         // Get the inserted record's ID
         var inserted = GetByUidDirect(accountId, folderId, uid);
@@ -278,6 +281,7 @@ public class MessageRepository(AppDatabase db)
         });
     }
 
+    /// <summary>Gets the maximum (newest) synced UID for a folder. Excludes on-demand fetched messages.</summary>
     public long GetMaxUid(string accountId, int folderId)
     {
         using var conn = db.GetReadConnection();
@@ -285,14 +289,14 @@ public class MessageRepository(AppDatabase db)
         cmd.CommandText = """
             SELECT COALESCE(MAX(mf.uid), 0) FROM message_folders mf
             JOIN messages m ON m.id = mf.message_id
-            WHERE m.account_id = $a AND mf.folder_id = $f;
+            WHERE m.account_id = $a AND mf.folder_id = $f AND m.synced = 1;
             """;
         cmd.Parameters.AddWithValue("$a", accountId);
         cmd.Parameters.AddWithValue("$f", folderId);
         return Convert.ToInt64(cmd.ExecuteScalar());
     }
 
-    /// <summary>Gets the minimum (oldest) cached UID for a folder. Returns 0 if no messages cached.</summary>
+    /// <summary>Gets the minimum (oldest) synced UID for a folder. Excludes on-demand fetched messages.</summary>
     public long GetMinUid(string accountId, int folderId)
     {
         using var conn = db.GetReadConnection();
@@ -300,7 +304,7 @@ public class MessageRepository(AppDatabase db)
         cmd.CommandText = """
             SELECT COALESCE(MIN(mf.uid), 0) FROM message_folders mf
             JOIN messages m ON m.id = mf.message_id
-            WHERE m.account_id = $a AND mf.folder_id = $f;
+            WHERE m.account_id = $a AND mf.folder_id = $f AND m.synced = 1;
             """;
         cmd.Parameters.AddWithValue("$a", accountId);
         cmd.Parameters.AddWithValue("$f", folderId);
