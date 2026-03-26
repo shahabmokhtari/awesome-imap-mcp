@@ -382,6 +382,56 @@ export function useSearchMessages(accountId: string | undefined, query: string, 
   })
 }
 
+export function useFetchBody() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (params: { accountId: string; folderId: number; uid: number }) =>
+      apiFetch<MessageDetail>(
+        `/api/messages/${encodeURIComponent(params.accountId)}/${params.folderId}/${params.uid}/fetch-body`,
+        { method: 'POST' }),
+    onSuccess: (_, params) => {
+      qc.invalidateQueries({ queryKey: ['message', params.accountId, params.folderId, params.uid] })
+    },
+  })
+}
+
+export function useClearCache() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => apiFetch<{ deleted: number }>('/api/cache', { method: 'DELETE' }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['messages'] })
+      qc.invalidateQueries({ queryKey: ['sync-status'] })
+    },
+  })
+}
+
+export function useClearAccountCache() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (accountId: string) =>
+      apiFetch<{ deleted: number }>(`/api/cache/${encodeURIComponent(accountId)}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['messages'] })
+      qc.invalidateQueries({ queryKey: ['sync-status'] })
+    },
+  })
+}
+
+export function useClearFolderCache() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (params: { accountId: string; folderId: number }) =>
+      apiFetch<{ deleted: number }>(
+        `/api/cache/${encodeURIComponent(params.accountId)}/${params.folderId}`,
+        { method: 'DELETE' }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['messages'] })
+      qc.invalidateQueries({ queryKey: ['sync-status'] })
+    },
+  })
+}
+
 // ---------- LLM hooks ----------
 
 export function useLlmModels(provider: string | undefined) {

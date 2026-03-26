@@ -253,6 +253,39 @@ public class MessageRepository(AppDatabase db)
         });
     }
 
+    public int DeleteAll()
+    {
+        return db.ExecuteWrite(conn =>
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "DELETE FROM messages;";
+            return cmd.ExecuteNonQuery();
+        });
+    }
+
+    public int DeleteByAccount(string accountId)
+    {
+        return db.ExecuteWrite(conn =>
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "DELETE FROM messages WHERE account_id = $a;";
+            cmd.Parameters.AddWithValue("$a", accountId);
+            return cmd.ExecuteNonQuery();
+        });
+    }
+
+    public int DeleteByFolder(string accountId, int folderId)
+    {
+        return db.ExecuteWrite(conn =>
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "DELETE FROM messages WHERE account_id = $a AND folder_id = $f;";
+            cmd.Parameters.AddWithValue("$a", accountId);
+            cmd.Parameters.AddWithValue("$f", folderId);
+            return cmd.ExecuteNonQuery();
+        });
+    }
+
     /// <summary>
     /// Gets email volume stats for an account over the specified number of days.
     /// Returns (total_count, total_size_bytes, folder_path, folder_count) per folder.

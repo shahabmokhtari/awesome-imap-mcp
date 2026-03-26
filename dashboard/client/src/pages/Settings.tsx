@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useSettings, useUpdateSettings, useAuthStatus, useChangePin, useSetupPin, useLlmModels, useTestLlm, useServerInfo, useShutdownServer, useInstances, useShutdownInstance, type InstanceHeartbeat } from '../hooks/useApi'
+import { useSettings, useUpdateSettings, useAuthStatus, useChangePin, useSetupPin, useLlmModels, useTestLlm, useServerInfo, useShutdownServer, useInstances, useShutdownInstance, useAccounts, useClearCache, useClearAccountCache, type InstanceHeartbeat } from '../hooks/useApi'
 
 /** Fields that require a server restart when changed. */
 const RESTART_FIELDS = new Set([
@@ -716,6 +716,96 @@ function LlmTestPanel({ settings }: { settings: Record<string, unknown> }) {
 }
 
 // ---------------------------------------------------------------------------
+// Cache Management card
+// ---------------------------------------------------------------------------
+
+function CacheManagementCard() {
+  const { data: accounts } = useAccounts()
+  const clearCache = useClearCache()
+  const clearAccountCache = useClearAccountCache()
+  const [resultMsg, setResultMsg] = useState<string | null>(null)
+
+  const handleClearAll = () => {
+    if (!window.confirm('Clear ALL cached messages? This cannot be undone.')) return
+    clearCache.mutate(undefined, {
+      onSuccess: (data) => {
+        setResultMsg(`Cleared ${data.deleted} cached messages.`)
+        setTimeout(() => setResultMsg(null), 5000)
+      },
+      onError: (err) => {
+        setResultMsg(`Error: ${err.message}`)
+        setTimeout(() => setResultMsg(null), 5000)
+      },
+    })
+  }
+
+  const handleClearAccount = (accountId: string) => {
+    if (!window.confirm('Clear cached messages for this account?')) return
+    clearAccountCache.mutate(accountId, {
+      onSuccess: (data) => {
+        setResultMsg(`Cleared ${data.deleted} cached messages for account.`)
+        setTimeout(() => setResultMsg(null), 5000)
+      },
+      onError: (err) => {
+        setResultMsg(`Error: ${err.message}`)
+        setTimeout(() => setResultMsg(null), 5000)
+      },
+    })
+  }
+
+  return (
+    <div className="bg-white rounded-lg shadow p-5">
+      <h3 className="text-lg font-medium text-gray-800 mb-4">Cache Management</h3>
+
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm text-gray-700">Clear all cached messages across every account.</p>
+          </div>
+          <button
+            onClick={handleClearAll}
+            disabled={clearCache.isPending}
+            className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {clearCache.isPending ? 'Clearing...' : 'Clear All Cache'}
+          </button>
+        </div>
+
+        {accounts && accounts.length > 0 && (
+          <div className="border-t border-gray-200 pt-4">
+            <p className="text-sm font-medium text-gray-600 mb-3">Per-Account Cache</p>
+            <div className="space-y-2">
+              {accounts.map((a) => (
+                <div key={a.id as string} className="flex items-center justify-between py-1">
+                  <span className="text-sm text-gray-700">{a.name as string}</span>
+                  <button
+                    onClick={() => handleClearAccount(a.id as string)}
+                    disabled={clearAccountCache.isPending}
+                    className="px-3 py-1 text-xs text-red-600 bg-red-50 border border-red-200 rounded hover:bg-red-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {clearAccountCache.isPending ? 'Clearing...' : 'Clear'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {resultMsg && (
+          <div className={`rounded-lg p-3 text-sm ${
+            resultMsg.startsWith('Error')
+              ? 'bg-red-50 border border-red-200 text-red-700'
+              : 'bg-green-50 border border-green-200 text-green-700'
+          }`}>
+            {resultMsg}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Main Settings page
 // ---------------------------------------------------------------------------
 
@@ -805,6 +895,9 @@ export default function Settings() {
 
         {/* Dashboard PIN card - always shown */}
         <DashboardPinCard />
+
+        {/* Cache management card */}
+        <CacheManagementCard />
 
         {/* Settings section cards */}
         {settings && (

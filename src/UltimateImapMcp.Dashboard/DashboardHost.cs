@@ -142,6 +142,11 @@ public sealed class DashboardHost : BackgroundService
 
         // LLM config (for test endpoint)
         builder.Services.AddSingleton(_rootServices.GetRequiredService<UltimateImapMcp.Core.Configuration.LlmConfig>());
+        builder.Services.AddSingleton(_rootServices.GetRequiredService<UltimateImapMcp.Llm.Repositories.LlmUsageRepository>());
+        builder.Services.AddSingleton(_rootServices.GetRequiredService<UltimateImapMcp.Llm.BudgetTracker>());
+
+        // Email backend factory (for on-demand body fetch)
+        builder.Services.AddSingleton(_rootServices.GetRequiredService<UltimateImapMcp.Core.Email.IEmailBackendFactory>());
 
         // Instance info + root lifetime (for shutdown endpoint)
         builder.Services.AddSingleton(_rootServices.GetRequiredService<InstanceInfo>());
@@ -184,6 +189,7 @@ public sealed class DashboardHost : BackgroundService
         app.MapLlmApi();
         app.MapServerApi();
         app.MapToolsApi();
+        app.MapCacheApi();
 
         // Map SignalR hub
         app.MapHub<DashboardHub>("/hub");

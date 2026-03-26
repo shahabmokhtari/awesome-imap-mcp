@@ -5,6 +5,8 @@ import {
   useMessages,
   useMessage,
   useSearchMessages,
+  useFetchBody,
+  useClearFolderCache,
   type MessageSummary,
   type FolderInfo,
 } from '../hooks/useApi'
@@ -164,6 +166,7 @@ function MessageView({
   onClose: () => void
 }) {
   const { data: msg, isLoading, error } = useMessage(accountId, folderId, uid)
+  const fetchBody = useFetchBody()
   const [showHtml, setShowHtml] = useState(false)
 
   if (isLoading) {
@@ -263,7 +266,17 @@ function MessageView({
       <div className="flex-1 overflow-auto p-6">
         {!msg.bodyFetched && !hasText && !hasHtml ? (
           <div className="text-gray-400 text-sm text-center py-8">
-            Message body has not been fetched yet. Trigger a sync to download the full message.
+            <p className="mb-3">Message body has not been fetched yet.</p>
+            <button
+              onClick={() => fetchBody.mutate({ accountId, folderId, uid: msg.uid })}
+              disabled={fetchBody.isPending}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {fetchBody.isPending ? 'Fetching...' : 'Fetch Body'}
+            </button>
+            {fetchBody.error && (
+              <p className="mt-2 text-red-500 text-xs">{fetchBody.error.message}</p>
+            )}
           </div>
         ) : hasHtml && (showHtml || !hasText) ? (
           <iframe
@@ -372,6 +385,7 @@ export default function Messages() {
 
   const { data: messages, isLoading: messagesLoading } = useMessages(accountId, effectiveFolderId, 100)
 
+  const clearFolderCache = useClearFolderCache()
   const isSearching = searchQuery.length > 0
 
   const handleAccountChange = (id: string) => {
@@ -498,10 +512,25 @@ export default function Messages() {
             <div className="text-center py-8 text-gray-400 text-sm">Loading messages...</div>
           ) : messages && messages.length > 0 ? (
             <>
-              <div className="px-4 py-2 text-xs text-gray-500 border-b border-gray-100 bg-gray-50">
-                {messages.length} message{messages.length !== 1 ? 's' : ''}
-                {folders && (
-                  <> in {folders.find(f => f.id === effectiveFolderId)?.displayName ?? 'folder'}</>
+              <div className="px-4 py-2 text-xs text-gray-500 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
+                <span>
+                  {messages.length} message{messages.length !== 1 ? 's' : ''}
+                  {folders && (
+                    <> in {folders.find(f => f.id === effectiveFolderId)?.displayName ?? 'folder'}</>
+                  )}
+                </span>
+                {accountId && effectiveFolderId != null && (
+                  <button
+                    onClick={() => {
+                      if (window.confirm('Clear cached messages for this folder?'))
+                        clearFolderCache.mutate({ accountId, folderId: effectiveFolderId })
+                    }}
+                    disabled={clearFolderCache.isPending}
+                    className="px-2 py-0.5 text-xs text-red-600 bg-red-50 border border-red-200 rounded hover:bg-red-100 transition-colors disabled:opacity-50"
+                    title="Clear folder cache"
+                  >
+                    {clearFolderCache.isPending ? 'Clearing...' : 'Clear Cache'}
+                  </button>
                 )}
               </div>
               {messages.map((msg) => (
