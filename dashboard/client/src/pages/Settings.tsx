@@ -247,12 +247,18 @@ function ServerControlsCard() {
         setConfirming(false)
         setTimeout(() => setDisconnected(true), 3000)
       },
+      onError: (err) => {
+        setConfirming(false)
+        console.error('[shutdown] failed:', err)
+      },
     })
   }
 
   const handleShutdownInstance = (instanceId: string) => {
     if (!window.confirm(`Shutdown instance ${instanceId}?`)) return
-    shutdownInstance.mutate(instanceId)
+    shutdownInstance.mutate(instanceId, {
+      onError: (err) => console.error('[shutdownInstance] failed:', err),
+    })
   }
 
   return (
@@ -688,19 +694,13 @@ function LlmTestPanel({ settings }: { settings: Record<string, unknown> }) {
           {testLlm.isPending ? 'Testing...' : 'Test LLM'}
         </button>
 
-        {testLlm.data && !testLlm.data.error && (
+        {testLlm.data && (
           <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-2">
             <p className="text-sm text-gray-900 whitespace-pre-wrap">{testLlm.data.response}</p>
             <div className="flex gap-4 text-xs text-gray-500">
               <span>Model: {testLlm.data.model}</span>
               <span>Duration: {testLlm.data.duration_ms}ms</span>
             </div>
-          </div>
-        )}
-
-        {testLlm.data?.error && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-            <p className="text-sm text-red-700">{testLlm.data.error}</p>
           </div>
         )}
 

@@ -51,4 +51,37 @@ public class ChatClientFactoryTests
         var ex = Assert.Throws<InvalidOperationException>(() => ChatClientFactory.Create(config));
         Assert.Contains("Unsupported API provider", ex.Message);
     }
+
+    [Fact]
+    public void Create_OpenAiProvider_ReturnsIChatClient()
+    {
+        var config = new LlmConfig { Provider = "openai", ApiKey = "sk-test-key", Model = "gpt-4o" };
+        var client = ChatClientFactory.Create(config);
+        Assert.NotNull(client);
+        (client as IDisposable)?.Dispose();
+    }
+
+    [Fact]
+    public void Create_AnthropicProvider_ReturnsIChatClient()
+    {
+        var config = new LlmConfig { Provider = "anthropic", ApiKey = "ant-test-key", Model = "claude-3-5-sonnet" };
+        var client = ChatClientFactory.Create(config);
+        Assert.NotNull(client);
+        (client as IDisposable)?.Dispose();
+    }
+
+    [Fact]
+    public void Create_UsesProviderSpecificKey()
+    {
+        var config = new LlmConfig
+        {
+            Provider = "openai",
+            ApiKey = null,
+            ProviderApiKeys = new() { ["openai"] = "sk-provider-specific" },
+            Model = "gpt-4o"
+        };
+        var client = ChatClientFactory.Create(config);
+        Assert.NotNull(client);
+        (client as IDisposable)?.Dispose();
+    }
 }

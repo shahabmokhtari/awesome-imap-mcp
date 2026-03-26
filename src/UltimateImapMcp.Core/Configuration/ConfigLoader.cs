@@ -99,6 +99,8 @@ public static partial class ConfigLoader
                 MonthlyCostLimit = config.Llm.MonthlyCostLimit,
                 AutoAnalyzeNew = config.Llm.AutoAnalyzeNew,
                 Acp = config.Llm.Acp,
+                // ProviderApiKeys are user-provided dashboard entries — persist them
+                // (unlike ApiKey, which may be resolved from env vars at runtime)
                 ProviderApiKeys = config.Llm.ProviderApiKeys,
             },
             Sync = config.Sync,

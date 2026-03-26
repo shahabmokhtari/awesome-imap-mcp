@@ -99,4 +99,20 @@ public class LlmConfigTests
             Environment.SetEnvironmentVariable(envVar, null);
         }
     }
+
+    [Fact]
+    public void ResolveApiKey_EmptyEnvVar_ReturnsNull()
+    {
+        var envVar = $"TEST_EMPTY_KEY_{Guid.NewGuid():N}";
+        Environment.SetEnvironmentVariable(envVar, "");
+        try
+        {
+            var config = new LlmConfig { ApiKeyEnv = envVar };
+            Assert.Null(config.ResolveApiKey("openai"));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(envVar, null);
+        }
+    }
 }

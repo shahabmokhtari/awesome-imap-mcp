@@ -386,7 +386,7 @@ export function useFetchBody() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (params: { accountId: string; folderId: number; uid: number }) =>
-      apiFetch<MessageDetail>(
+      apiFetch<FetchBodyResult>(
         `/api/messages/${encodeURIComponent(params.accountId)}/${params.folderId}/${params.uid}/fetch-body`,
         { method: 'POST' }),
     onSuccess: (_, params) => {
@@ -458,7 +458,15 @@ export interface LlmTestResult {
   response: string | null
   model: string
   duration_ms: number
-  error?: string
+}
+
+export interface FetchBodyResult {
+  id: number
+  uid: number
+  subject: string
+  bodyText: string | null
+  bodyHtml: string | null
+  bodyFetched: boolean
 }
 
 export function useTestLlm() {
