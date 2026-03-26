@@ -20,18 +20,21 @@ public class AcpClient : IAsyncDisposable
     private readonly string[] _args;
     private readonly ILogger<AcpClient> _logger;
     private readonly TimeSpan _timeout;
+    private readonly Dictionary<string, string>? _envVars;
 
     private Process? _process;
     private int _nextId = 1;
     private bool _disposed;
     private bool _initialized;
 
-    public AcpClient(string command, string[] args, ILogger<AcpClient> logger, TimeSpan? timeout = null)
+    public AcpClient(string command, string[] args, ILogger<AcpClient> logger, TimeSpan? timeout = null,
+        Dictionary<string, string>? envVars = null)
     {
         _command = command;
         _args = args;
         _logger = logger;
         _timeout = timeout ?? TimeSpan.FromSeconds(30);
+        _envVars = envVars;
     }
 
     /// <summary>
@@ -57,6 +60,12 @@ public class AcpClient : IAsyncDisposable
         };
         foreach (var arg in _args)
             startInfo.ArgumentList.Add(arg);
+
+        if (_envVars is not null)
+        {
+            foreach (var (key, value) in _envVars)
+                startInfo.Environment[key] = value;
+        }
 
         _process = Process.Start(startInfo)
             ?? throw new InvalidOperationException($"Failed to start ACP agent process: {_command}");

@@ -149,13 +149,13 @@ public sealed class AcpClientPool : IAcpClientPool
         var tags = new TagList { { "provider", _config.Provider } };
         var sw = Stopwatch.StartNew();
 
-        var (command, args) = ResolveProviderCommand(model);
+        var (command, args, envVars) = ResolveProviderCommand(model);
         var timeout = TimeSpan.FromSeconds(_config.RequestTimeoutSeconds);
 
         workerLogger.LogDebug("Worker {Index} creating new ACP client: {Command} {Args}",
             workerIndex, command, string.Join(" ", args));
 
-        var newClient = new AcpClient(command, args, _loggerFactory.CreateLogger<AcpClient>(), timeout);
+        var newClient = new AcpClient(command, args, _loggerFactory.CreateLogger<AcpClient>(), timeout, envVars);
 
         try
         {
@@ -238,16 +238,23 @@ public sealed class AcpClientPool : IAcpClientPool
         };
     }
 
-    private (string Command, string[] Args) ResolveProviderCommand(string? model)
+    private (string Command, string[] Args, Dictionary<string, string>? EnvVars) ResolveProviderCommand(string? model)
     {
         var provider = _config.Provider.ToLowerInvariant();
         string command;
         var argsList = new List<string>();
+        Dictionary<string, string>? envVars = null;
 
         if (provider == "copilot")
         {
             command = _config.Copilot.Command;
             argsList.AddRange(_config.Copilot.Args);
+            // Copilot uses --model CLI flag
+            if (!string.IsNullOrEmpty(model) && !argsList.Contains("--model"))
+            {
+                argsList.Add("--model");
+                argsList.Add(model);
+            }
         }
         else
         {
@@ -262,15 +269,12 @@ public sealed class AcpClientPool : IAcpClientPool
                 command = _config.Claude.Command;
                 argsList.AddRange(_config.Claude.Args);
             }
+            // Claude-code-acp uses CLAUDE_MODEL env var
+            if (!string.IsNullOrEmpty(model))
+                envVars = new() { ["CLAUDE_MODEL"] = model };
         }
 
-        if (!string.IsNullOrEmpty(model) && !argsList.Contains("--model"))
-        {
-            argsList.Add("--model");
-            argsList.Add(model);
-        }
-
-        return (command, argsList.ToArray());
+        return (command, argsList.ToArray(), envVars);
     }
 
     private async Task DisposeClientSafelyAsync(AcpClient? client, ILogger logger)
