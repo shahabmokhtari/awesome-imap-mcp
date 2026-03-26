@@ -51,6 +51,12 @@ public static class SettingsApi
                     config.Llm.MonthlyCostLimit,
                     config.Llm.AutoAnalyzeNew
                 },
+                Sync = new
+                {
+                    config.Sync.Enabled,
+                    config.Sync.PollInterval,
+                    config.Sync.MaxMessagesPerSync
+                },
                 Metrics = new
                 {
                     config.Metrics.Enabled,
@@ -112,6 +118,14 @@ public static class SettingsApi
                 if (l.AutoAnalyzeNew is { } aan) { config.Llm.AutoAnalyzeNew = aan; changed.Add("llm.auto_analyze_new"); }
             }
 
+            // Sync settings
+            if (updates.Sync is { } sy)
+            {
+                if (sy.Enabled is { } se) { config.Sync.Enabled = se; changed.Add("sync.enabled"); }
+                if (sy.PollInterval is { } pi) { config.Sync.PollInterval = pi; changed.Add("sync.poll_interval"); }
+                if (sy.MaxMessagesPerSync is { } mms) { config.Sync.MaxMessagesPerSync = mms; changed.Add("sync.max_messages_per_sync"); }
+            }
+
             // Metrics settings
             if (updates.Metrics is { } m)
             {
@@ -159,6 +173,7 @@ file record SettingsUpdateRequest
     public ServerSettingsUpdate? Server { get; init; }
     public CacheSettingsUpdate? Cache { get; init; }
     public QueueSettingsUpdate? Queue { get; init; }
+    public SyncSettingsUpdate? Sync { get; init; }
     public LlmSettingsUpdate? Llm { get; init; }
     public MetricsSettingsUpdate? Metrics { get; init; }
 }
@@ -199,6 +214,13 @@ file record LlmSettingsUpdate
     public int? DailyTokenBudget { get; init; }
     public double? MonthlyCostLimit { get; init; }
     public bool? AutoAnalyzeNew { get; init; }
+}
+
+file record SyncSettingsUpdate
+{
+    public bool? Enabled { get; init; }
+    public int? PollInterval { get; init; }
+    public int? MaxMessagesPerSync { get; init; }
 }
 
 file record MetricsSettingsUpdate

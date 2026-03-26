@@ -22,6 +22,30 @@ public static class SyncApi
             return Results.Ok(result);
         });
 
+        app.MapPost("/api/sync/trigger-all", async (SyncManager syncManager, AccountRepository accountRepo) =>
+        {
+            var accounts = accountRepo.GetAll();
+            if (accounts.Count == 0)
+                return Results.Ok(new { triggered = 0, message = "No accounts found." });
+
+            var triggered = 0;
+            var errors = new List<string>();
+            foreach (var account in accounts)
+            {
+                try
+                {
+                    await syncManager.TriggerSyncAsync(account.Id).ConfigureAwait(false);
+                    triggered++;
+                }
+                catch (Exception ex)
+                {
+                    errors.Add($"{account.Name}: {ex.Message}");
+                }
+            }
+
+            return Results.Ok(new { triggered, total = accounts.Count, errors });
+        });
+
         app.MapPost("/api/sync/trigger", async (HttpContext ctx, SyncManager syncManager) =>
         {
             var body = await ctx.Request.ReadFromJsonAsync<SyncTriggerRequest>().ConfigureAwait(false);

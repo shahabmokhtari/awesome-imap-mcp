@@ -1,10 +1,23 @@
 import { useState } from 'react'
-import { useSyncStatus, useTriggerSync } from '../hooks/useApi'
+import { useSyncStatus, useTriggerSync, useTriggerSyncAll } from '../hooks/useApi'
 
 export default function Sync() {
   const { data: syncStatus, isLoading, error } = useSyncStatus()
   const triggerSync = useTriggerSync()
+  const triggerSyncAll = useTriggerSyncAll()
   const [triggerResult, setTriggerResult] = useState<{ accountId: string; message: string; success: boolean } | null>(null)
+
+  const handleSyncAllAccounts = () => {
+    setTriggerResult(null)
+    triggerSyncAll.mutate(undefined, {
+      onSuccess: (data) => setTriggerResult({
+        accountId: '',
+        message: `Sync triggered for ${data.triggered}/${data.total} account(s)${data.errors.length > 0 ? `. Errors: ${data.errors.join('; ')}` : ''}`,
+        success: data.errors.length === 0,
+      }),
+      onError: (err) => setTriggerResult({ accountId: '', message: err.message, success: false }),
+    })
+  }
 
   const handleTriggerAll = (accountId: string) => {
     setTriggerResult(null)
@@ -24,7 +37,16 @@ export default function Sync() {
 
   return (
     <div>
-      <h2 className="text-2xl font-semibold text-gray-900 mb-6">Sync Status</h2>
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-2xl font-semibold text-gray-900">Sync Status</h2>
+        <button
+          onClick={handleSyncAllAccounts}
+          disabled={triggerSyncAll.isPending || triggerSync.isPending}
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {triggerSyncAll.isPending ? 'Syncing All...' : 'Sync All Accounts'}
+        </button>
+      </div>
 
       {isLoading && (
         <div className="text-center py-8 text-gray-500">Loading sync status...</div>
