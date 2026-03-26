@@ -300,24 +300,36 @@ public class MessageRepository(AppDatabase db)
     /// <summary>
     /// Gets email volume stats for an account over the specified number of days.
     /// Returns (total_count, total_size_bytes, folder_path, folder_count) per folder.
+    /// Falls back to all-time results when the date-filtered query returns nothing.
     /// </summary>
     public List<EmailVolumeRecord> GetEmailVolume(string accountId, int days = 30)
     {
+        var results = GetEmailVolumeInternal(accountId, days);
+        if (results.Count > 0) return results;
+        // Fall back to all-time if date-filtered returned nothing
+        return GetEmailVolumeInternal(accountId, 0);
+    }
+
+    private List<EmailVolumeRecord> GetEmailVolumeInternal(string accountId, int days)
+    {
         using var conn = db.GetReadConnection();
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
+        var dateFilter = days > 0 ? "AND m.date_epoch >= $since" : "";
+        cmd.CommandText = $"""
             SELECT f.path, COUNT(m.id) as msg_count,
                    COALESCE(SUM(m.size_bytes), 0) as total_size,
                    SUM(CASE WHEN m.has_attachments = 1 THEN 1 ELSE 0 END) as with_attachments
             FROM messages m
             JOIN folders f ON f.id = m.folder_id
             WHERE m.account_id = $accountId
-              AND m.date_epoch >= $since
+              AND m.from_email IS NOT NULL AND m.from_email != ''
+              {dateFilter}
             GROUP BY f.path
             ORDER BY msg_count DESC;
             """;
         cmd.Parameters.AddWithValue("$accountId", accountId);
-        cmd.Parameters.AddWithValue("$since", DateTimeOffset.UtcNow.AddDays(-days).ToUnixTimeSeconds());
+        if (days > 0)
+            cmd.Parameters.AddWithValue("$since", DateTimeOffset.UtcNow.AddDays(-days).ToUnixTimeSeconds());
 
         using var reader = cmd.ExecuteReader();
         var list = new List<EmailVolumeRecord>();
@@ -334,24 +346,35 @@ public class MessageRepository(AppDatabase db)
 
     /// <summary>
     /// Gets top senders by message count for an account over the specified days.
+    /// Falls back to all-time results when the date-filtered query returns nothing.
     /// </summary>
     public List<TopSenderRecord> GetTopSenders(string accountId, int days = 30, int limit = 10)
     {
+        var results = GetTopSendersInternal(accountId, days, limit);
+        if (results.Count > 0) return results;
+        // Fall back to all-time if date-filtered returned nothing
+        return GetTopSendersInternal(accountId, 0, limit);
+    }
+
+    private List<TopSenderRecord> GetTopSendersInternal(string accountId, int days, int limit)
+    {
         using var conn = db.GetReadConnection();
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
+        var dateFilter = days > 0 ? "AND date_epoch >= $since" : "";
+        cmd.CommandText = $"""
             SELECT from_email, COUNT(*) as msg_count,
                    COALESCE(SUM(size_bytes), 0) as total_size
             FROM messages
             WHERE account_id = $accountId
-              AND from_email IS NOT NULL
-              AND date_epoch >= $since
+              AND from_email IS NOT NULL AND from_email != ''
+              {dateFilter}
             GROUP BY from_email
             ORDER BY msg_count DESC
             LIMIT $limit;
             """;
         cmd.Parameters.AddWithValue("$accountId", accountId);
-        cmd.Parameters.AddWithValue("$since", DateTimeOffset.UtcNow.AddDays(-days).ToUnixTimeSeconds());
+        if (days > 0)
+            cmd.Parameters.AddWithValue("$since", DateTimeOffset.UtcNow.AddDays(-days).ToUnixTimeSeconds());
         cmd.Parameters.AddWithValue("$limit", limit);
 
         using var reader = cmd.ExecuteReader();
