@@ -81,7 +81,7 @@ export interface LogsResponse {
   logs: LogEntry[]
 }
 
-export function useLogs(params: { levels?: string; search?: string; page?: number; page_size?: number; scope?: string; instance_id?: string }) {
+export function useLogs(params: { levels?: string; search?: string; page?: number; page_size?: number; scope?: string; instance_id?: string; live_only?: boolean }) {
   const qs = new URLSearchParams()
   if (params.levels) qs.set('level', params.levels)
   if (params.search) qs.set('search', params.search)
@@ -89,8 +89,9 @@ export function useLogs(params: { levels?: string; search?: string; page?: numbe
   if (params.page_size != null) qs.set('page_size', String(params.page_size))
   if (params.scope) qs.set('scope', params.scope)
   if (params.instance_id) qs.set('instance_id', params.instance_id)
+  if (params.live_only) qs.set('live_only', 'true')
   return useQuery({
-    queryKey: ['logs', params.levels, params.search, params.page, params.page_size, params.scope, params.instance_id],
+    queryKey: ['logs', params.levels, params.search, params.page, params.page_size, params.scope, params.instance_id, params.live_only],
     queryFn: () => apiFetch<LogsResponse>(`/api/logs?${qs}`),
     refetchInterval: 5000,
   })
@@ -139,6 +140,45 @@ export function useShutdownServer() {
         method: 'POST',
         body: JSON.stringify(data ?? {}),
       }),
+  })
+}
+
+export interface InstanceHeartbeat {
+  instanceId: string
+  processId: number
+  cwd: string
+  transport: string
+  isDashboardHost: boolean
+  isLeader: boolean
+  startedAt: string
+  lastHeartbeat: string
+  accountsCount: number
+  cpuTimeMs: number
+  memoryMb: number
+  shutdownRequested: boolean
+}
+
+export interface InstancesResponse {
+  current: string
+  instances: InstanceHeartbeat[]
+}
+
+export function useInstances() {
+  return useQuery({
+    queryKey: ['instances'],
+    queryFn: () => apiFetch<InstancesResponse>('/api/server/instances'),
+    refetchInterval: 10000,
+  })
+}
+
+export function useShutdownInstance() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (instanceId: string) =>
+      apiFetch<{ shutting_down: boolean }>(
+        `/api/server/instances/${encodeURIComponent(instanceId)}/shutdown`,
+        { method: 'POST' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['instances'] }),
   })
 }
 
