@@ -17,6 +17,20 @@ public record EmailVolumeRecord(string FolderPath, int MessageCount, long TotalS
 /// <summary>Top sender stats.</summary>
 public record TopSenderRecord(string FromEmail, int MessageCount, long TotalSizeBytes);
 
+public record SearchFilter
+{
+    public string? Query { get; init; }
+    public string? AccountId { get; init; }
+    public int? FolderId { get; init; }
+    public string? FromAddress { get; init; }
+    public string? ToAddress { get; init; }
+    public string? Subject { get; init; }
+    public long? FromDateEpoch { get; init; }
+    public long? ToDateEpoch { get; init; }
+    public string OrderBy { get; init; } = "date_desc";
+    public int MaxResults { get; init; } = 50;
+}
+
 public class MessageRepository(AppDatabase db)
 {
     public void Insert(string accountId, int folderId, long uid, string? messageId,
@@ -111,6 +125,54 @@ public class MessageRepository(AppDatabase db)
         if (accountId != null) cmd.Parameters.AddWithValue("$accountId", accountId);
         if (folderId != null) cmd.Parameters.AddWithValue("$folderId", folderId);
         cmd.Parameters.AddWithValue("$limit", maxResults);
+
+        using var reader = cmd.ExecuteReader();
+        var list = new List<MessageRecord>();
+        while (reader.Read())
+            list.Add(ReadRecord(reader));
+        return list;
+    }
+
+    public List<MessageRecord> SearchAdvanced(SearchFilter filter)
+    {
+        using var conn = db.GetReadConnection();
+        using var cmd = conn.CreateCommand();
+
+        var conditions = new List<string>();
+        var useFts = !string.IsNullOrEmpty(filter.Query);
+
+        if (useFts) conditions.Add("messages_fts MATCH $query");
+        if (filter.AccountId is not null) conditions.Add("m.account_id = $accountId");
+        if (filter.FolderId is not null) conditions.Add("m.folder_id = $folderId");
+        if (filter.FromAddress is not null) conditions.Add("m.from_email LIKE $from");
+        if (filter.ToAddress is not null) conditions.Add("m.to_addresses LIKE $to");
+        if (filter.Subject is not null) conditions.Add("m.subject LIKE $subject");
+        if (filter.FromDateEpoch is not null) conditions.Add("m.date_epoch >= $fromDate");
+        if (filter.ToDateEpoch is not null) conditions.Add("m.date_epoch <= $toDate");
+
+        var where = conditions.Count > 0 ? "WHERE " + string.Join(" AND ", conditions) : "";
+        var orderClause = filter.OrderBy switch
+        {
+            "date_asc" => "ORDER BY m.date_epoch ASC",
+            "from" => "ORDER BY m.from_email ASC",
+            "subject" => "ORDER BY m.subject ASC",
+            "size_desc" => "ORDER BY m.size_bytes DESC",
+            _ => "ORDER BY m.date_epoch DESC"
+        };
+
+        var join = useFts ? "JOIN messages_fts ON messages_fts.rowid = m.id" : "";
+
+        cmd.CommandText = $"SELECT m.* FROM messages m {join} {where} {orderClause} LIMIT $limit;";
+
+        if (useFts) cmd.Parameters.AddWithValue("$query", filter.Query!);
+        if (filter.AccountId is not null) cmd.Parameters.AddWithValue("$accountId", filter.AccountId);
+        if (filter.FolderId is not null) cmd.Parameters.AddWithValue("$folderId", filter.FolderId);
+        if (filter.FromAddress is not null) cmd.Parameters.AddWithValue("$from", $"%{filter.FromAddress}%");
+        if (filter.ToAddress is not null) cmd.Parameters.AddWithValue("$to", $"%{filter.ToAddress}%");
+        if (filter.Subject is not null) cmd.Parameters.AddWithValue("$subject", $"%{filter.Subject}%");
+        if (filter.FromDateEpoch is not null) cmd.Parameters.AddWithValue("$fromDate", filter.FromDateEpoch.Value);
+        if (filter.ToDateEpoch is not null) cmd.Parameters.AddWithValue("$toDate", filter.ToDateEpoch.Value);
+        cmd.Parameters.AddWithValue("$limit", filter.MaxResults);
 
         using var reader = cmd.ExecuteReader();
         var list = new List<MessageRecord>();
