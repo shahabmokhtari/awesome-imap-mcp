@@ -70,12 +70,16 @@ public class AcpClient : IAsyncDisposable
         _process = Process.Start(startInfo)
             ?? throw new InvalidOperationException($"Failed to start ACP agent process: {_command}");
 
-        // Send initialize request
+        // Send initialize request (ACP protocol version is a number, not a date string)
         var initRequest = CreateRequest("initialize", new
         {
-            protocolVersion = "2024-11-05",
-            capabilities = new { },
-            clientInfo = new { name = "ultimate-imap-mcp", version = "0.1.0" }
+            protocolVersion = 1,
+            clientInfo = new { name = "ultimate-imap-mcp", title = "Ultimate IMAP MCP", version = "0.1.0" },
+            clientCapabilities = new
+            {
+                fs = new { readTextFile = false, writeTextFile = false },
+                terminal = false,
+            }
         });
 
         var response = await SendRequestAsync(initRequest, ct).ConfigureAwait(false);
@@ -93,7 +97,8 @@ public class AcpClient : IAsyncDisposable
 
         var request = CreateRequest("session/new", new
         {
-            workingDir
+            cwd = workingDir,
+            mcpServers = Array.Empty<object>(),
         });
 
         var response = await SendRequestAsync(request, ct).ConfigureAwait(false);
@@ -117,7 +122,7 @@ public class AcpClient : IAsyncDisposable
         var request = CreateRequest("session/prompt", new
         {
             sessionId = session.SessionId,
-            prompt = new { text = prompt }
+            prompt = new[] { new { type = "text", text = prompt } }
         });
 
         await WriteRequestAsync(request, ct).ConfigureAwait(false);
@@ -319,7 +324,7 @@ public class AcpClient : IAsyncDisposable
     {
         var root = doc.RootElement;
 
-        // Check for error response
+        // Check for JSON-RPC error
         if (root.TryGetProperty("error", out var error))
         {
             return new AcpEvent
@@ -329,44 +334,74 @@ public class AcpClient : IAsyncDisposable
             };
         }
 
-        // Check for result with event type
+        // Check for session/prompt result (final response with stopReason)
         if (root.TryGetProperty("result", out var result))
         {
-            var eventType = result.TryGetProperty("type", out var t) ? t.GetString() : null;
-
-            return eventType switch
+            if (result.TryGetProperty("stopReason", out _))
             {
-                "text_delta" => new AcpEvent
+                return new AcpEvent { Type = AcpEventType.Complete };
+            }
+
+            // Legacy: check for type-based result
+            var eventType = result.TryGetProperty("type", out var t) ? t.GetString() : null;
+            if (eventType is not null)
+            {
+                return eventType switch
                 {
-                    Type = AcpEventType.TextDelta,
-                    Text = result.TryGetProperty("text", out var text) ? text.GetString() : null
-                },
-                "tool_use" => new AcpEvent { Type = AcpEventType.ToolUse },
+                    "text_delta" => new AcpEvent
+                    {
+                        Type = AcpEventType.TextDelta,
+                        Text = result.TryGetProperty("text", out var text) ? text.GetString() : null
+                    },
+                    "complete" => new AcpEvent { Type = AcpEventType.Complete },
+                    "error" => new AcpEvent
+                    {
+                        Type = AcpEventType.Error,
+                        Error = result.TryGetProperty("message", out var errMsg) ? errMsg.GetString() : null
+                    },
+                    _ => new AcpEvent { Type = AcpEventType.TextDelta, Text = result.ToString() }
+                };
+            }
+
+            return new AcpEvent { Type = AcpEventType.Complete };
+        }
+
+        // Check for session/update notification (streaming events)
+        if (root.TryGetProperty("method", out var method) && method.GetString() == "session/update"
+            && root.TryGetProperty("params", out var @params)
+            && @params.TryGetProperty("update", out var update))
+        {
+            var updateType = update.TryGetProperty("sessionUpdate", out var su)
+                ? su.GetString() : null;
+
+            return updateType switch
+            {
+                "agent_message_chunk" => ParseAgentMessageChunk(update),
+                "agent_message_start" => new AcpEvent { Type = AcpEventType.TextDelta, Text = "" },
+                "agent_message_end" => new AcpEvent { Type = AcpEventType.TextDelta, Text = "" },
+                "tool_use" or "tool_use_start" => new AcpEvent { Type = AcpEventType.ToolUse },
+                "tool_result" => new AcpEvent { Type = AcpEventType.TextDelta, Text = "" },
                 "permission_request" => new AcpEvent { Type = AcpEventType.PermissionRequest },
-                "complete" => new AcpEvent
-                {
-                    Type = AcpEventType.Complete,
-                    Text = result.TryGetProperty("text", out var completeText) ? completeText.GetString() : null
-                },
-                "error" => new AcpEvent
-                {
-                    Type = AcpEventType.Error,
-                    Error = result.TryGetProperty("message", out var errMsg) ? errMsg.GetString() : null
-                },
-                _ => new AcpEvent
-                {
-                    Type = AcpEventType.TextDelta,
-                    Text = result.ToString()
-                }
+                _ => new AcpEvent { Type = AcpEventType.TextDelta, Text = "" }
             };
         }
 
-        // Fallback: treat as text
-        return new AcpEvent
+        // Fallback
+        return new AcpEvent { Type = AcpEventType.TextDelta, Text = "" };
+    }
+
+    private static AcpEvent ParseAgentMessageChunk(JsonElement update)
+    {
+        // Extract text from content block: { content: { type: "text", text: "..." } }
+        if (update.TryGetProperty("content", out var content)
+            && content.TryGetProperty("type", out var ct)
+            && ct.GetString() == "text"
+            && content.TryGetProperty("text", out var text))
         {
-            Type = AcpEventType.TextDelta,
-            Text = root.ToString()
-        };
+            return new AcpEvent { Type = AcpEventType.TextDelta, Text = text.GetString() };
+        }
+
+        return new AcpEvent { Type = AcpEventType.TextDelta, Text = "" };
     }
 }
 
