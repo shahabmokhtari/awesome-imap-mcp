@@ -21,7 +21,7 @@ public sealed class AcpClientPool : IAcpClientPool
     private readonly Task[] _workerTasks;
     private readonly CancellationTokenSource _shutdownCts = new();
     private volatile int _activeClients;
-    private bool _disposed;
+    private volatile bool _disposed;
 
     public int ActiveClients => _activeClients;
     public int QueuedRequests => _queue.Reader.Count;
@@ -174,7 +174,10 @@ public sealed class AcpClientPool : IAcpClientPool
         }
         catch
         {
-            await DisposeClientSafelyAsync(newClient, workerLogger).ConfigureAwait(false);
+            // Don't use DisposeClientSafelyAsync here — it decrements _activeClients,
+            // but Interlocked.Increment hasn't been called yet at this point.
+            try { await newClient.DisposeAsync().ConfigureAwait(false); }
+            catch (Exception disposeEx) { workerLogger.LogWarning(disposeEx, "Error disposing failed ACP client"); }
             throw;
         }
     }

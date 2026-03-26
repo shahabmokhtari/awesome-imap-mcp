@@ -145,9 +145,9 @@ public class MessageRepository(AppDatabase db)
         if (useFts) conditions.Add("messages_fts MATCH $query");
         if (filter.AccountId is not null) conditions.Add("m.account_id = $accountId");
         if (filter.FolderId is not null) conditions.Add("m.folder_id = $folderId");
-        if (filter.FromAddress is not null) conditions.Add("m.from_email LIKE $from");
-        if (filter.ToAddress is not null) conditions.Add("m.to_addresses LIKE $to");
-        if (filter.Subject is not null) conditions.Add("m.subject LIKE $subject");
+        if (filter.FromAddress is not null) conditions.Add("m.from_email LIKE $from ESCAPE '\\'");
+        if (filter.ToAddress is not null) conditions.Add("m.to_addresses LIKE $to ESCAPE '\\'");
+        if (filter.Subject is not null) conditions.Add("m.subject LIKE $subject ESCAPE '\\'");
         if (filter.FromDateEpoch is not null) conditions.Add("m.date_epoch >= $fromDate");
         if (filter.ToDateEpoch is not null) conditions.Add("m.date_epoch <= $toDate");
 
@@ -168,9 +168,9 @@ public class MessageRepository(AppDatabase db)
         if (useFts) cmd.Parameters.AddWithValue("$query", filter.Query!);
         if (filter.AccountId is not null) cmd.Parameters.AddWithValue("$accountId", filter.AccountId);
         if (filter.FolderId is not null) cmd.Parameters.AddWithValue("$folderId", filter.FolderId);
-        if (filter.FromAddress is not null) cmd.Parameters.AddWithValue("$from", $"%{filter.FromAddress}%");
-        if (filter.ToAddress is not null) cmd.Parameters.AddWithValue("$to", $"%{filter.ToAddress}%");
-        if (filter.Subject is not null) cmd.Parameters.AddWithValue("$subject", $"%{filter.Subject}%");
+        if (filter.FromAddress is not null) cmd.Parameters.AddWithValue("$from", $"%{EscapeLike(filter.FromAddress)}%");
+        if (filter.ToAddress is not null) cmd.Parameters.AddWithValue("$to", $"%{EscapeLike(filter.ToAddress)}%");
+        if (filter.Subject is not null) cmd.Parameters.AddWithValue("$subject", $"%{EscapeLike(filter.Subject)}%");
         if (filter.FromDateEpoch is not null) cmd.Parameters.AddWithValue("$fromDate", filter.FromDateEpoch.Value);
         if (filter.ToDateEpoch is not null) cmd.Parameters.AddWithValue("$toDate", filter.ToDateEpoch.Value);
         cmd.Parameters.AddWithValue("$limit", filter.MaxResults);
@@ -386,7 +386,6 @@ public class MessageRepository(AppDatabase db)
             FROM messages m
             JOIN folders f ON f.id = m.folder_id
             WHERE m.account_id = $accountId
-              AND m.from_email IS NOT NULL AND m.from_email != ''
               {dateFilter}
             GROUP BY f.path
             ORDER BY msg_count DESC;
@@ -452,6 +451,30 @@ public class MessageRepository(AppDatabase db)
         }
         return list;
     }
+
+    /// <summary>Resolves a message from various parameter combinations (shared helper).</summary>
+    public MessageRecord? Resolve(int? messageId, string? accountId, int? folderId, int? uid, FolderRepository folderRepo)
+    {
+        if (messageId is not null)
+            return GetById(messageId.Value);
+
+        if (string.IsNullOrEmpty(accountId) || uid is null)
+            return null;
+
+        if (folderId is not null)
+            return GetByUid(accountId, folderId.Value, uid.Value);
+
+        foreach (var folder in folderRepo.GetByAccount(accountId))
+        {
+            var msg = GetByUid(accountId, folder.Id, uid.Value);
+            if (msg is not null) return msg;
+        }
+
+        return null;
+    }
+
+    private static string EscapeLike(string value) =>
+        value.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
 
     private static MessageRecord ReadRecord(Microsoft.Data.Sqlite.SqliteDataReader r) => new(
         Id: r.GetInt32(r.GetOrdinal("id")),

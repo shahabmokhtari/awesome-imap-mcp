@@ -27,7 +27,7 @@ public class MessageTools(
         [Description("Max body length (0=unlimited, default: 0)")] int maxBodyLength = 0,
         [Description("Fetch body from server if not cached (default: true). Set false for metadata only.")] bool fetchBody = true)
     {
-        var msg = ResolveMessage(messageId, accountId, folderId, uid);
+        var msg = messageRepo.Resolve(messageId, accountId, folderId, uid, folderRepo);
         if (msg is null)
             return Error("Message not found. Provide 'messageId' or 'accountId'+'uid'.");
 
@@ -46,6 +46,7 @@ public class MessageTools(
                     msg = messageRepo.GetById(msg.Id) ?? msg;
                 }
             }
+            catch (OperationCanceledException) { throw; }
             catch (Exception ex)
             {
                 // Non-fatal — return what we have with a note
@@ -148,31 +149,6 @@ public class MessageTools(
             message_count = mapped.Count,
             messages = mapped
         }, JsonOptions);
-    }
-
-    /// <summary>Resolves a message from various parameter combinations.</summary>
-    private MessageRecord? ResolveMessage(int? messageId, string? accountId, int? folderId, int? uid)
-    {
-        // 1. Direct database ID lookup
-        if (messageId is not null)
-            return messageRepo.GetById(messageId.Value);
-
-        if (string.IsNullOrEmpty(accountId) || uid is null)
-            return null;
-
-        // 2. Full lookup with folder_id
-        if (folderId is not null)
-            return messageRepo.GetByUid(accountId, folderId.Value, uid.Value);
-
-        // 3. Search across all folders for this account+uid
-        var folders = folderRepo.GetByAccount(accountId);
-        foreach (var folder in folders)
-        {
-            var msg = messageRepo.GetByUid(accountId, folder.Id, uid.Value);
-            if (msg is not null) return msg;
-        }
-
-        return null;
     }
 
     private static string Error(string message) =>

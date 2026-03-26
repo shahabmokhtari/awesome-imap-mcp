@@ -442,15 +442,14 @@ public class SyncManager(
         var account = AccountConfigMapper.ToAccountConfig(record, encryptor);
 
         // Create connection on the fly if not already tracked (e.g., account added after startup)
-        if (!_connections.TryGetValue(accountId, out var connMgr))
+        var connMgr = _connections.GetOrAdd(accountId, _ =>
         {
-            connMgr = new ImapConnectionManager(account, encryptor,
-                logger as ILogger<ImapConnectionManager>,
-                oauthProvider, accountId);
-            _connections[accountId] = connMgr;
             logger.LogInformation("Created on-demand connection for account {AccountId} ({Name})",
                 accountId, record.Name);
-        }
+            return new ImapConnectionManager(account, encryptor,
+                logger as ILogger<ImapConnectionManager>,
+                oauthProvider, accountId);
+        });
 
         if (folderPath is not null)
         {
@@ -477,16 +476,15 @@ public class SyncManager(
         accountId = record.Id;
         var account = AccountConfigMapper.ToAccountConfig(record, encryptor);
 
-        // Create connection on the fly if not already tracked
-        if (!_connections.TryGetValue(accountId, out var connMgr))
+        // Create connection on the fly if not already tracked (GetOrAdd is atomic)
+        var connMgr = _connections.GetOrAdd(accountId, _ =>
         {
-            connMgr = new ImapConnectionManager(account, encryptor,
-                logger as ILogger<ImapConnectionManager>,
-                oauthProvider, accountId);
-            _connections[accountId] = connMgr;
             logger.LogInformation("Created on-demand connection for server search on account {AccountId} ({Name})",
                 accountId, record.Name);
-        }
+            return new ImapConnectionManager(account, encryptor,
+                logger as ILogger<ImapConnectionManager>,
+                oauthProvider, accountId);
+        });
 
         var folder = folderRepo.GetByPath(accountId, folderPath)
             ?? throw new InvalidOperationException($"Folder '{folderPath}' not found for account '{accountId}'.");

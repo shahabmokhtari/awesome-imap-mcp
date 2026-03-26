@@ -353,6 +353,69 @@ public class MessageRepositoryTests : IDisposable
         Assert.All(results, r => Assert.Equal(sentId, r.FolderId));
     }
 
+    [Fact]
+    public void GetById_ReturnsMessage()
+    {
+        var folderId = _folderRepo.GetByPath("test", "INBOX")!.Id;
+        InsertTestMessage("test", folderId, 950, "getbyid-test");
+        var byUid = _messageRepo.GetByUid("test", folderId, 950);
+        Assert.NotNull(byUid);
+
+        var byId = _messageRepo.GetById(byUid.Id);
+        Assert.NotNull(byId);
+        Assert.Equal(byUid.Uid, byId.Uid);
+        Assert.Equal(byUid.Subject, byId.Subject);
+    }
+
+    [Fact]
+    public void GetById_NonExistent_ReturnsNull()
+    {
+        Assert.Null(_messageRepo.GetById(999999));
+    }
+
+    [Fact]
+    public void SearchAdvanced_FtsWithFromFilter_CombinesCorrectly()
+    {
+        var folderId = _folderRepo.GetByPath("test", "INBOX")!.Id;
+        InsertTestMessage("test", folderId, 951, "combotest");
+        // from_email is "test@test.com", subject is "Subject combotest"
+
+        var results = _messageRepo.SearchAdvanced(new SearchFilter
+        {
+            Query = "combotest",
+            FromAddress = "test@test.com"
+        });
+        Assert.True(results.Count >= 1);
+
+        // Searching with wrong from should return nothing
+        var noResults = _messageRepo.SearchAdvanced(new SearchFilter
+        {
+            Query = "combotest",
+            FromAddress = "nobody@example.com"
+        });
+        Assert.Empty(noResults);
+    }
+
+    [Fact]
+    public void SearchAdvanced_WithOffset_Paginates()
+    {
+        var folderId = _folderRepo.GetByPath("test", "INBOX")!.Id;
+        InsertTestMessage("test", folderId, 952, "page-a");
+        InsertTestMessage("test", folderId, 953, "page-b");
+
+        var page1 = _messageRepo.SearchAdvanced(new SearchFilter
+        {
+            AccountId = "test", FolderId = folderId, MaxResults = 1, Offset = 0
+        });
+        var page2 = _messageRepo.SearchAdvanced(new SearchFilter
+        {
+            AccountId = "test", FolderId = folderId, MaxResults = 1, Offset = 1
+        });
+        Assert.Single(page1);
+        Assert.Single(page2);
+        Assert.NotEqual(page1[0].Uid, page2[0].Uid);
+    }
+
     public void Dispose()
     {
         _db.Dispose();
