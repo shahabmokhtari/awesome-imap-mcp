@@ -59,12 +59,12 @@
         "pool_size": 2,
         "request_timeout_seconds": 60,
         "claude": {
-            "command": "claude-agent-acp",
-            "args": []
+            "command": "npx",
+            "args": ["--yes", "claude-code-acp"]
         },
         "copilot": {
-            "command": "copilot",
-            "args": ["--acp"]
+            "command": "gh",
+            "args": ["copilot", "--acp"]
         }
     }
   },

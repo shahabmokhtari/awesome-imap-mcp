@@ -27,7 +27,8 @@ public class AnalysisTools(
         [Description("Account ID")] string? accountId = null,
         [Description("Message UID")] int? uid = null,
         [Description("Folder ID (integer, optional)")] int? folderId = null,
-        [Description("Analysis type: spam_score, category, priority, summary, custom")] string type = "summary")
+        [Description("Analysis type: spam_score, category, priority, summary, custom")] string type = "summary",
+        [Description("Custom analysis instructions (used when type='custom', or overrides the default prompt for any type)")] string? customPrompt = null)
     {
         try
         {
@@ -46,6 +47,16 @@ public class AnalysisTools(
                 msg.FromAddress ?? "(unknown)",
                 msg.BodyText,
                 msg.Snippet);
+
+            // If custom prompt provided, prepend it to the email body context
+            if (!string.IsNullOrEmpty(customPrompt))
+            {
+                email = new EmailContent(
+                    msg.Subject ?? "(no subject)",
+                    msg.FromAddress ?? "(unknown)",
+                    $"[Analysis Instructions: {customPrompt}]\n\n{msg.BodyText}",
+                    msg.Snippet);
+            }
 
             var result = await analyzer.AnalyzeAsync(email, analysisType).ConfigureAwait(false);
 
@@ -94,7 +105,8 @@ public class AnalysisTools(
         [Description("Account ID")] string accountId,
         [Description("Folder path (e.g., INBOX)")] string folderPath,
         [Description("Analysis type: spam_score, category, priority, summary, custom")] string type = "summary",
-        [Description("Max number of messages to analyze (default: 10)")] int limit = 10)
+        [Description("Max number of messages to analyze (default: 10)")] int limit = 10,
+        [Description("Custom analysis instructions (used when type='custom')")] string? customPrompt = null)
     {
         try
         {
@@ -126,6 +138,16 @@ public class AnalysisTools(
                     msg.FromAddress ?? "(unknown)",
                     msg.BodyText,
                     msg.Snippet);
+
+                // If custom prompt provided, prepend it to the email body context
+                if (!string.IsNullOrEmpty(customPrompt))
+                {
+                    email = new EmailContent(
+                        msg.Subject ?? "(no subject)",
+                        msg.FromAddress ?? "(unknown)",
+                        $"[Analysis Instructions: {customPrompt}]\n\n{msg.BodyText}",
+                        msg.Snippet);
+                }
 
                 var result = await analyzer.AnalyzeAsync(email, analysisType).ConfigureAwait(false);
 

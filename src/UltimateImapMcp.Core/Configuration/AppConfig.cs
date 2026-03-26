@@ -297,15 +297,15 @@ public class AcpConfig
     [JsonPropertyName("claude")]
     public AcpProviderConfig Claude { get; set; } = new()
     {
-        Command = "claude-agent-acp",
-        Args = [],
+        Command = "npx",
+        Args = ["--yes", "claude-code-acp"],
     };
 
     [JsonPropertyName("copilot")]
     public AcpProviderConfig Copilot { get; set; } = new()
     {
-        Command = "copilot",
-        Args = ["--acp"],
+        Command = "gh",
+        Args = ["copilot", "--acp"],
     };
 
     /// <summary>Legacy command field — if set, overrides claude provider command.</summary>
