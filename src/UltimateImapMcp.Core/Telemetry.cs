@@ -24,4 +24,14 @@ public static class Telemetry
     public static readonly Counter<long> OperationsCompleted = Meter.CreateCounter<long>("queue.completed");
     public static readonly Counter<long> LlmTokensUsed = Meter.CreateCounter<long>("llm.tokens_used");
     public static readonly Counter<long> CacheEvictions = Meter.CreateCounter<long>("cache.evictions");
+
+    // ACP metrics
+    public static readonly Histogram<double> AcpSessionLatency =
+        Meter.CreateHistogram<double>("acp.session_ms", description: "ACP session creation latency");
+    public static readonly Histogram<double> AcpPromptLatency =
+        Meter.CreateHistogram<double>("acp.prompt_ms", description: "ACP prompt processing latency");
+    public static readonly Counter<long> AcpRequests =
+        Meter.CreateCounter<long>("acp.requests", description: "Total ACP requests");
+    public static readonly Counter<long> AcpErrors =
+        Meter.CreateCounter<long>("acp.errors", description: "Total ACP errors");
 }

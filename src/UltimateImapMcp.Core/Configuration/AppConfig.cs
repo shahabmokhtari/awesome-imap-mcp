@@ -285,11 +285,45 @@ public class LlmConfig
 /// <summary>Agent Client Protocol configuration for spawning LLM agents.</summary>
 public class AcpConfig
 {
+    [JsonPropertyName("provider")]
+    public string Provider { get; set; } = "claude";
+
+    [JsonPropertyName("pool_size")]
+    public int PoolSize { get; set; } = 2;
+
+    [JsonPropertyName("request_timeout_seconds")]
+    public int RequestTimeoutSeconds { get; set; } = 60;
+
+    [JsonPropertyName("claude")]
+    public AcpProviderConfig Claude { get; set; } = new()
+    {
+        Command = "claude-agent-acp",
+        Args = [],
+    };
+
+    [JsonPropertyName("copilot")]
+    public AcpProviderConfig Copilot { get; set; } = new()
+    {
+        Command = "copilot",
+        Args = ["--acp"],
+    };
+
+    /// <summary>Legacy command field — if set, overrides claude provider command.</summary>
     [JsonPropertyName("command")]
     public string Command { get; set; } = "claude";
 
+    /// <summary>Legacy args field — if set, overrides claude provider args.</summary>
     [JsonPropertyName("args")]
     public List<string> Args { get; set; } = ["--acp"];
+}
+
+public class AcpProviderConfig
+{
+    [JsonPropertyName("command")]
+    public string Command { get; set; } = "";
+
+    [JsonPropertyName("args")]
+    public List<string> Args { get; set; } = [];
 }
 
 /// <summary>Prometheus/metrics endpoint settings.</summary>
