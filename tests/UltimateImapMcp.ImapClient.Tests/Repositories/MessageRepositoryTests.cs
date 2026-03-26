@@ -282,6 +282,77 @@ public class MessageRepositoryTests : IDisposable
             hasAttachments: false, snippet: "test snippet");
     }
 
+    // ---------------------------------------------------------------
+    // SearchAdvanced tests
+    // ---------------------------------------------------------------
+
+    [Fact]
+    public void SearchAdvanced_ByFromAddress_FiltersCorrectly()
+    {
+        var folderId = _folderRepo.GetByPath("test", "INBOX")!.Id;
+        InsertTestMessage("test", folderId, 901, "sa-from");
+
+        var results = _messageRepo.SearchAdvanced(new SearchFilter { AccountId = "test", FromAddress = "test@test.com" });
+        Assert.True(results.Count >= 1);
+        Assert.All(results, r => Assert.Contains("test@test.com", r.FromEmail ?? ""));
+    }
+
+    [Fact]
+    public void SearchAdvanced_ByDateRange_FiltersCorrectly()
+    {
+        var folderId = _folderRepo.GetByPath("test", "INBOX")!.Id;
+        InsertTestMessage("test", folderId, 902, "sa-date");
+
+        var results = _messageRepo.SearchAdvanced(new SearchFilter
+        {
+            AccountId = "test", FromDateEpoch = 1774040000, ToDateEpoch = 1774041000
+        });
+        Assert.True(results.Count >= 1);
+    }
+
+    [Fact]
+    public void SearchAdvanced_BySubject_FiltersCorrectly()
+    {
+        var folderId = _folderRepo.GetByPath("test", "INBOX")!.Id;
+        InsertTestMessage("test", folderId, 903, "sa-subj-unique");
+
+        var results = _messageRepo.SearchAdvanced(new SearchFilter { Subject = "sa-subj-unique" });
+        Assert.True(results.Count >= 1);
+    }
+
+    [Fact]
+    public void SearchAdvanced_OrderByDateAsc_Works()
+    {
+        var folderId = _folderRepo.GetByPath("test", "INBOX")!.Id;
+        InsertTestMessage("test", folderId, 904, "sa-order");
+
+        var results = _messageRepo.SearchAdvanced(new SearchFilter { AccountId = "test", OrderBy = "date_asc" });
+        Assert.NotEmpty(results);
+    }
+
+    [Fact]
+    public void SearchAdvanced_NoFilters_ReturnsMessages()
+    {
+        var folderId = _folderRepo.GetByPath("test", "INBOX")!.Id;
+        InsertTestMessage("test", folderId, 905, "sa-nofilter");
+
+        var results = _messageRepo.SearchAdvanced(new SearchFilter());
+        Assert.NotEmpty(results);
+    }
+
+    [Fact]
+    public void SearchAdvanced_ByFolderId_FiltersCorrectly()
+    {
+        _folderRepo.Insert("test", "Sent", "Sent", "sent", "/");
+        var inboxId = _folderRepo.GetByPath("test", "INBOX")!.Id;
+        var sentId = _folderRepo.GetByPath("test", "Sent")!.Id;
+        InsertTestMessage("test", inboxId, 906, "sa-folder-inbox");
+        InsertTestMessage("test", sentId, 907, "sa-folder-sent");
+
+        var results = _messageRepo.SearchAdvanced(new SearchFilter { AccountId = "test", FolderId = sentId });
+        Assert.All(results, r => Assert.Equal(sentId, r.FolderId));
+    }
+
     public void Dispose()
     {
         _db.Dispose();
