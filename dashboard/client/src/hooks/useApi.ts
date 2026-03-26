@@ -381,6 +381,20 @@ export function useTools() {
   })
 }
 
+export interface ToolSuggestion {
+  value: string | number
+  label: string
+  accountId?: string
+}
+
+export function useToolSuggestions() {
+  return useQuery({
+    queryKey: ['tool-suggestions'],
+    queryFn: () => apiFetch<Record<string, ToolSuggestion[]>>('/api/tools/suggestions'),
+    staleTime: 30000,
+  })
+}
+
 export function useExecuteTool() {
   return useMutation({
     mutationFn: (params: { name: string; args: Record<string, unknown> }) =>

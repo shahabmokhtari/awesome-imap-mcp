@@ -361,7 +361,6 @@ export default function Messages() {
   }, [selectedAccountId, accounts])
 
   const { data: folders, isLoading: foldersLoading } = useFolders(accountId)
-  const { data: messages, isLoading: messagesLoading } = useMessages(accountId, selectedFolderId, 100)
 
   // Auto-select INBOX or first folder
   const effectiveFolderId = useMemo(() => {
@@ -370,6 +369,8 @@ export default function Messages() {
     const inbox = folders.find(f => f.role?.toLowerCase() === 'inbox' || f.path.toLowerCase() === 'inbox')
     return inbox?.id ?? folders[0].id
   }, [selectedFolderId, folders])
+
+  const { data: messages, isLoading: messagesLoading } = useMessages(accountId, effectiveFolderId, 100)
 
   const isSearching = searchQuery.length > 0
 
