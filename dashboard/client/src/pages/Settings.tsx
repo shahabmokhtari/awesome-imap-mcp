@@ -239,6 +239,7 @@ function ServerControlsCard() {
   const [confirming, setConfirming] = useState(false)
   const [shutdownSent, setShutdownSent] = useState(false)
   const [disconnected, setDisconnected] = useState(false)
+  const [instanceError, setInstanceError] = useState<string | null>(null)
 
   const handleShutdown = () => {
     shutdownMutation.mutate(undefined, {
@@ -249,15 +250,16 @@ function ServerControlsCard() {
       },
       onError: (err) => {
         setConfirming(false)
-        console.error('[shutdown] failed:', err)
+        setInstanceError(`Shutdown failed: ${err.message}`)
       },
     })
   }
 
   const handleShutdownInstance = (instanceId: string) => {
     if (!window.confirm(`Shutdown instance ${instanceId}?`)) return
+    setInstanceError(null)
     shutdownInstance.mutate(instanceId, {
-      onError: (err) => console.error('[shutdownInstance] failed:', err),
+      onError: (err) => setInstanceError(`Failed to shutdown ${instanceId}: ${err.message}`),
     })
   }
 
@@ -295,6 +297,12 @@ function ServerControlsCard() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {instanceError && (
+        <div className="mt-2 text-xs text-red-600 bg-red-50 border border-red-200 rounded p-2">
+          {instanceError}
         </div>
       )}
 
