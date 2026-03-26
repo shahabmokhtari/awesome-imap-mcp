@@ -87,44 +87,40 @@ public class FolderRepository(AppDatabase db)
         });
     }
 
-    /// <summary>Resets sync state for all folders of an account so they will be re-synced.</summary>
+    /// <summary>Resets sync cursor for all folders of an account so they will re-sync.
+    /// Only resets last_synced_uid — message_count/unread_count are IMAP server counts
+    /// and will be refreshed from the server on next sync.</summary>
     public void ResetSyncState(string accountId)
     {
         db.ExecuteWrite(conn =>
         {
             using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                UPDATE folders SET last_synced_uid = 0, message_count = 0, unread_count = 0
-                WHERE account_id = $a;
-                """;
+            cmd.CommandText = "UPDATE folders SET last_synced_uid = 0 WHERE account_id = $a;";
             cmd.Parameters.AddWithValue("$a", accountId);
             cmd.ExecuteNonQuery();
         });
     }
 
-    /// <summary>Resets sync state for a specific folder so it will be re-synced.</summary>
+    /// <summary>Resets sync cursor for a specific folder so it will re-sync.</summary>
     public void ResetFolderSyncState(string accountId, int folderId)
     {
         db.ExecuteWrite(conn =>
         {
             using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                UPDATE folders SET last_synced_uid = 0, message_count = 0, unread_count = 0
-                WHERE id = $id AND account_id = $a;
-                """;
+            cmd.CommandText = "UPDATE folders SET last_synced_uid = 0 WHERE id = $id AND account_id = $a;";
             cmd.Parameters.AddWithValue("$id", folderId);
             cmd.Parameters.AddWithValue("$a", accountId);
             cmd.ExecuteNonQuery();
         });
     }
 
-    /// <summary>Resets sync state for ALL folders across all accounts.</summary>
+    /// <summary>Resets sync cursor for ALL folders across all accounts.</summary>
     public void ResetAllSyncState()
     {
         db.ExecuteWrite(conn =>
         {
             using var cmd = conn.CreateCommand();
-            cmd.CommandText = "UPDATE folders SET last_synced_uid = 0, message_count = 0, unread_count = 0;";
+            cmd.CommandText = "UPDATE folders SET last_synced_uid = 0;";
             cmd.ExecuteNonQuery();
         });
     }
