@@ -66,6 +66,14 @@ public class SyncManager(
             var accountId = record.Id;
             var account = AccountConfigMapper.ToAccountConfig(record, encryptor);
 
+            // Skip REST-only accounts (e.g. Zoho OAuth) — they have no IMAP host
+            // and are synced via their own REST backend (ZohoSyncService, etc.)
+            if (string.IsNullOrEmpty(account.ImapHost))
+            {
+                logger.LogDebug("Skipping IMAP sync for {Account} — no IMAP host (REST-only account)", accountId);
+                continue;
+            }
+
             // Create a connection manager for each account
             var connMgr = new ImapConnectionManager(account, encryptor,
                 logger as ILogger<ImapConnectionManager>,
@@ -462,6 +470,13 @@ public class SyncManager(
         accountId = record.Id;
         var account = AccountConfigMapper.ToAccountConfig(record, encryptor);
 
+        // REST-only accounts (e.g. Zoho OAuth) have no IMAP host — they cannot be synced via IMAP
+        if (string.IsNullOrEmpty(account.ImapHost))
+        {
+            logger.LogDebug("Skipping IMAP sync for {Account} — no IMAP host (REST-only account)", accountId);
+            return;
+        }
+
         // Create connection on the fly if not already tracked (e.g., account added after startup)
         var connMgr = _connections.GetOrAdd(accountId, _ =>
         {
@@ -496,6 +511,11 @@ public class SyncManager(
 
         accountId = record.Id;
         var account = AccountConfigMapper.ToAccountConfig(record, encryptor);
+
+        // REST-only accounts (e.g. Zoho OAuth) have no IMAP host — server search is not available
+        if (string.IsNullOrEmpty(account.ImapHost))
+            throw new InvalidOperationException(
+                $"Server search is not available for REST-only account '{record.Name}' (no IMAP host).");
 
         // Create connection on the fly if not already tracked (GetOrAdd is atomic)
         var connMgr = _connections.GetOrAdd(accountId, _ =>

@@ -7,6 +7,7 @@ export default function Sync() {
   const triggerSync = useTriggerSync()
   const triggerSyncAll = useTriggerSyncAll()
   const [triggerResult, setTriggerResult] = useState<{ accountId: string; message: string; success: boolean } | null>(null)
+  const [syncingAccountId, setSyncingAccountId] = useState<string | null>(null)
 
   const handleSyncAllAccounts = () => {
     setTriggerResult(null)
@@ -22,17 +23,19 @@ export default function Sync() {
 
   const handleTriggerAll = (accountId: string) => {
     setTriggerResult(null)
+    setSyncingAccountId(accountId)
     triggerSync.mutate({ accountId }, {
-      onSuccess: () => setTriggerResult({ accountId, message: 'Sync triggered', success: true }),
-      onError: (err) => setTriggerResult({ accountId, message: err.message, success: false }),
+      onSuccess: () => { setTriggerResult({ accountId, message: 'Sync triggered', success: true }); setSyncingAccountId(null) },
+      onError: (err) => { setTriggerResult({ accountId, message: err.message, success: false }); setSyncingAccountId(null) },
     })
   }
 
   const handleTriggerFolder = (accountId: string, folderPath: string) => {
     setTriggerResult(null)
+    setSyncingAccountId(accountId)
     triggerSync.mutate({ accountId, folderPath }, {
-      onSuccess: () => setTriggerResult({ accountId, message: `Syncing ${folderPath}...`, success: true }),
-      onError: (err) => setTriggerResult({ accountId, message: err.message, success: false }),
+      onSuccess: () => { setTriggerResult({ accountId, message: `Syncing ${folderPath}...`, success: true }); setSyncingAccountId(null) },
+      onError: (err) => { setTriggerResult({ accountId, message: err.message, success: false }); setSyncingAccountId(null) },
     })
   }
 
@@ -84,10 +87,10 @@ export default function Sync() {
               <h3 className="text-lg font-medium text-gray-800">{accountLabel}</h3>
               <button
                 onClick={() => handleTriggerAll(accountId)}
-                disabled={triggerSync.isPending}
+                disabled={syncingAccountId === accountId}
                 className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs hover:bg-blue-700 transition-colors disabled:opacity-50"
               >
-                {triggerSync.isPending ? 'Syncing...' : 'Sync All Folders'}
+                {syncingAccountId === accountId ? 'Syncing...' : 'Sync All Folders'}
               </button>
             </div>
             <div className="bg-white rounded-lg shadow overflow-hidden">
@@ -138,7 +141,7 @@ export default function Sync() {
                           <td className="px-4 py-3">
                             <button
                               onClick={() => handleTriggerFolder(accountId, folderPath)}
-                              disabled={triggerSync.isPending}
+                              disabled={syncingAccountId === accountId}
                               className="text-blue-600 hover:text-blue-800 text-xs disabled:opacity-50"
                             >
                               Sync

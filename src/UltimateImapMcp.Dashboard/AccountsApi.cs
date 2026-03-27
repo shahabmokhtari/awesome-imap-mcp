@@ -113,7 +113,11 @@ public static class AccountsApi
                     http.DefaultRequestHeaders.Authorization =
                         new System.Net.Http.Headers.AuthenticationHeaderValue("Zoho-oauthtoken", accessToken);
                     var response = await http.GetAsync("https://mail.zoho.com/api/accounts").ConfigureAwait(false);
-                    response.EnsureSuccessStatusCode();
+                    var body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                    logger.LogDebug("Zoho test response ({Status}): {Body}", response.StatusCode, body);
+
+                    if (!response.IsSuccessStatusCode)
+                        throw new InvalidOperationException($"Zoho API returned {response.StatusCode}: {body}");
 
                     logger.LogInformation("Account test successful (Zoho REST) for {AccountName} ({AccountId})",
                         account.Name, id);
