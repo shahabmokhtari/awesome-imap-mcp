@@ -272,8 +272,31 @@ public class AcpClient : IAsyncDisposable
                 if (depth == 0)
                 {
                     var result = json.ToString();
-                    _logger.LogDebug("ACP <- {Response}", result);
-                    return JsonDocument.Parse(result);
+
+                    // Only accept JSON-RPC messages (must have "jsonrpc" key).
+                    // The ACP bridge emits debug JSON to stdout that we must skip.
+                    try
+                    {
+                        var doc = JsonDocument.Parse(result);
+                        if (doc.RootElement.TryGetProperty("jsonrpc", out _)
+                            || doc.RootElement.TryGetProperty("method", out _))
+                        {
+                            _logger.LogDebug("ACP <- {Response}", result);
+                            return doc;
+                        }
+                        // Not a JSON-RPC message — skip (bridge debug output)
+                        _logger.LogTrace("ACP (skip non-RPC JSON): {Json}", result[..Math.Min(result.Length, 200)]);
+                        doc.Dispose();
+                    }
+                    catch (JsonException)
+                    {
+                        _logger.LogTrace("ACP (skip malformed): {Json}", result[..Math.Min(result.Length, 100)]);
+                    }
+
+                    // Reset and continue looking for the real response
+                    json.Clear();
+                    inString = false;
+                    escape = false;
                 }
             }
         }
@@ -349,12 +372,20 @@ public class AcpClient : IAsyncDisposable
                 inString = false;
                 escape = false;
 
-                _logger.LogDebug("ACP event <- {Json}", result);
-
+                // Only process JSON-RPC messages, skip bridge debug JSON
                 AcpEvent acpEvent;
                 try
                 {
                     var doc = JsonDocument.Parse(result);
+                    if (!doc.RootElement.TryGetProperty("jsonrpc", out _)
+                        && !doc.RootElement.TryGetProperty("method", out _))
+                    {
+                        _logger.LogTrace("ACP (skip non-RPC): {Json}", result[..Math.Min(result.Length, 200)]);
+                        doc.Dispose();
+                        continue;
+                    }
+
+                    _logger.LogDebug("ACP event <- {Json}", result);
                     acpEvent = ParseEvent(doc);
                 }
                 catch (JsonException ex)
