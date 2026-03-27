@@ -207,4 +207,8 @@ public record OAuthTokenResponse
 
     [JsonPropertyName("id_token")]
     public string? IdToken { get; init; }
+
+    /// <summary>Zoho-specific: the API domain for this user's datacenter (e.g., https://www.zohoapis.com.au)</summary>
+    [JsonPropertyName("api_domain")]
+    public string? ApiDomain { get; init; }
 }

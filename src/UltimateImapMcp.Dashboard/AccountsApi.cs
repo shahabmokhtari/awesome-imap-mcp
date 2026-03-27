@@ -109,10 +109,16 @@ public static class AccountsApi
                     var accessToken = await oauthProvider.GetAccessTokenAsync(id).ConfigureAwait(false)
                         ?? throw new InvalidOperationException("No OAuth access token available.");
 
+                    // Get the correct Zoho domain from stored api_domain
+                    var tokenRecord = oauthTokenRepo.GetByAccountId(id);
+                    var mailDomain = "https://mail.zoho.com";
+                    if (tokenRecord?.ApiDomain is not null)
+                        mailDomain = tokenRecord.ApiDomain.Replace("www.zohoapis", "mail.zoho").TrimEnd('/');
+
                     using var http = new HttpClient();
                     http.DefaultRequestHeaders.Authorization =
                         new System.Net.Http.Headers.AuthenticationHeaderValue("Zoho-oauthtoken", accessToken);
-                    var response = await http.GetAsync("https://mail.zoho.com/api/accounts").ConfigureAwait(false);
+                    var response = await http.GetAsync($"{mailDomain}/api/accounts").ConfigureAwait(false);
                     var body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
                     logger.LogDebug("Zoho test response ({Status}): {Body}", response.StatusCode, body);
 

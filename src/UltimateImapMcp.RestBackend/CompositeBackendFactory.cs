@@ -28,6 +28,7 @@ public sealed class CompositeBackendFactory : IEmailBackendFactory
     private readonly CredentialEncryptor _encryptor;
     private readonly ProviderProfileRegistry _providerRegistry;
     private readonly IOAuthAccessTokenProvider _oauthProvider;
+    private readonly OAuthTokenRepository _tokenRepo;
     private readonly ImapSyncService _imapSyncService;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILoggerFactory _loggerFactory;
@@ -41,6 +42,7 @@ public sealed class CompositeBackendFactory : IEmailBackendFactory
         CredentialEncryptor encryptor,
         ProviderProfileRegistry providerRegistry,
         IOAuthAccessTokenProvider oauthProvider,
+        OAuthTokenRepository tokenRepo,
         ImapSyncService imapSyncService,
         IHttpClientFactory httpClientFactory,
         ILoggerFactory loggerFactory)
@@ -53,6 +55,7 @@ public sealed class CompositeBackendFactory : IEmailBackendFactory
         _encryptor = encryptor;
         _providerRegistry = providerRegistry;
         _oauthProvider = oauthProvider;
+        _tokenRepo = tokenRepo;
         _imapSyncService = imapSyncService;
         _httpClientFactory = httpClientFactory;
         _loggerFactory = loggerFactory;
@@ -156,6 +159,7 @@ public sealed class CompositeBackendFactory : IEmailBackendFactory
         var apiClient = new ZohoApiClient(
             _httpClientFactory,
             _oauthProvider,
+            _tokenRepo,
             _loggerFactory.CreateLogger<ZohoApiClient>());
 
         return new ZohoSyncBackend(
@@ -171,6 +175,7 @@ public sealed class CompositeBackendFactory : IEmailBackendFactory
         var apiClient = new ZohoApiClient(
             _httpClientFactory,
             _oauthProvider,
+            _tokenRepo,
             _loggerFactory.CreateLogger<ZohoApiClient>());
 
         return new ZohoOperationBackend(
