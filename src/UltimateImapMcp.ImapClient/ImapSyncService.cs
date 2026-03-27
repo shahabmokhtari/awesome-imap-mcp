@@ -99,11 +99,13 @@ public sealed class ImapSyncService
     /// <summary>
     /// Contiguous sync: gets ALL UIDs from server, compares with cached UIDs,
     /// fetches missing ones newest-first in batches. Guarantees no gaps.
+    /// Optionally soft-deletes messages that no longer exist on the server.
     /// </summary>
     public async Task SyncFolderMessagesAsync(
         ImapClientLib client,
         string accountId,
         FolderRecord folder,
+        bool cleanupServerDeleted = true,
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(client);
@@ -120,6 +122,7 @@ public sealed class ImapSyncService
         {
             // Get ALL UIDs that exist on the server
             var allServerUids = await imapFolder.SearchAsync(SearchQuery.All, ct).ConfigureAwait(false);
+            var serverUidSet = new HashSet<long>(allServerUids.Select(u => (long)u.Id));
 
             if (allServerUids.Count == 0)
             {
@@ -130,19 +133,31 @@ public sealed class ImapSyncService
             // Get UIDs we already have cached
             var cachedUids = _messageRepo.GetCachedUids(accountId, folder.Id);
 
-            // Find missing UIDs (on server but not in cache)
+            // Find missing UIDs (on server but not in cache) — fetch newest first
             var missingUids = allServerUids
                 .Where(u => !cachedUids.Contains((long)u.Id))
-                .OrderByDescending(u => u.Id) // Newest first
+                .OrderByDescending(u => u.Id)
                 .ToList();
 
             if (missingUids.Count > 0)
             {
-                // Fetch in batches of 200, newest first
                 const int batchSize = 200;
                 var batch = missingUids.Take(batchSize).ToList();
                 await FetchAndStoreMessagesAsync(imapFolder, accountId, folder.Id, batch, ct)
                     .ConfigureAwait(false);
+            }
+
+            // Soft-delete messages that were removed from the server
+            if (cleanupServerDeleted && cachedUids.Count > 0)
+            {
+                var deletedOnServer = cachedUids
+                    .Where(uid => !serverUidSet.Contains(uid))
+                    .ToList();
+
+                if (deletedOnServer.Count > 0)
+                {
+                    _messageRepo.SoftDeleteByUids(accountId, folder.Id, deletedOnServer);
+                }
             }
 
             // Update folder state from actual data

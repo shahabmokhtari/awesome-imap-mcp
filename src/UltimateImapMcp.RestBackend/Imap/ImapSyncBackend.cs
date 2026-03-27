@@ -66,7 +66,7 @@ internal sealed class ImapSyncBackend : IEmailSyncBackend
                 return;
             }
 
-            await _syncService.SyncFolderMessagesAsync(client, accountId, folder, ct)
+            await _syncService.SyncFolderMessagesAsync(client, accountId, folder, ct: ct)
                 .ConfigureAwait(false);
         }, ct).ConfigureAwait(false);
     }

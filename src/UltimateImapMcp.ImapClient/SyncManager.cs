@@ -395,7 +395,8 @@ public class SyncManager(
 
         try
         {
-            await syncService.SyncFolderMessagesAsync(client, accountId, folder, ct)
+            await syncService.SyncFolderMessagesAsync(client, accountId, folder,
+                    cleanupServerDeleted: appConfig.Cache.CleanupServerDeleted, ct: ct)
                 .ConfigureAwait(false);
 
             sw.Stop();
