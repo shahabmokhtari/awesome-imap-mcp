@@ -37,6 +37,7 @@ public class SyncManager(
     private readonly ConcurrentDictionary<string, ImapConnectionManager> _connections = new();
     private readonly ConcurrentDictionary<string, FolderSyncStatus> _folderStatus = new();
     private readonly ConcurrentDictionary<string, CancellationTokenSource> _idleCts = new();
+    private readonly ConcurrentDictionary<string, bool> _hasPendingMessages = new();
     private Action<string, object>? _onSyncEvent;
 
     /// <summary>
@@ -262,7 +263,8 @@ public class SyncManager(
         {
             try
             {
-                await SyncAllFoldersAsync(accountId, account, connMgr, "poll", ct).ConfigureAwait(false);
+                var remaining = await SyncAllFoldersAsync(accountId, account, connMgr, "poll", ct).ConfigureAwait(false);
+                _hasPendingMessages[accountId] = remaining > 0;
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
@@ -289,9 +291,14 @@ public class SyncManager(
                 continue;
             }
 
+            // Wait before next sync — short delay (2s) if still catching up, full interval if caught up
+            var delay = _hasPendingMessages.GetValueOrDefault(accountId, false)
+                ? TimeSpan.FromSeconds(2)
+                : interval;
+
             try
             {
-                await Task.Delay(interval, ct).ConfigureAwait(false);
+                await Task.Delay(delay, ct).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -300,7 +307,8 @@ public class SyncManager(
 
             try
             {
-                await SyncAllFoldersAsync(accountId, account, connMgr, "poll", ct).ConfigureAwait(false);
+                var remaining = await SyncAllFoldersAsync(accountId, account, connMgr, "poll", ct).ConfigureAwait(false);
+                _hasPendingMessages[accountId] = remaining > 0;
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
@@ -318,10 +326,11 @@ public class SyncManager(
     // Sync operations
     // ------------------------------------------------------------------
 
-    private async Task SyncAllFoldersAsync(string accountId, AccountConfig account,
+    /// <summary>Returns total remaining messages across all folders (0 = fully caught up).</summary>
+    private async Task<int> SyncAllFoldersAsync(string accountId, AccountConfig account,
         ImapConnectionManager connMgr, string syncType, CancellationToken ct)
     {
-        await connMgr.ExecuteAsync(async client =>
+        return await connMgr.ExecuteAsync(async client =>
         {
             // Sync folder list first
             var profile = providerRegistry.GetProfileByName(account.Provider);
@@ -335,6 +344,7 @@ public class SyncManager(
             logger.LogInformation("Starting {SyncType} sync for {Account} — {Count} enabled folder(s)",
                 syncType, accountId, enabledFolders.Count);
 
+            var totalRemaining = 0;
             foreach (var folder in enabledFolders)
             {
                 ct.ThrowIfCancellationRequested();
@@ -344,12 +354,15 @@ public class SyncManager(
 
                 _onSyncEvent?.Invoke("sync:progress", new { accountId, folder = folder.Path, status = "syncing", totalFolders = enabledFolders.Count });
 
-                await SyncFolderInternalCoreAsync(client, accountId, folder, syncType, ct)
+                var remaining = await SyncFolderInternalCoreAsync(client, accountId, folder, syncType, ct)
                     .ConfigureAwait(false);
+                totalRemaining += remaining;
             }
 
-            logger.LogInformation("Completed {SyncType} sync for {Account} — {Count} folder(s) processed",
-                syncType, accountId, enabledFolders.Count);
+            logger.LogInformation("Completed {SyncType} sync for {Account} — {Count} folder(s) processed, {Remaining} messages still pending",
+                syncType, accountId, enabledFolders.Count, totalRemaining);
+
+            return totalRemaining;
         }, ct).ConfigureAwait(false);
     }
 
@@ -394,8 +407,8 @@ public class SyncManager(
         }, ct).ConfigureAwait(false);
     }
 
-    /// <summary>Core folder sync logic. Caller must ensure exclusive IMAP client access.</summary>
-    private async Task SyncFolderInternalCoreAsync(MailKit.Net.Imap.ImapClient client,
+    /// <summary>Core folder sync logic. Returns remaining messages. Caller must ensure exclusive IMAP client access.</summary>
+    private async Task<int> SyncFolderInternalCoreAsync(MailKit.Net.Imap.ImapClient client,
         string accountId, FolderRecord folder, string syncType, CancellationToken ct)
     {
         var logId = syncLogRepo.LogStart(accountId, folder.Id, syncType);
@@ -403,7 +416,7 @@ public class SyncManager(
 
         try
         {
-            await syncService.SyncFolderMessagesAsync(client, accountId, folder,
+            var remaining = await syncService.SyncFolderMessagesAsync(client, accountId, folder,
                     cleanupServerDeleted: appConfig.Cache.CleanupServerDeleted, ct: ct)
                 .ConfigureAwait(false);
 
@@ -426,8 +439,10 @@ public class SyncManager(
 
             _onSyncEvent?.Invoke("sync:complete", new { accountId, folder = folder.Path, messagesSynced = (int)Math.Max(0, messagesSynced), durationMs = sw.ElapsedMilliseconds });
 
-            logger.LogDebug("Synced {Account}/{Folder} — {Messages} new messages in {Duration}ms",
-                accountId, folder.Path, messagesSynced, sw.ElapsedMilliseconds);
+            logger.LogDebug("Synced {Account}/{Folder} — {Messages} new messages in {Duration}ms, {Remaining} remaining",
+                accountId, folder.Path, messagesSynced, sw.ElapsedMilliseconds, remaining);
+
+            return remaining;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -449,6 +464,8 @@ public class SyncManager(
             // Rethrow connection-level errors so the parent stops trying more folders on a dead connection
             if (ex is IOException or SocketException or ImapProtocolException)
                 throw;
+
+            return 0; // On error, don't signal remaining — let the next cycle retry
         }
     }
 

@@ -100,8 +100,9 @@ public sealed class ImapSyncService
     /// Contiguous sync: gets ALL UIDs from server, compares with cached UIDs,
     /// fetches missing ones newest-first in batches. Guarantees no gaps.
     /// Optionally soft-deletes messages that no longer exist on the server.
+    /// Returns the number of messages still missing after this batch (0 = fully caught up).
     /// </summary>
-    public async Task SyncFolderMessagesAsync(
+    public async Task<int> SyncFolderMessagesAsync(
         ImapClientLib client,
         string accountId,
         FolderRecord folder,
@@ -114,7 +115,7 @@ public sealed class ImapSyncService
         var imapFolder = await client.GetFolderAsync(folder.Path, ct).ConfigureAwait(false);
         if (imapFolder.Attributes.HasFlag(FolderAttributes.NoSelect)
             || imapFolder.Attributes.HasFlag(FolderAttributes.NonExistent))
-            return;
+            return 0;
 
         await imapFolder.OpenAsync(FolderAccess.ReadOnly, ct).ConfigureAwait(false);
 
@@ -127,7 +128,7 @@ public sealed class ImapSyncService
             if (allServerUids.Count == 0)
             {
                 _folderRepo.UpdateSyncState(folder.Id, 0, 0, 0, 0);
-                return;
+                return 0;
             }
 
             // Get UIDs we already have cached
@@ -167,6 +168,10 @@ public sealed class ImapSyncService
             _folderRepo.UpdateSyncState(
                 folder.Id, maxUid, minUid,
                 imapFolder.Count, imapFolder.Unread);
+
+            // Return how many messages are still missing
+            var remaining = missingUids.Count > 200 ? missingUids.Count - 200 : 0;
+            return remaining;
         }
         finally
         {
