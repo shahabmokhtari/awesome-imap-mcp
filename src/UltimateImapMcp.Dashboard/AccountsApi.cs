@@ -102,6 +102,24 @@ public static class AccountsApi
 
             try
             {
+                // Zoho OAuth uses REST API, not IMAP — test via API instead
+                if (account.Provider.Equals("zoho", StringComparison.OrdinalIgnoreCase)
+                    && account.AuthType.Equals("oauth2", StringComparison.OrdinalIgnoreCase))
+                {
+                    var accessToken = await oauthProvider.GetAccessTokenAsync(id).ConfigureAwait(false)
+                        ?? throw new InvalidOperationException("No OAuth access token available.");
+
+                    using var http = new HttpClient();
+                    http.DefaultRequestHeaders.Authorization =
+                        new System.Net.Http.Headers.AuthenticationHeaderValue("Zoho-oauthtoken", accessToken);
+                    var response = await http.GetAsync("https://mail.zoho.com/api/accounts").ConfigureAwait(false);
+                    response.EnsureSuccessStatusCode();
+
+                    logger.LogInformation("Account test successful (Zoho REST) for {AccountName} ({AccountId})",
+                        account.Name, id);
+                    return Results.Ok(new { success = true, message = "Zoho REST API connection successful" });
+                }
+
                 using var client = new MailKit.Net.Imap.ImapClient();
                 await client.ConnectAsync(account.ImapHost, account.ImapPort,
                     MailKit.Security.SecureSocketOptions.SslOnConnect).ConfigureAwait(false);

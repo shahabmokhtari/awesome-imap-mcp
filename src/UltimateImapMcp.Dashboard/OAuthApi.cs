@@ -407,8 +407,13 @@ public static class OAuthApi
             if (url is null) return (null, null);
 
             using var request = new HttpRequestMessage(HttpMethod.Get, url);
-            request.Headers.Authorization =
-                new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+            // Zoho uses "Zoho-oauthtoken" prefix instead of "Bearer"
+            if (provider.Equals("zoho", StringComparison.OrdinalIgnoreCase))
+                request.Headers.Authorization =
+                    new System.Net.Http.Headers.AuthenticationHeaderValue("Zoho-oauthtoken", accessToken);
+            else
+                request.Headers.Authorization =
+                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
 
             using var response = await http.SendAsync(request, ct).ConfigureAwait(false);
             var json = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
