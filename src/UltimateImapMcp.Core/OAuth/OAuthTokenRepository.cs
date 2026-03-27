@@ -10,16 +10,17 @@ public class OAuthTokenRepository(AppDatabase db)
 {
     public void Upsert(string accountId, string provider, string clientId,
         string? clientSecretEnc, string refreshTokenEnc, string? accessTokenEnc,
-        string? tokenExpiry, string? scopes, string? email)
+        string? tokenExpiry, string? scopes, string? email,
+        string? apiDomain = null)
     {
         db.ExecuteWrite(conn =>
         {
             using var cmd = conn.CreateCommand();
             cmd.CommandText = """
                 INSERT INTO oauth_tokens (account_id, provider, client_id, client_secret_enc,
-                    refresh_token_enc, access_token_enc, token_expiry, scopes, email)
+                    refresh_token_enc, access_token_enc, token_expiry, scopes, email, api_domain)
                 VALUES ($accountId, $provider, $clientId, $clientSecretEnc,
-                    $refreshTokenEnc, $accessTokenEnc, $tokenExpiry, $scopes, $email)
+                    $refreshTokenEnc, $accessTokenEnc, $tokenExpiry, $scopes, $email, $apiDomain)
                 ON CONFLICT(account_id) DO UPDATE SET
                     provider = excluded.provider,
                     client_id = excluded.client_id,
@@ -29,6 +30,7 @@ public class OAuthTokenRepository(AppDatabase db)
                     token_expiry = excluded.token_expiry,
                     scopes = excluded.scopes,
                     email = excluded.email,
+                    api_domain = excluded.api_domain,
                     updated_at = datetime('now');
                 """;
             cmd.Parameters.AddWithValue("$accountId", accountId);
@@ -40,6 +42,7 @@ public class OAuthTokenRepository(AppDatabase db)
             cmd.Parameters.AddWithValue("$tokenExpiry", (object?)tokenExpiry ?? DBNull.Value);
             cmd.Parameters.AddWithValue("$scopes", (object?)scopes ?? DBNull.Value);
             cmd.Parameters.AddWithValue("$email", (object?)email ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$apiDomain", (object?)apiDomain ?? DBNull.Value);
             cmd.ExecuteNonQuery();
         });
     }
@@ -66,18 +69,34 @@ public class OAuthTokenRepository(AppDatabase db)
         return list;
     }
 
-    public void UpdateAccessToken(string accountId, string? accessTokenEnc, string? tokenExpiry)
+    public void UpdateAccessToken(string accountId, string? accessTokenEnc, string? tokenExpiry,
+        string? apiDomain = null)
     {
         db.ExecuteWrite(conn =>
         {
             using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                UPDATE oauth_tokens
-                SET access_token_enc = $accessTokenEnc,
-                    token_expiry = $tokenExpiry,
-                    updated_at = datetime('now')
-                WHERE account_id = $accountId;
-                """;
+            if (apiDomain is not null)
+            {
+                cmd.CommandText = """
+                    UPDATE oauth_tokens
+                    SET access_token_enc = $accessTokenEnc,
+                        token_expiry = $tokenExpiry,
+                        api_domain = $apiDomain,
+                        updated_at = datetime('now')
+                    WHERE account_id = $accountId;
+                    """;
+                cmd.Parameters.AddWithValue("$apiDomain", apiDomain);
+            }
+            else
+            {
+                cmd.CommandText = """
+                    UPDATE oauth_tokens
+                    SET access_token_enc = $accessTokenEnc,
+                        token_expiry = $tokenExpiry,
+                        updated_at = datetime('now')
+                    WHERE account_id = $accountId;
+                    """;
+            }
             cmd.Parameters.AddWithValue("$accountId", accountId);
             cmd.Parameters.AddWithValue("$accessTokenEnc", (object?)accessTokenEnc ?? DBNull.Value);
             cmd.Parameters.AddWithValue("$tokenExpiry", (object?)tokenExpiry ?? DBNull.Value);
@@ -118,7 +137,8 @@ public class OAuthTokenRepository(AppDatabase db)
         Scopes: r.IsDBNull(r.GetOrdinal("scopes")) ? null : r.GetString(r.GetOrdinal("scopes")),
         Email: r.IsDBNull(r.GetOrdinal("email")) ? null : r.GetString(r.GetOrdinal("email")),
         CreatedAt: r.GetString(r.GetOrdinal("created_at")),
-        UpdatedAt: r.GetString(r.GetOrdinal("updated_at"))
+        UpdatedAt: r.GetString(r.GetOrdinal("updated_at")),
+        ApiDomain: r.IsDBNull(r.GetOrdinal("api_domain")) ? null : r.GetString(r.GetOrdinal("api_domain"))
     );
 }
 
@@ -127,4 +147,5 @@ public record OAuthTokenRecord(
     string? ClientSecretEnc, string RefreshTokenEnc,
     string? AccessTokenEnc, string? TokenExpiry,
     string? Scopes, string? Email,
-    string CreatedAt, string UpdatedAt);
+    string CreatedAt, string UpdatedAt,
+    string? ApiDomain);

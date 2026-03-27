@@ -105,11 +105,13 @@ public sealed class OAuthAccessTokenProvider(
                 var newRefreshTokenEnc = encryptor.Encrypt(tokenResponse.RefreshToken);
                 tokenRepo.Upsert(accountId, record.Provider, record.ClientId,
                     record.ClientSecretEnc, newRefreshTokenEnc, newAccessTokenEnc,
-                    newExpiry, record.Scopes, record.Email);
+                    newExpiry, record.Scopes, record.Email,
+                    apiDomain: tokenResponse.ApiDomain);
             }
             else
             {
-                tokenRepo.UpdateAccessToken(accountId, newAccessTokenEnc, newExpiry);
+                tokenRepo.UpdateAccessToken(accountId, newAccessTokenEnc, newExpiry,
+                    apiDomain: tokenResponse.ApiDomain);
             }
 
             return tokenResponse.AccessToken;

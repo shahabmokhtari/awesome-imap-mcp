@@ -240,6 +240,7 @@ public static class OAuthApi
                     Scope = tokenResponse.Scope,
                     Email = email,
                     Name = name,
+                    ApiDomain = tokenResponse.ApiDomain,
                     CreatedAt = DateTime.UtcNow
                 };
 
@@ -314,7 +315,8 @@ public static class OAuthApi
 
             tokenRepo.Upsert(accountId, pending.Provider, pending.ClientId,
                 clientSecretEnc, refreshTokenEnc, accessTokenEnc,
-                tokenExpiry, pending.Scope, pending.Email);
+                tokenExpiry, pending.Scope, pending.Email,
+                apiDomain: pending.ApiDomain);
 
             logger.LogInformation("OAuth account created: {AccountId} for {Provider} ({Email})",
                 accountId, pending.Provider, email);
@@ -493,5 +495,6 @@ internal record PendingOAuthResult
     public string? Scope { get; init; }
     public string? Email { get; init; }
     public string? Name { get; init; }
+    public string? ApiDomain { get; init; }
     public DateTime CreatedAt { get; init; } = DateTime.UtcNow;
 }

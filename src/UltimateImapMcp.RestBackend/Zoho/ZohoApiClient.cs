@@ -16,10 +16,11 @@ namespace UltimateImapMcp.RestBackend.Zoho;
 /// </summary>
 internal sealed class ZohoApiClient
 {
-    private const string BaseUrl = "https://mail.zoho.com/api";
+    private const string DefaultBaseUrl = "https://mail.zoho.com/api";
 
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IOAuthAccessTokenProvider _tokenProvider;
+    private readonly OAuthTokenRepository _tokenRepo;
     private readonly ILogger<ZohoApiClient> _logger;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -30,11 +31,33 @@ internal sealed class ZohoApiClient
     public ZohoApiClient(
         IHttpClientFactory httpClientFactory,
         IOAuthAccessTokenProvider tokenProvider,
+        OAuthTokenRepository tokenRepo,
         ILogger<ZohoApiClient> logger)
     {
         _httpClientFactory = httpClientFactory;
         _tokenProvider = tokenProvider;
+        _tokenRepo = tokenRepo;
         _logger = logger;
+    }
+
+    /// <summary>
+    /// Resolves the correct Zoho Mail API base URL for the given account based on the
+    /// stored <c>api_domain</c> from the token response.
+    /// Converts the zohoapis domain to the corresponding mail domain
+    /// (e.g., <c>https://www.zohoapis.com.au</c> becomes <c>https://mail.zoho.com.au/api</c>).
+    /// Falls back to <c>https://mail.zoho.com/api</c> when no api_domain is stored.
+    /// </summary>
+    private string GetBaseUrl(string accountId)
+    {
+        var record = _tokenRepo.GetByAccountId(accountId);
+        if (record?.ApiDomain is not null)
+        {
+            var mailDomain = record.ApiDomain
+                .Replace("www.zohoapis", "mail.zoho")
+                .TrimEnd('/');
+            return $"{mailDomain}/api";
+        }
+        return DefaultBaseUrl;
     }
 
     // ------------------------------------------------------------------
@@ -147,7 +170,8 @@ internal sealed class ZohoApiClient
     private async Task<T?> GetAsync<T>(string accountId, string path, CancellationToken ct)
     {
         using var client = await CreateAuthenticatedClientAsync(accountId, ct).ConfigureAwait(false);
-        var url = $"{BaseUrl}{path}";
+        var baseUrl = GetBaseUrl(accountId);
+        var url = $"{baseUrl}{path}";
 
         _logger.LogDebug("Zoho GET {Url}", url);
         var response = await client.GetAsync(url, ct).ConfigureAwait(false);
@@ -159,7 +183,8 @@ internal sealed class ZohoApiClient
     private async Task PostAsync<T>(string accountId, string path, T body, CancellationToken ct)
     {
         using var client = await CreateAuthenticatedClientAsync(accountId, ct).ConfigureAwait(false);
-        var url = $"{BaseUrl}{path}";
+        var baseUrl = GetBaseUrl(accountId);
+        var url = $"{baseUrl}{path}";
 
         _logger.LogDebug("Zoho POST {Url}", url);
         var response = await client.PostAsJsonAsync(url, body, JsonOptions, ct).ConfigureAwait(false);
@@ -169,7 +194,8 @@ internal sealed class ZohoApiClient
     private async Task PutAsync<T>(string accountId, string path, T body, CancellationToken ct)
     {
         using var client = await CreateAuthenticatedClientAsync(accountId, ct).ConfigureAwait(false);
-        var url = $"{BaseUrl}{path}";
+        var baseUrl = GetBaseUrl(accountId);
+        var url = $"{baseUrl}{path}";
 
         _logger.LogDebug("Zoho PUT {Url}", url);
         var response = await client.PutAsJsonAsync(url, body, JsonOptions, ct).ConfigureAwait(false);
@@ -179,7 +205,8 @@ internal sealed class ZohoApiClient
     private async Task DeleteAsync(string accountId, string path, CancellationToken ct)
     {
         using var client = await CreateAuthenticatedClientAsync(accountId, ct).ConfigureAwait(false);
-        var url = $"{BaseUrl}{path}";
+        var baseUrl = GetBaseUrl(accountId);
+        var url = $"{baseUrl}{path}";
 
         _logger.LogDebug("Zoho DELETE {Url}", url);
         var response = await client.DeleteAsync(url, ct).ConfigureAwait(false);
