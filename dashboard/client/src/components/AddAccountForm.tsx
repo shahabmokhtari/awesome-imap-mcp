@@ -239,7 +239,10 @@ export default function AddAccountForm({ onComplete, onCancel }: AddAccountFormP
     })
   }
 
-  const providerHasOAuth = selectedProvider ? oauthProviders?.[selectedProvider]?.configured === true : false
+  const providerOAuthEntry = selectedProvider ? oauthProviders?.[selectedProvider] : undefined
+  const providerHasOAuth = providerOAuthEntry?.configured === true
+  const providerNeedsOAuthConfig = selectedProvider && !providerHasOAuth &&
+    ['zoho', 'gmail', 'outlook'].includes(selectedProvider) && !providerOAuthEntry?.configured
   const isValid = form.name.trim() && form.username.trim() && (form.password ?? '').trim() && form.imapHost.trim()
 
   const handleTestAndSave = async () => {
@@ -299,9 +302,11 @@ export default function AddAccountForm({ onComplete, onCancel }: AddAccountFormP
             >
               <ProviderIcon provider={provider} size={36} />
               <span className="text-sm font-medium text-gray-900">{PROVIDER_DISPLAY_NAMES[provider] ?? provider}</span>
-              {oauthProviders?.[provider]?.configured && (
+              {oauthProviders?.[provider]?.configured ? (
                 <span className="text-xs text-green-600">OAuth</span>
-              )}
+              ) : ['zoho', 'gmail', 'outlook'].includes(provider) ? (
+                <span className="text-xs text-amber-500">OAuth (needs config)</span>
+              ) : null}
             </button>
           ))}
         </div>
@@ -342,6 +347,24 @@ export default function AddAccountForm({ onComplete, onCancel }: AddAccountFormP
       {PROVIDER_NOTES[selectedProvider] && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-5 text-sm text-amber-800">
           {PROVIDER_NOTES[selectedProvider]}
+        </div>
+      )}
+
+      {/* OAuth needs configuration notice */}
+      {providerNeedsOAuthConfig && (
+        <div className="border border-amber-200 rounded-lg p-4 bg-amber-50 mb-5">
+          <p className="text-sm text-amber-800 font-medium mb-1">OAuth available for {selectedProvider}</p>
+          <p className="text-xs text-amber-700">
+            To use OAuth sign-in, add your OAuth credentials in <code className="bg-amber-100 px-1 rounded">config.json</code> under{' '}
+            <code className="bg-amber-100 px-1 rounded">oauth_providers.{selectedProvider}</code> with your{' '}
+            <code className="bg-amber-100 px-1 rounded">client_id</code> and{' '}
+            <code className="bg-amber-100 px-1 rounded">client_secret</code>.
+            {selectedProvider === 'zoho' && ' Create a Self Client at api-console.zoho.com.'}
+          </p>
+          <div className="relative mt-3">
+            <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-amber-200" /></div>
+            <div className="relative flex justify-center text-xs"><span className="bg-amber-50 px-2 text-amber-400">use app password below</span></div>
+          </div>
         </div>
       )}
 
