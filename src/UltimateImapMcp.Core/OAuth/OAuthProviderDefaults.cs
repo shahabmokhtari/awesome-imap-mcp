@@ -52,6 +52,7 @@ public static class OAuthProviderDefaults
                 "ZohoMail.accounts.READ",
                 "ZohoMail.messages.UPDATE",
                 "ZohoMail.messages.DELETE",
+                "AaaServer.profile.READ",
             ]
         },
     };

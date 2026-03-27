@@ -163,7 +163,12 @@ public static class OAuthApi
                     effectiveConfig, code, flow.CodeVerifier, redirectUri, ctx.RequestAborted)
                     .ConfigureAwait(false);
 
-                logger.LogInformation("OAuth token exchange successful for {Provider}", flow.Provider);
+                logger.LogInformation("OAuth token exchange for {Provider}: access_token length={AccessLen}, refresh_token length={RefreshLen}, expires_in={ExpiresIn}, scope={Scope}",
+                    flow.Provider,
+                    tokenResponse.AccessToken.Length,
+                    tokenResponse.RefreshToken?.Length ?? 0,
+                    tokenResponse.ExpiresIn,
+                    tokenResponse.Scope);
 
                 // Extract user info: try ID token first, then profile endpoints
                 using var httpClient = httpClientFactory.CreateClient();
@@ -282,7 +287,7 @@ public static class OAuthApi
             {
                 "gmail" => ("imap.gmail.com", 993, "smtp.gmail.com", 465, true),
                 "outlook" or "outlook365" => ("outlook.office365.com", 993, "smtp.office365.com", 587, false),
-                "zoho" => ("imap.zoho.com", 993, "smtp.zoho.com", 465, true),
+                "zoho" => ("", 0, "", 0, false), // Zoho OAuth uses REST API, not IMAP
                 _ => ("", 993, "", 587, false)
             };
 
