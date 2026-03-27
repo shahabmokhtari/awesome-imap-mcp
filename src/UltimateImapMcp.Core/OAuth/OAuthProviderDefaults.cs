@@ -42,7 +42,7 @@ public static class OAuthProviderDefaults
         // and supply their own client_id/client_secret in config.
         ["zoho"] = new OAuthProviderConfig
         {
-            ClientId = "CONFIGURE_ME",
+            ClientId = "1000.JGVUBWJDOV91GZXFWZDBRAF4FLE3IN",
             AuthUrl = "https://accounts.zoho.com/oauth/v2/auth",
             TokenUrl = "https://accounts.zoho.com/oauth/v2/token",
             Scopes = [
