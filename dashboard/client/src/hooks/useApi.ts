@@ -376,13 +376,14 @@ export function useFolders(accountId: string | undefined) {
   })
 }
 
-export function useMessages(accountId: string | undefined, folderId?: number, limit?: number) {
+export function useMessages(accountId: string | undefined, folderId?: number, limit?: number, offset?: number) {
   const qs = new URLSearchParams()
   if (accountId) qs.set('account_id', accountId)
   if (folderId != null) qs.set('folder_id', String(folderId))
   if (limit != null) qs.set('limit', String(limit))
+  if (offset != null && offset > 0) qs.set('offset', String(offset))
   return useQuery({
-    queryKey: ['messages', accountId, folderId, limit],
+    queryKey: ['messages', accountId, folderId, limit, offset],
     queryFn: () => apiFetch<MessageSummary[]>(`/api/messages?${qs}`),
     enabled: !!accountId && folderId != null,
   })
