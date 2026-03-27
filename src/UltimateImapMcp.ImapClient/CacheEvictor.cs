@@ -116,5 +116,14 @@ public class CacheEvictor(
                 logger.LogInformation("Deleted {Count} messages older than {Days} days (time-based)",
                     deleted, cacheConfig.DefaultWindowDays);
         }
+
+        // Purge soft-deleted messages past retention
+        if (cacheConfig.DeletedRetentionDays > 0)
+        {
+            var purged = messageRepo.PurgeSoftDeleted(cacheConfig.DeletedRetentionDays);
+            if (purged > 0)
+                logger.LogInformation("Purged {Count} soft-deleted messages (retention: {Days} days)",
+                    purged, cacheConfig.DeletedRetentionDays);
+        }
     }
 }

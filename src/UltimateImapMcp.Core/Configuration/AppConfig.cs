@@ -181,6 +181,12 @@ public class CacheConfig
 
     [JsonPropertyName("vacuum_on_startup")]
     public bool VacuumOnStartup { get; set; } = false;
+
+    [JsonPropertyName("cleanup_server_deleted")]
+    public bool CleanupServerDeleted { get; set; } = true;
+
+    [JsonPropertyName("deleted_retention_days")]
+    public int DeletedRetentionDays { get; set; } = 30;
 }
 
 /// <summary>Global sync defaults (used when per-account sync config is not set).</summary>

@@ -330,6 +330,65 @@ public class MessageRepository(AppDatabase db)
         return set;
     }
 
+    /// <summary>Soft-delete messages that were removed from the server (marks deleted_at).</summary>
+    public int SoftDeleteByUids(string accountId, int folderId, IEnumerable<long> uids)
+    {
+        var uidList = uids.ToList();
+        if (uidList.Count == 0) return 0;
+
+        return db.ExecuteWrite(conn =>
+        {
+            var count = 0;
+            foreach (var uid in uidList)
+            {
+                // Find the message via junction table
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = """
+                    UPDATE messages SET deleted_at = datetime('now')
+                    WHERE id IN (
+                        SELECT mf.message_id FROM message_folders mf
+                        JOIN messages m ON m.id = mf.message_id
+                        WHERE m.account_id = $a AND mf.folder_id = $f AND mf.uid = $u
+                    ) AND deleted_at IS NULL;
+                    """;
+                cmd.Parameters.AddWithValue("$a", accountId);
+                cmd.Parameters.AddWithValue("$f", folderId);
+                cmd.Parameters.AddWithValue("$u", uid);
+                count += cmd.ExecuteNonQuery();
+            }
+            return count;
+        });
+    }
+
+    /// <summary>Permanently delete messages that were soft-deleted more than N days ago.</summary>
+    public int PurgeSoftDeleted(int retentionDays)
+    {
+        return db.ExecuteWrite(conn =>
+        {
+            // Remove junction entries for soft-deleted messages
+            using var unlinkCmd = conn.CreateCommand();
+            unlinkCmd.CommandText = """
+                DELETE FROM message_folders WHERE message_id IN (
+                    SELECT id FROM messages
+                    WHERE deleted_at IS NOT NULL
+                      AND deleted_at < datetime('now', $days)
+                );
+                """;
+            unlinkCmd.Parameters.AddWithValue("$days", $"-{retentionDays} days");
+            unlinkCmd.ExecuteNonQuery();
+
+            // Remove the messages themselves
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                DELETE FROM messages
+                WHERE deleted_at IS NOT NULL
+                  AND deleted_at < datetime('now', $days);
+                """;
+            cmd.Parameters.AddWithValue("$days", $"-{retentionDays} days");
+            return cmd.ExecuteNonQuery();
+        });
+    }
+
     /// <summary>
     /// Gets the most recent messages in a folder, ordered by date descending.
     /// </summary>
@@ -340,7 +399,7 @@ public class MessageRepository(AppDatabase db)
         cmd.CommandText = """
             SELECT m.* FROM messages m
             JOIN message_folders mf ON mf.message_id = m.id
-            WHERE mf.folder_id = $f AND m.account_id = $a
+            WHERE mf.folder_id = $f AND m.account_id = $a AND m.deleted_at IS NULL
             ORDER BY m.date_epoch DESC LIMIT $limit OFFSET $offset;
             """;
         cmd.Parameters.AddWithValue("$a", accountId);
