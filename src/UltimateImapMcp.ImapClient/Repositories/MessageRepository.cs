@@ -311,6 +311,25 @@ public class MessageRepository(AppDatabase db)
         return Convert.ToInt64(cmd.ExecuteScalar());
     }
 
+    /// <summary>Gets all cached UIDs for a folder as a HashSet for fast lookup.</summary>
+    public HashSet<long> GetCachedUids(string accountId, int folderId)
+    {
+        using var conn = db.GetReadConnection();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT mf.uid FROM message_folders mf
+            JOIN messages m ON m.id = mf.message_id
+            WHERE m.account_id = $a AND mf.folder_id = $f;
+            """;
+        cmd.Parameters.AddWithValue("$a", accountId);
+        cmd.Parameters.AddWithValue("$f", folderId);
+        using var reader = cmd.ExecuteReader();
+        var set = new HashSet<long>();
+        while (reader.Read())
+            set.Add(reader.GetInt64(0));
+        return set;
+    }
+
     /// <summary>
     /// Gets the most recent messages in a folder, ordered by date descending.
     /// </summary>

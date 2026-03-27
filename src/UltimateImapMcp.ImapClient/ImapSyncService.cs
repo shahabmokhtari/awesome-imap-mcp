@@ -97,9 +97,8 @@ public sealed class ImapSyncService
     // ------------------------------------------------------------------
 
     /// <summary>
-    /// Bidirectional sync: derives current sync boundaries from the actual cached
-    /// messages in the DB (not stored columns), then fetches new messages forward
-    /// and backfills older messages in batches of 100.
+    /// Contiguous sync: gets ALL UIDs from server, compares with cached UIDs,
+    /// fetches missing ones newest-first in batches. Guarantees no gaps.
     /// </summary>
     public async Task SyncFolderMessagesAsync(
         ImapClientLib client,
@@ -119,45 +118,37 @@ public sealed class ImapSyncService
 
         try
         {
-            // Derive sync boundaries from actual cached data — single source of truth
+            // Get ALL UIDs that exist on the server
+            var allServerUids = await imapFolder.SearchAsync(SearchQuery.All, ct).ConfigureAwait(false);
+
+            if (allServerUids.Count == 0)
+            {
+                _folderRepo.UpdateSyncState(folder.Id, 0, 0, 0, 0);
+                return;
+            }
+
+            // Get UIDs we already have cached
+            var cachedUids = _messageRepo.GetCachedUids(accountId, folder.Id);
+
+            // Find missing UIDs (on server but not in cache)
+            var missingUids = allServerUids
+                .Where(u => !cachedUids.Contains((long)u.Id))
+                .OrderByDescending(u => u.Id) // Newest first
+                .ToList();
+
+            if (missingUids.Count > 0)
+            {
+                // Fetch in batches of 200, newest first
+                const int batchSize = 200;
+                var batch = missingUids.Take(batchSize).ToList();
+                await FetchAndStoreMessagesAsync(imapFolder, accountId, folder.Id, batch, ct)
+                    .ConfigureAwait(false);
+            }
+
+            // Update folder state from actual data
             var maxUid = _messageRepo.GetMaxUid(accountId, folder.Id);
             var minUid = _messageRepo.GetMinUid(accountId, folder.Id);
 
-            // Phase 1: Forward sync — fetch new messages (UID > max cached)
-            {
-                var startUid = new UniqueId((uint)(maxUid + 1));
-                var range = new UniqueIdRange(startUid, UniqueId.MaxValue);
-                var newUids = await imapFolder.SearchAsync(SearchQuery.Uids(range), ct).ConfigureAwait(false);
-
-                if (newUids.Count > 0)
-                {
-                    await FetchAndStoreMessagesAsync(imapFolder, accountId, folder.Id, newUids, ct).ConfigureAwait(false);
-                    maxUid = Math.Max(maxUid, newUids.Max(u => (long)u.Id));
-                    if (minUid == 0)
-                        minUid = newUids.Min(u => (long)u.Id);
-                }
-            }
-
-            // Phase 2: Backfill — fetch older messages (UID < min cached)
-            if (minUid > 1)
-            {
-                var endUid = new UniqueId((uint)(minUid - 1));
-                var backfillRange = new UniqueIdRange(UniqueId.MinValue, endUid);
-                var oldUids = await imapFolder.SearchAsync(SearchQuery.Uids(backfillRange), ct).ConfigureAwait(false);
-
-                if (oldUids.Count > 0)
-                {
-                    var batch = oldUids.OrderByDescending(u => u.Id).Take(100).ToList();
-                    await FetchAndStoreMessagesAsync(imapFolder, accountId, folder.Id, batch, ct).ConfigureAwait(false);
-                    minUid = batch.Min(u => (long)u.Id);
-                }
-                else
-                {
-                    minUid = 1; // Backfill complete
-                }
-            }
-
-            // Update folder state (for dashboard display and backfill tracking)
             _folderRepo.UpdateSyncState(
                 folder.Id, maxUid, minUid,
                 imapFolder.Count, imapFolder.Unread);
