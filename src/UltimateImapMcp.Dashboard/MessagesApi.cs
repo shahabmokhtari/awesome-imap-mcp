@@ -49,7 +49,12 @@ public static class MessagesApi
             if (!string.IsNullOrEmpty(limitStr) && int.TryParse(limitStr, out var parsedLimit))
                 limit = Math.Clamp(parsedLimit, 1, 500);
 
-            var messages = messageRepo.GetByFolder(accountId, folderId, limit);
+            var offsetStr = ctx.Request.Query["offset"].FirstOrDefault();
+            var offset = 0;
+            if (!string.IsNullOrEmpty(offsetStr) && int.TryParse(offsetStr, out var parsedOffset))
+                offset = Math.Max(0, parsedOffset);
+
+            var messages = messageRepo.GetByFolder(accountId, folderId, limit, offset);
 
             // Look up the folder path for context
             var folders = folderRepo.GetByAccount(accountId);
