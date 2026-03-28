@@ -1,15 +1,17 @@
 using System.ComponentModel;
 using System.Text.Json;
 using ModelContextProtocol.Server;
+using UltimateImapMcp.Core.Configuration;
 using UltimateImapMcp.Queue;
 using UltimateImapMcp.Queue.Models;
 
 namespace UltimateImapMcp.McpServer.Tools;
 
 [McpServerToolType]
-public class OrganizeTools(QueueManager queueManager)
+public class OrganizeTools(QueueManager queueManager, AppConfig config)
 {
     private readonly QueueManager _queueManager = queueManager;
+    private readonly AppConfig _config = config;
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
     private static List<int> ParseUids(string uids)
@@ -137,7 +139,9 @@ public class OrganizeTools(QueueManager queueManager)
         }
     }
 
-    [McpServerTool, Description("Add or remove a label from one or more messages. This operation is queued.")]
+    [McpServerTool, Description(
+        "Add or remove a label from one or more messages. This operation is queued. " +
+        "Use list_labels to see the configured vocabulary for consistent labeling.")]
     public string LabelMessages(
         [Description("Account ID")] string accountId,
         [Description("Comma-separated list of message UIDs")] string uids,
@@ -153,7 +157,17 @@ public class OrganizeTools(QueueManager queueManager)
             var payload = JsonSerializer.Serialize(new { uids = uidList, label, action });
             var pendingId = _queueManager.EnqueueOperation(accountId, operationType, payload);
 
-            return JsonSerializer.Serialize(new { pending_id = pendingId, operation = $"label_{action}", uids = uidList, label }, JsonOptions);
+            // Advisory vocabulary warning (only on add, only if vocabulary is non-empty)
+            string? warning = null;
+            if (!action.Equals("remove", StringComparison.OrdinalIgnoreCase)
+                && _config.Labels.Items.Count > 0
+                && !_config.Labels.Items.Any(l => l.Name.Equals(label, StringComparison.OrdinalIgnoreCase)))
+            {
+                var known = string.Join(", ", _config.Labels.Items.Select(l => l.Name));
+                warning = $"Label '{label}' is not in the configured vocabulary. Known labels: {known}";
+            }
+
+            return JsonSerializer.Serialize(new { pending_id = pendingId, operation = $"label_{action}", uids = uidList, label, warning }, JsonOptions);
         }
         catch (Exception ex)
         {
