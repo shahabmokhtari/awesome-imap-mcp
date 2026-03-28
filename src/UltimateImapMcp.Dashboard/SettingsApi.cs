@@ -68,6 +68,11 @@ public static class SettingsApi
                     config.Metrics.Path,
                     config.Metrics.InternalRetentionDays
                 },
+                labels = new
+                {
+                    config.Labels.AllowCliEdits,
+                    config.Labels.Items,
+                },
                 accountCount = accountRepo.GetAll().Count
             });
         });
@@ -172,6 +177,28 @@ public static class SettingsApi
                 }
             }
 
+            // Labels settings
+            if (updates.Labels is { } lb)
+            {
+                if (lb.AllowCliEdits is { } ace) { config.Labels.AllowCliEdits = ace; changed.Add("labels.allow_cli_edits"); }
+                if (lb.Items is { } items)
+                {
+                    // Validate: unique names, valid IMAP keywords
+                    var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    foreach (var item in items)
+                    {
+                        if (string.IsNullOrWhiteSpace(item.Name))
+                            return Results.BadRequest(new { error = "Label name cannot be empty" });
+                        if (!System.Text.RegularExpressions.Regex.IsMatch(item.Name, @"^[A-Za-z0-9_$-]+$"))
+                            return Results.BadRequest(new { error = $"Invalid label name '{item.Name}'. Must contain only letters, digits, hyphens, underscores, or $." });
+                        if (!names.Add(item.Name))
+                            return Results.BadRequest(new { error = $"Duplicate label name '{item.Name}'" });
+                    }
+                    config.Labels.Items = items;
+                    changed.Add("labels.items");
+                }
+            }
+
             // Persist to disk if we know the source file
             var persisted = false;
             if (config.SourcePath is not null && changed.Count > 0)
@@ -215,6 +242,7 @@ file record SettingsUpdateRequest
     public SyncSettingsUpdate? Sync { get; init; }
     public LlmSettingsUpdate? Llm { get; init; }
     public MetricsSettingsUpdate? Metrics { get; init; }
+    public LabelsSettingsUpdate? Labels { get; init; }
 }
 
 file record ServerSettingsUpdate
@@ -268,4 +296,10 @@ file record MetricsSettingsUpdate
 {
     public bool? Enabled { get; init; }
     public int? InternalRetentionDays { get; init; }
+}
+
+file record LabelsSettingsUpdate
+{
+    public bool? AllowCliEdits { get; init; }
+    public List<LabelDefinition>? Items { get; init; }
 }
