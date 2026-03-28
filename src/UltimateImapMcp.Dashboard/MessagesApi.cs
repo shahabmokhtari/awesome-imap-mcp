@@ -115,6 +115,21 @@ public static class MessagesApi
             UltimateImapMcp.ImapClient.Repositories.MessageRepository messageRepo,
             ILoggerFactory loggerFactory) =>
         {
+            // Check if body is already cached — return immediately without creating a backend
+            var cached = messageRepo.GetByUid(accountId, folderId, uid);
+            if (cached is not null && cached.BodyFetched)
+            {
+                return Results.Ok(new
+                {
+                    id = cached.Id,
+                    uid = cached.Uid,
+                    subject = cached.Subject ?? "(no subject)",
+                    bodyText = cached.BodyText,
+                    bodyHtml = cached.BodyHtml,
+                    bodyFetched = cached.BodyFetched,
+                });
+            }
+
             // Resolve folder path from folderId
             var folders = folderRepo.GetByAccount(accountId);
             var folder = folders.FirstOrDefault(f => f.Id == folderId);

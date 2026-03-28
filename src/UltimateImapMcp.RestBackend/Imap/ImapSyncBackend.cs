@@ -74,11 +74,20 @@ internal sealed class ImapSyncBackend : IEmailSyncBackend
     public async Task FetchMessageBodyAsync(string accountId, string folderPath, long uid,
         CancellationToken ct = default)
     {
+        // Check if body is already cached in the database — skip IMAP fetch if so
+        var folder = _folderRepo.GetByPath(accountId, folderPath);
+        if (folder is null) return;
+
+        var existing = _messageRepo.GetByUid(accountId, folder.Id, uid);
+        if (existing is not null && existing.BodyFetched)
+        {
+            _logger.LogDebug("Body already cached for message UID {Uid} in {AccountId}/{FolderPath}, skipping IMAP fetch",
+                uid, accountId, folderPath);
+            return;
+        }
+
         await _connMgr.ExecuteAsync(async client =>
         {
-            var folder = _folderRepo.GetByPath(accountId, folderPath);
-            if (folder is null) return;
-
             var imapFolder = await client.GetFolderAsync(folderPath, ct).ConfigureAwait(false);
             await imapFolder.OpenAsync(FolderAccess.ReadOnly, ct).ConfigureAwait(false);
 
