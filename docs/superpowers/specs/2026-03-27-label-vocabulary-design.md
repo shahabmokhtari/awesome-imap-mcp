@@ -52,7 +52,7 @@ New top-level `labels` section in `config.json`:
 ### Validation Rules
 
 - `name` must be non-empty and unique (case-insensitive) within the list.
-- `name` must be a valid IMAP keyword (no spaces, no backslash prefix which is reserved for system flags).
+- `name` must be a valid IMAP keyword per RFC 3501 atom syntax: alphanumeric, hyphens, underscores, and `$` only (regex: `^[A-Za-z0-9_$-]+$`). No spaces, parentheses, quotes, backslashes, or control characters.
 
 ## C# Config Model
 
@@ -90,7 +90,7 @@ public LabelsConfig Labels { get; set; } = new();
 
 ## MCP Tools
 
-New tool class: `LabelVocabularyTools` in `src/UltimateImapMcp.McpServer/Tools/`.
+New tool class: `LabelVocabularyTools` in `src/UltimateImapMcp.McpServer/Tools/`. Receives `AppConfig` via constructor injection: `LabelVocabularyTools(AppConfig config)`.
 
 ### `list_labels`
 
@@ -116,6 +116,7 @@ New tool class: `LabelVocabularyTools` in `src/UltimateImapMcp.McpServer/Tools/`
   - If label not found (case-insensitive), return error
   - Update provided fields, persist
 - **Returns:** `{ updated: { name, description, category } }`
+- **Note:** Label names are immutable. To rename a label, remove the old one and add a new one.
 
 ### `remove_label`
 
@@ -129,7 +130,7 @@ New tool class: `LabelVocabularyTools` in `src/UltimateImapMcp.McpServer/Tools/`
 
 ## Warning in `label_messages`
 
-Modify `OrganizeTools.LabelMessages` to check the vocabulary when `action` is `"add"`:
+Modify `OrganizeTools.LabelMessages` to check the vocabulary when `action` is `"add"`. This requires adding `AppConfig` to the `OrganizeTools` constructor: `OrganizeTools(QueueManager queueManager, AppConfig config)`.
 
 1. Look up the label name (case-insensitive) in `config.Labels.Items`.
 2. If not found and the vocabulary is non-empty, add a `warning` field to the response:
@@ -144,7 +145,7 @@ Modify `OrganizeTools.LabelMessages` to check the vocabulary when `action` is `"
 }
 ```
 
-If the vocabulary is empty (no labels configured), no warning is issued.
+If the vocabulary is empty (no labels configured), no warning is issued. No warning is issued when `action` is `"remove"`, even if the label is not in the vocabulary.
 
 ## Dashboard Integration
 
@@ -176,7 +177,19 @@ Accept a `labels` section in the update request:
 }
 ```
 
-When `items` is provided, it replaces the entire list (not a partial merge — labels are managed as a set). When only `allowCliEdits` is provided, only that flag changes.
+When `items` is provided, it replaces the entire list (not a partial merge — labels are managed as a set). The endpoint must validate incoming items: reject duplicate names (case-insensitive) and invalid IMAP keyword names, returning 400 with an error message. When only `allowCliEdits` is provided, only that flag changes.
+
+DTO addition to `SettingsApi.cs`:
+
+```csharp
+file record LabelsSettingsUpdate
+{
+    public bool? AllowCliEdits { get; init; }
+    public List<LabelDefinition>? Items { get; init; }
+}
+```
+
+Add `public LabelsSettingsUpdate? Labels { get; init; }` to `SettingsUpdateRequest`.
 
 ### Frontend
 
@@ -188,7 +201,7 @@ Add a "Labels" section to the Settings page:
 
 ## `ConfigLoader.SaveToFile` Update
 
-Add `Labels = config.Labels` to the sanitized copy. No sensitive fields to strip.
+In the `SaveToFile` method, add `Labels = config.Labels,` to the `new AppConfig { ... }` initializer block, after the `OAuthProviders` line. No sensitive fields to strip.
 
 ## Files Changed
 
