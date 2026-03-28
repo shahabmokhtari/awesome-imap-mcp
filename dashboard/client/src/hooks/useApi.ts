@@ -93,6 +93,24 @@ export function useQueue(status?: string) {
   })
 }
 
+export function useCancelOperation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiFetch<{ id: string; cancelled: boolean }>(`/api/queue/${id}/cancel`, { method: 'POST' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['queue'] }),
+  })
+}
+
+export function useConfirmOperation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiFetch<{ id: string; confirmed: boolean }>(`/api/queue/${id}/confirm`, { method: 'POST' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['queue'] }),
+  })
+}
+
 export function useSettings() {
   return useQuery({
     queryKey: ['settings'],
