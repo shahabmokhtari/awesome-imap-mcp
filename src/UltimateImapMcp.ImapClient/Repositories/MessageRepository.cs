@@ -694,6 +694,32 @@ public class MessageRepository(AppDatabase db)
         });
     }
 
+    /// <summary>Update the flags column for a cached message.</summary>
+    public void UpdateFlags(int messageId, string? flags)
+    {
+        db.ExecuteWrite(conn =>
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "UPDATE messages SET flags = $flags WHERE id = $id;";
+            cmd.Parameters.AddWithValue("$id", messageId);
+            cmd.Parameters.AddWithValue("$flags", (object?)flags ?? DBNull.Value);
+            cmd.ExecuteNonQuery();
+        });
+    }
+
+    /// <summary>Remove a folder link from the junction table for a message.</summary>
+    public void UnlinkFromFolder(int messageDbId, int folderId)
+    {
+        db.ExecuteWrite(conn =>
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "DELETE FROM message_folders WHERE message_id = $mid AND folder_id = $fid;";
+            cmd.Parameters.AddWithValue("$mid", messageDbId);
+            cmd.Parameters.AddWithValue("$fid", folderId);
+            cmd.ExecuteNonQuery();
+        });
+    }
+
     private static string EscapeLike(string value) =>
         value.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
 
