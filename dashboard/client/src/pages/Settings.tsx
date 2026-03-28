@@ -573,11 +573,6 @@ function LlmSectionCard({
   const [providerKeys, setProviderKeys] = useState<Record<string, string>>({ ...providerApiKeys })
   const [keysDirty, setKeysDirty] = useState(false)
 
-  // Analysis prompts state
-  const analysisPrompts = (values.analysisPrompts ?? {}) as Record<string, string>
-  const [prompts, setPrompts] = useState<Record<string, string>>({ ...analysisPrompts })
-  const [promptsDirty, setPromptsDirty] = useState(false)
-
   // Sync provider from upstream when settings are reloaded
   useEffect(() => {
     setCurrentProvider(values.provider as string | undefined)
@@ -587,16 +582,6 @@ function LlmSectionCard({
     setProviderKeys({ ...(values.providerApiKeys ?? {}) as Record<string, string> })
     setKeysDirty(false)
   }, [values.providerApiKeys])
-
-  useEffect(() => {
-    setPrompts({ ...(values.analysisPrompts ?? {}) as Record<string, string> })
-    setPromptsDirty(false)
-  }, [values.analysisPrompts])
-
-  const handlePromptChange = useCallback((type: string, value: string) => {
-    setPrompts(prev => ({ ...prev, [type]: value }))
-    setPromptsDirty(true)
-  }, [])
 
   const handleFormChange = useCallback((form: Record<string, unknown>) => {
     const provider = form.provider as string | undefined
@@ -608,13 +593,9 @@ function LlmSectionCard({
     if (keysDirty) {
       data.providerApiKeys = providerKeys
     }
-    if (promptsDirty) {
-      data.analysisPrompts = prompts
-    }
     onSave(section, data)
     setKeysDirty(false)
-    setPromptsDirty(false)
-  }, [onSave, providerKeys, keysDirty, prompts, promptsDirty])
+  }, [onSave, providerKeys, keysDirty])
 
   const handleKeyChange = useCallback((provider: string, value: string) => {
     setProviderKeys(prev => {
@@ -676,31 +657,6 @@ function LlmSectionCard({
         )}
       </div>
 
-      <div className="bg-white rounded-lg shadow p-5">
-        <h3 className="text-lg font-medium text-gray-800 mb-2">Analysis Prompts</h3>
-        <p className="text-sm text-gray-500 mb-4">
-          Customize the default prompts used for email analysis. Leave blank to use built-in defaults.
-        </p>
-        {(['summary', 'spam_score', 'category', 'priority', 'custom'] as const).map(type => (
-          <div key={type} className="mb-4">
-            <label className="block text-sm font-medium text-gray-600 mb-1 capitalize">
-              {type.replace('_', ' ')} prompt
-            </label>
-            <textarea
-              rows={3}
-              value={prompts[type] ?? ''}
-              onChange={e => handlePromptChange(type, e.target.value)}
-              placeholder={`Default ${type.replace('_', ' ')} prompt (leave blank for built-in)`}
-              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-        ))}
-        {promptsDirty && (
-          <p className="text-xs text-amber-600">
-            Prompt changes will be saved when you click &quot;Save Changes&quot; in the LLM section above.
-          </p>
-        )}
-      </div>
     </div>
   )
 }
@@ -765,6 +721,78 @@ function LlmTestPanel({ settings }: { settings: Record<string, unknown> }) {
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Analysis Prompts card
+// ---------------------------------------------------------------------------
+
+const DEFAULT_PROMPTS: Record<string, string> = {
+  summary: 'You are an email summarization assistant. Summarize the given email and return ONLY a JSON object with the following structure: { "summary": "<one paragraph summary>", "key_points": ["<point1>", "<point2>", ...] }.',
+  spam_score: 'You are an email spam analysis assistant. Analyze the given email and return ONLY a JSON object with the following structure: { "score": <0-100 integer>, "label": "spam"|"likely_spam"|"not_spam", "explanation": "<brief explanation>" }. Score 0 = definitely not spam, 100 = definitely spam.',
+  category: 'You are an email categorization assistant. Categorize the given email and return ONLY a JSON object with the following structure: { "category": "newsletter"|"transactional"|"personal"|"work"|"spam"|"social"|"promotions"|"updates", "confidence": <0.0-1.0>, "explanation": "<brief explanation>" }.',
+  priority: 'You are an email priority assessment assistant. Assess the priority of the given email and return ONLY a JSON object with the following structure: { "priority": "low"|"normal"|"high"|"urgent", "explanation": "<brief explanation>" }.',
+  custom: 'You are an email analysis assistant. Analyze the given email according to the user\'s instructions and return ONLY a JSON object with your analysis results.',
+}
+
+function AnalysisPromptsCard({ settings, onSave, saving }: {
+  settings: Record<string, unknown>
+  onSave: (section: string, data: Record<string, unknown>) => void
+  saving: boolean
+}) {
+  const llm = settings.llm as Record<string, unknown> | undefined
+  if (!llm?.enabled) return null
+
+  const savedPrompts = (llm?.analysisPrompts ?? {}) as Record<string, string>
+  const [prompts, setPrompts] = useState<Record<string, string>>({ ...savedPrompts })
+  const [dirty, setDirty] = useState(false)
+
+  useEffect(() => {
+    setPrompts({ ...(llm?.analysisPrompts ?? {}) as Record<string, string> })
+    setDirty(false)
+  }, [llm?.analysisPrompts])
+
+  const handleChange = useCallback((type: string, value: string) => {
+    setPrompts(prev => ({ ...prev, [type]: value }))
+    setDirty(true)
+  }, [])
+
+  const handleSave = () => {
+    onSave('llm', { analysisPrompts: prompts })
+    setDirty(false)
+  }
+
+  return (
+    <div className="bg-white rounded-lg shadow p-5">
+      <h3 className="text-lg font-medium text-gray-800 mb-2">Analysis Prompts</h3>
+      <p className="text-sm text-gray-500 mb-4">
+        Customize the prompts used for email analysis. Leave blank to use the built-in defaults shown as placeholder text.
+      </p>
+      {(['summary', 'spam_score', 'category', 'priority', 'custom'] as const).map(type => (
+        <div key={type} className="mb-4">
+          <label className="block text-sm font-medium text-gray-600 mb-1 capitalize">
+            {type.replace('_', ' ')}
+          </label>
+          <textarea
+            rows={3}
+            value={prompts[type] ?? ''}
+            onChange={e => handleChange(type, e.target.value)}
+            placeholder={DEFAULT_PROMPTS[type]}
+            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-gray-400 placeholder:text-xs"
+          />
+        </div>
+      ))}
+      {dirty && (
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors disabled:opacity-50"
+        >
+          {saving ? 'Saving...' : 'Save Prompts'}
+        </button>
+      )}
     </div>
   )
 }
@@ -974,6 +1002,7 @@ export default function Settings() {
                       saving={updateSettings.isPending}
                     />
                     <LlmTestPanel settings={settings as Record<string, unknown>} />
+                    <AnalysisPromptsCard settings={settings as Record<string, unknown>} onSave={handleSave} saving={updateSettings.isPending} />
                   </div>
                 )
               }
