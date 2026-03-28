@@ -35,6 +35,9 @@ public class AppConfig
 
     [JsonPropertyName("oauth_providers")]
     public Dictionary<string, OAuthProviderConfig> OAuthProviders { get; set; } = new();
+
+    [JsonPropertyName("labels")]
+    public LabelsConfig Labels { get; set; } = new();
 }
 
 /// <summary>MCP server transport and dashboard settings.</summary>
@@ -377,4 +380,27 @@ public class OAuthProviderConfig
 
     [JsonPropertyName("scopes")]
     public List<string>? Scopes { get; set; }
+}
+
+/// <summary>Label vocabulary configuration.</summary>
+public class LabelsConfig
+{
+    [JsonPropertyName("allow_cli_edits")]
+    public bool AllowCliEdits { get; set; } = true;
+
+    [JsonPropertyName("items")]
+    public List<LabelDefinition> Items { get; set; } = [];
+}
+
+/// <summary>A single label definition in the vocabulary.</summary>
+public class LabelDefinition
+{
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = string.Empty;
+
+    [JsonPropertyName("description")]
+    public string Description { get; set; } = string.Empty;
+
+    [JsonPropertyName("category")]
+    public string Category { get; set; } = string.Empty;
 }

@@ -208,4 +208,82 @@ public class ConfigLoaderTests
         }
         finally { File.Delete(tmpFile); }
     }
+
+    [Fact]
+    public void Load_LabelsConfig_ParsesCorrectly()
+    {
+        var json = """
+        {
+          "labels": {
+            "allow_cli_edits": false,
+            "items": [
+              { "name": "urgent", "description": "Needs immediate attention", "category": "priority" },
+              { "name": "newsletter", "description": "Regular newsletter", "category": "type" }
+            ]
+          }
+        }
+        """;
+        var tmpFile = Path.GetTempFileName();
+        File.WriteAllText(tmpFile, json);
+        try
+        {
+            var config = ConfigLoader.LoadFromFile(tmpFile);
+            Assert.False(config.Labels.AllowCliEdits);
+            Assert.Equal(2, config.Labels.Items.Count);
+            Assert.Equal("urgent", config.Labels.Items[0].Name);
+            Assert.Equal("Needs immediate attention", config.Labels.Items[0].Description);
+            Assert.Equal("priority", config.Labels.Items[0].Category);
+            Assert.Equal("newsletter", config.Labels.Items[1].Name);
+            Assert.Equal("Regular newsletter", config.Labels.Items[1].Description);
+            Assert.Equal("type", config.Labels.Items[1].Category);
+        }
+        finally { File.Delete(tmpFile); }
+    }
+
+    [Fact]
+    public void Load_NoLabelsSection_DefaultsApplied()
+    {
+        var json = """{ "accounts": [] }""";
+        var tmpFile = Path.GetTempFileName();
+        File.WriteAllText(tmpFile, json);
+        try
+        {
+            var config = ConfigLoader.LoadFromFile(tmpFile);
+            Assert.True(config.Labels.AllowCliEdits);
+            Assert.Empty(config.Labels.Items);
+        }
+        finally { File.Delete(tmpFile); }
+    }
+
+    [Fact]
+    public void SaveToFile_PersistsLabels()
+    {
+        var config = new AppConfig
+        {
+            Labels = new LabelsConfig
+            {
+                AllowCliEdits = false,
+                Items =
+                [
+                    new LabelDefinition { Name = "urgent", Description = "Needs immediate attention", Category = "priority" },
+                    new LabelDefinition { Name = "newsletter", Description = "Regular newsletter", Category = "type" },
+                ]
+            }
+        };
+        var tmpFile = Path.GetTempFileName();
+        try
+        {
+            ConfigLoader.SaveToFile(config, tmpFile);
+            var reloaded = ConfigLoader.LoadFromFile(tmpFile);
+            Assert.False(reloaded.Labels.AllowCliEdits);
+            Assert.Equal(2, reloaded.Labels.Items.Count);
+            Assert.Equal("urgent", reloaded.Labels.Items[0].Name);
+            Assert.Equal("Needs immediate attention", reloaded.Labels.Items[0].Description);
+            Assert.Equal("priority", reloaded.Labels.Items[0].Category);
+            Assert.Equal("newsletter", reloaded.Labels.Items[1].Name);
+            Assert.Equal("Regular newsletter", reloaded.Labels.Items[1].Description);
+            Assert.Equal("type", reloaded.Labels.Items[1].Category);
+        }
+        finally { File.Delete(tmpFile); }
+    }
 }

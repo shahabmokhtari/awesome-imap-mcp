@@ -106,6 +106,7 @@ public static partial class ConfigLoader
             Sync = config.Sync,
             Metrics = config.Metrics,
             OAuthProviders = config.OAuthProviders,
+            Labels = config.Labels,
         };
 
         var json = JsonSerializer.Serialize(sanitized, WriteOptions);
