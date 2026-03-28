@@ -28,6 +28,7 @@ public sealed class HttpMcpTransportHost : BackgroundService
     private readonly ILogger<HttpMcpTransportHost> _logger;
     private WebApplication? _webApp;
     private int _consecutiveFailures;
+    private bool _hasStartedOnce;
 
     public HttpMcpTransportHost(AppConfig config, IServiceProvider rootServices,
         ILogger<HttpMcpTransportHost> logger)
@@ -111,7 +112,15 @@ public sealed class HttpMcpTransportHost : BackgroundService
 
         app.MapMcp();
 
-        _logger.LogInformation("MCP HTTP transport starting on http://0.0.0.0:{Port}", port);
+        if (!_hasStartedOnce)
+        {
+            _logger.LogInformation("MCP HTTP transport starting on http://0.0.0.0:{Port}", port);
+            _hasStartedOnce = true;
+        }
+        else
+        {
+            _logger.LogDebug("MCP HTTP transport reconnecting on http://0.0.0.0:{Port}", port);
+        }
 
         await app.RunAsync(stoppingToken).ConfigureAwait(false);
     }

@@ -140,12 +140,13 @@ public class OrganizeTools(QueueManager queueManager, AppConfig config)
     }
 
     [McpServerTool, Description(
-        "Add or remove a label from one or more messages. This operation is queued. " +
+        "Add or remove a label (IMAP keyword) from one or more messages. This operation is queued. " +
         "Use list_labels to see the configured vocabulary for consistent labeling.")]
     public string LabelMessages(
         [Description("Account ID")] string accountId,
         [Description("Comma-separated list of message UIDs")] string uids,
         [Description("Label name")] string label,
+        [Description("Folder name")] string folder,
         [Description("Action: \"add\" or \"remove\"")] string action)
     {
         try
@@ -154,7 +155,7 @@ public class OrganizeTools(QueueManager queueManager, AppConfig config)
             var operationType = action.Equals("remove", StringComparison.OrdinalIgnoreCase)
                 ? OperationType.Unlabel
                 : OperationType.Label;
-            var payload = JsonSerializer.Serialize(new { uids = uidList, label, action });
+            var payload = JsonSerializer.Serialize(new { uids = uidList, label, folder, action });
             var pendingId = _queueManager.EnqueueOperation(accountId, operationType, payload);
 
             // Advisory vocabulary warning (only on add, only if vocabulary is non-empty)

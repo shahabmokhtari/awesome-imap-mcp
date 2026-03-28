@@ -180,6 +180,7 @@ builder.Services.AddSingleton<IOperationExecutor, SendExecutor>();
 builder.Services.AddSingleton<IOperationExecutor, DeleteExecutor>();
 builder.Services.AddSingleton<IOperationExecutor, MoveExecutor>();
 builder.Services.AddSingleton<IOperationExecutor, FlagExecutor>();
+builder.Services.AddSingleton<IOperationExecutor, LabelExecutor>();
 builder.Services.AddHostedService<QueueWorker>();
 
 // LLM Analysis
