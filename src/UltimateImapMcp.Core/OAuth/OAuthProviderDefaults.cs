@@ -40,21 +40,11 @@ public static class OAuthProviderDefaults
         // instead of IMAP. IMAP+app-password is still supported for Zoho.
         // Users must create a "Self Client" at https://api-console.zoho.com/
         // and supply their own client_id/client_secret in config.
-        ["zoho"] = new OAuthProviderConfig
-        {
-            ClientId = "1000.JGVUBWJDOV91GZXFWZDBRAF4FLE3IN",
-            AuthUrl = "https://accounts.zoho.com/oauth/v2/auth",
-            TokenUrl = "https://accounts.zoho.com/oauth/v2/token",
-            Scopes = [
-                "ZohoMail.messages.READ",
-                "ZohoMail.messages.CREATE",
-                "ZohoMail.folders.READ",
-                "ZohoMail.accounts.READ",
-                "ZohoMail.messages.UPDATE",
-                "ZohoMail.messages.DELETE",
-                "AaaServer.profile.READ",
-            ]
-        },
+        // Zoho OAuth disabled — Zoho's token exchange returns empty tokens and
+        // INVALID_TICKET errors due to datacenter routing issues. Zoho Mail can
+        // still be used with app passwords via IMAP. The REST API backend code
+        // is preserved in src/UltimateImapMcp.RestBackend/Zoho/ for future use.
+        // ["zoho"] = new OAuthProviderConfig { ... },
     };
 
     /// <summary>XOR-deobfuscates a base64 string with a repeating key.</summary>
