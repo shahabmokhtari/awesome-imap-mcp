@@ -7,6 +7,7 @@ using UltimateImapMcp.Core;
 using UltimateImapMcp.Core.Configuration;
 using UltimateImapMcp.Core.Database;
 using UltimateImapMcp.Core.Encryption;
+using UltimateImapMcp.Core.OAuth;
 using UltimateImapMcp.Core.Repositories;
 using UltimateImapMcp.ImapClient;
 using UltimateImapMcp.ImapClient.Repositories;
@@ -98,6 +99,7 @@ public sealed class HttpMcpTransportHost : BackgroundService
         builder.Services.AddSingleton(_rootServices.GetRequiredService<IEmailAnalyzer>());
         builder.Services.AddSingleton(_rootServices.GetRequiredService<MetricsRepository>());
         builder.Services.AddSingleton(_rootServices.GetRequiredService<LogsRepository>());
+        builder.Services.AddSingleton(_rootServices.GetRequiredService<IOAuthAccessTokenProvider>());
 
         // Register MCP server with HTTP transport
         builder.Services.AddMcpServer(options =>
