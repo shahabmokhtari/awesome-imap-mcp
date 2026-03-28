@@ -1,4 +1,5 @@
 using MailKit;
+using MimeKit;
 using Microsoft.Extensions.Logging;
 using UltimateImapMcp.Core.Configuration;
 using UltimateImapMcp.Core.Email;
@@ -113,6 +114,85 @@ internal sealed class ImapSyncBackend : IEmailSyncBackend
                 await imapFolder.CloseAsync(false, ct).ConfigureAwait(false);
             }
         }, ct).ConfigureAwait(false);
+    }
+
+    public async Task<long> DownloadAttachmentAsync(string accountId, string folderPath, long uid,
+        string? targetFilename, string? contentId, string savePath, CancellationToken ct = default)
+    {
+        long bytesWritten = 0;
+
+        await _connMgr.ExecuteAsync(async client =>
+        {
+            var imapFolder = await client.GetFolderAsync(folderPath, ct).ConfigureAwait(false);
+            await imapFolder.OpenAsync(FolderAccess.ReadOnly, ct).ConfigureAwait(false);
+
+            try
+            {
+                var uidObj = new UniqueId((uint)uid);
+                var message = await imapFolder.GetMessageAsync(uidObj, ct).ConfigureAwait(false);
+
+                if (message is null)
+                    throw new InvalidOperationException($"Message UID {uid} not found in folder '{folderPath}'.");
+
+                // Find the matching attachment
+                MimePart? match = null;
+                foreach (var attachment in message.Attachments.OfType<MimePart>())
+                {
+                    // Match by content_id first (most specific)
+                    if (!string.IsNullOrEmpty(contentId) && attachment.ContentId == contentId)
+                    {
+                        match = attachment;
+                        break;
+                    }
+                    // Match by filename
+                    if (!string.IsNullOrEmpty(targetFilename) && string.Equals(attachment.FileName, targetFilename, StringComparison.OrdinalIgnoreCase))
+                    {
+                        match = attachment;
+                        break;
+                    }
+                }
+
+                // If no match via attachments, also check body parts (inline)
+                if (match is null)
+                {
+                    foreach (var part in message.BodyParts.OfType<MimePart>())
+                    {
+                        if (!string.IsNullOrEmpty(contentId) && part.ContentId == contentId)
+                        {
+                            match = part;
+                            break;
+                        }
+                        if (!string.IsNullOrEmpty(targetFilename) && string.Equals(part.FileName, targetFilename, StringComparison.OrdinalIgnoreCase))
+                        {
+                            match = part;
+                            break;
+                        }
+                    }
+                }
+
+                if (match is null)
+                    throw new InvalidOperationException(
+                        $"Attachment not found in message UID {uid} (filename='{targetFilename}', contentId='{contentId}').");
+
+                // Ensure directory exists
+                var dir = Path.GetDirectoryName(savePath);
+                if (!string.IsNullOrEmpty(dir))
+                    Directory.CreateDirectory(dir);
+
+                if (match.Content is null)
+                    throw new InvalidOperationException("Attachment has no content data.");
+
+                await using var stream = File.Create(savePath);
+                await match.Content.DecodeToAsync(stream, ct).ConfigureAwait(false);
+                bytesWritten = stream.Length;
+            }
+            finally
+            {
+                await imapFolder.CloseAsync(false, ct).ConfigureAwait(false);
+            }
+        }, ct).ConfigureAwait(false);
+
+        return bytesWritten;
     }
 
     public Task StartRealtimeListenerAsync(string accountId, string folderPath,

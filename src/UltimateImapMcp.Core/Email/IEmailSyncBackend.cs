@@ -29,4 +29,14 @@ public interface IEmailSyncBackend : IAsyncDisposable
     /// </summary>
     Task StartRealtimeListenerAsync(string accountId, string folderPath,
         Func<Task> onChangesDetected, CancellationToken ct = default);
+
+    /// <summary>
+    /// Downloads a specific attachment from a message and saves it to disk.
+    /// Returns the number of bytes written.
+    /// </summary>
+    Task<long> DownloadAttachmentAsync(string accountId, string folderPath, long uid,
+        string? targetFilename, string? contentId, string savePath, CancellationToken ct = default)
+    {
+        throw new NotSupportedException($"Attachment download is not supported by the {BackendType} backend.");
+    }
 }
