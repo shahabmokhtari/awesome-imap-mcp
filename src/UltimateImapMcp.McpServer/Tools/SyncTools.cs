@@ -75,11 +75,12 @@ public class SyncTools(SyncManager syncManager, AccountRepository accountRepo)
 
     /// <summary>
     /// Resolves an account identifier (ID or name) to the canonical DB ID.
+    /// Throws if the account is disabled.
     /// Returns the input unchanged if no match is found (caller handles the error).
     /// </summary>
     private string ResolveAccountId(string idOrName)
     {
-        var record = accountRepo.ResolveAccount(idOrName);
+        var record = accountRepo.ResolveEnabledAccount(idOrName);
         return record?.Id ?? idOrName;
     }
 }

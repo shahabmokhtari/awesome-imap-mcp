@@ -29,9 +29,16 @@ public static class SyncApi
                 return Results.Ok(new { triggered = 0, message = "No accounts found." });
 
             var triggered = 0;
+            var skipped = 0;
             var errors = new List<string>();
             foreach (var account in accounts)
             {
+                if (!account.Enabled)
+                {
+                    skipped++;
+                    continue;
+                }
+
                 try
                 {
                     await syncManager.TriggerSyncAsync(account.Id).ConfigureAwait(false);
@@ -48,8 +55,8 @@ public static class SyncApi
             }
 
             if (errors.Count > 0)
-                return Results.Json(new { triggered, total = accounts.Count, errors }, statusCode: 207);
-            return Results.Ok(new { triggered, total = accounts.Count, errors });
+                return Results.Json(new { triggered, total = accounts.Count, skipped, errors }, statusCode: 207);
+            return Results.Ok(new { triggered, total = accounts.Count, skipped, errors });
         });
 
         app.MapGet("/api/sync/logs", (HttpContext ctx, SyncLogRepository syncLogRepo) =>

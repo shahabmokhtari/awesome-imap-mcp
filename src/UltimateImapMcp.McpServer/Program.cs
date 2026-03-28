@@ -130,6 +130,10 @@ var encryptor = passphrase != null ? new CredentialEncryptor(passphrase) : Crede
             acct.SmtpHost, acct.SmtpPort, acct.SmtpUseSsl,
             acct.Username, acct.AuthType, credEnc, acct.Provider, configJson);
 
+        // Respect the enabled field from config (defaults to true)
+        if (!acct.Enabled)
+            accountRepo.SetEnabled(id, false);
+
         if (string.IsNullOrEmpty(acct.Password) && !acct.AuthType.Equals("oauth2", StringComparison.OrdinalIgnoreCase))
         {
             Console.Error.WriteLine($"  WARNING: Account '{acct.Name}' has no password. Set the env var or update via dashboard.");

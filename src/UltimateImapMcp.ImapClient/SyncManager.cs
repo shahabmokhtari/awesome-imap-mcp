@@ -65,6 +65,14 @@ public class SyncManager(
         foreach (var record in dbAccounts)
         {
             var accountId = record.Id;
+
+            // Skip disabled accounts — they should not sync
+            if (!record.Enabled)
+            {
+                logger.LogInformation("Skipping sync for disabled account {Account} ({Name})", accountId, record.Name);
+                continue;
+            }
+
             var account = AccountConfigMapper.ToAccountConfig(record, encryptor);
 
             // Skip REST-only accounts (e.g. Zoho OAuth) — they have no IMAP host
@@ -479,8 +487,8 @@ public class SyncManager(
     public async Task TriggerSyncAsync(string accountId, string? folderPath = null,
         CancellationToken ct = default)
     {
-        // Resolve account from DB
-        var record = accountRepo.ResolveAccount(accountId)
+        // Resolve account from DB — also checks enabled state
+        var record = accountRepo.ResolveEnabledAccount(accountId)
             ?? throw new InvalidOperationException($"Account '{accountId}' not found in database.");
 
         // Use the canonical DB id
@@ -522,8 +530,8 @@ public class SyncManager(
         string? to, string? subject, long? fromEpoch, long? toEpoch,
         int maxResults, CancellationToken ct = default)
     {
-        // Resolve account from DB (same pattern as TriggerSyncAsync)
-        var record = accountRepo.ResolveAccount(accountId)
+        // Resolve account from DB — also checks enabled state
+        var record = accountRepo.ResolveEnabledAccount(accountId)
             ?? throw new InvalidOperationException($"Account '{accountId}' not found in database.");
 
         accountId = record.Id;

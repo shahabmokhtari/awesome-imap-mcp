@@ -4,6 +4,7 @@ import {
   useDeleteAccount,
   useTestAccount,
   useFetchRecent,
+  useToggleAccountEnabled,
   type RecentEmail,
 } from '../hooks/useApi'
 import AddAccountForm from '../components/AddAccountForm'
@@ -16,10 +17,12 @@ function AccountRow({ account }: { account: Record<string, unknown> }) {
   const deleteAccount = useDeleteAccount()
   const testAccount = useTestAccount()
   const fetchRecent = useFetchRecent()
+  const toggleEnabled = useToggleAccountEnabled()
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
   const [recentEmails, setRecentEmails] = useState<RecentEmail[] | null>(null)
   const [recentError, setRecentError] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const isEnabled = account.enabled !== false
 
   const handleTest = () => {
     setTestResult(null)
@@ -41,6 +44,10 @@ function AccountRow({ account }: { account: Record<string, unknown> }) {
     })
   }
 
+  const handleToggleEnabled = () => {
+    toggleEnabled.mutate({ id: account.id as string, enabled: !isEnabled })
+  }
+
   const handleDelete = () => {
     if (!confirmDelete) {
       setConfirmDelete(true)
@@ -53,8 +60,13 @@ function AccountRow({ account }: { account: Record<string, unknown> }) {
 
   return (
     <>
-    <tr className="hover:bg-gray-50">
-      <td className="px-4 py-3 font-medium text-gray-900">{account.name as string}</td>
+    <tr className={`hover:bg-gray-50 ${!isEnabled ? 'opacity-60' : ''}`}>
+      <td className="px-4 py-3 font-medium text-gray-900">
+        {account.name as string}
+        {!isEnabled && (
+          <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-gray-200 text-gray-500">Disabled</span>
+        )}
+      </td>
       <td className="px-4 py-3 text-gray-600 capitalize">{account.provider as string}</td>
       <td className="px-4 py-3 text-gray-600">
         {account.imapHost as string}:{account.imapPort as number}
@@ -63,8 +75,22 @@ function AccountRow({ account }: { account: Record<string, unknown> }) {
       <td className="px-4 py-3">
         <div className="flex items-center gap-2 flex-wrap">
           <button
+            onClick={handleToggleEnabled}
+            disabled={toggleEnabled.isPending}
+            className={`text-sm disabled:opacity-50 ${
+              isEnabled
+                ? 'text-amber-600 hover:text-amber-800'
+                : 'text-green-600 hover:text-green-800'
+            }`}
+          >
+            {toggleEnabled.isPending
+              ? (isEnabled ? 'Disabling...' : 'Enabling...')
+              : (isEnabled ? 'Disable' : 'Enable')}
+          </button>
+
+          <button
             onClick={handleTest}
-            disabled={testAccount.isPending}
+            disabled={testAccount.isPending || !isEnabled}
             className="text-blue-600 hover:text-blue-800 text-sm disabled:opacity-50"
           >
             {testAccount.isPending ? 'Testing...' : 'Test'}
@@ -72,7 +98,7 @@ function AccountRow({ account }: { account: Record<string, unknown> }) {
 
           <button
             onClick={handleFetchRecent}
-            disabled={fetchRecent.isPending}
+            disabled={fetchRecent.isPending || !isEnabled}
             className="text-indigo-600 hover:text-indigo-800 text-sm disabled:opacity-50"
           >
             {fetchRecent.isPending ? 'Fetching...' : 'Recent'}

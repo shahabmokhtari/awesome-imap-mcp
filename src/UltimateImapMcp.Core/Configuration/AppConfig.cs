@@ -125,6 +125,9 @@ public class AccountConfig
     [JsonPropertyName("undo_window_seconds")]
     public int UndoWindowSeconds { get; set; } = 10;
 
+    [JsonPropertyName("enabled")]
+    public bool Enabled { get; set; } = true;
+
     [JsonPropertyName("sync")]
     public SyncConfig Sync { get; set; } = new();
 }

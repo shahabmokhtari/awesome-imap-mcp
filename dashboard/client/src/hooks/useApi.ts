@@ -259,6 +259,17 @@ export function useDeleteAccount() {
   })
 }
 
+export function useToggleAccountEnabled() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (params: { id: string; enabled: boolean }) =>
+      apiFetch<{ id: string; enabled: boolean }>(
+        `/api/accounts/${params.id}/toggle-enabled`,
+        { method: 'POST', body: JSON.stringify({ enabled: params.enabled }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['accounts'] }),
+  })
+}
+
 export function useTestAccount() {
   return useMutation({
     mutationFn: (id: string) =>

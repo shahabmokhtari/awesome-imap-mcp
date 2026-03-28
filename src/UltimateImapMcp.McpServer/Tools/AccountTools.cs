@@ -11,7 +11,8 @@ public class AccountTools(AccountRepository accountRepo)
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
     [McpServerTool, Description(
-        "List all configured email accounts with connection status, message counts, and sync state.")]
+        "List all configured email accounts with connection status, message counts, and sync state. " +
+        "Disabled accounts are included with enabled=false.")]
     public string ListAccounts()
     {
         var accounts = accountRepo.GetAll()
@@ -21,7 +22,8 @@ public class AccountTools(AccountRepository accountRepo)
                 name = a.Name,
                 imap_host = a.ImapHost,
                 username = a.Username,
-                provider = a.Provider
+                provider = a.Provider,
+                enabled = a.Enabled
             })
             .ToList();
         return JsonSerializer.Serialize(accounts, JsonOptions);
@@ -44,6 +46,7 @@ public class AccountTools(AccountRepository accountRepo)
             username = account.Username,
             provider = account.Provider,
             auth_type = account.AuthType,
+            enabled = account.Enabled,
             created_at = account.CreatedAt
         }, JsonOptions);
     }

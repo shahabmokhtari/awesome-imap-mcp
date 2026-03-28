@@ -8,7 +8,8 @@ public record AccountRecord(
     string Username, string AuthType, string CredentialsEnc,
     string Provider, string? ConfigJson,
     string CreatedAt, string UpdatedAt,
-    string BackendType = "imap");
+    string BackendType = "imap",
+    bool Enabled = true);
 
 public class AccountRepository(AppDatabase db)
 {
@@ -115,6 +116,30 @@ public class AccountRepository(AppDatabase db)
         return list;
     }
 
+    /// <summary>
+    /// Resolves an account and throws if it is disabled.
+    /// Returns the account record when the account exists and is enabled.
+    /// </summary>
+    public AccountRecord? ResolveEnabledAccount(string idOrName)
+    {
+        var account = ResolveAccount(idOrName);
+        if (account is not null && !account.Enabled)
+            throw new InvalidOperationException($"Account '{account.Name}' is disabled. Re-enable it from the dashboard or config to use it.");
+        return account;
+    }
+
+    public void SetEnabled(string id, bool enabled)
+    {
+        db.ExecuteWrite(conn =>
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "UPDATE accounts SET enabled = $enabled, updated_at = datetime('now') WHERE id = $id;";
+            cmd.Parameters.AddWithValue("$id", id);
+            cmd.Parameters.AddWithValue("$enabled", enabled ? 1 : 0);
+            cmd.ExecuteNonQuery();
+        });
+    }
+
     private static AccountRecord ReadRecord(Microsoft.Data.Sqlite.SqliteDataReader r) => new(
         Id: r.GetString(r.GetOrdinal("id")),
         Name: r.GetString(r.GetOrdinal("name")),
@@ -130,6 +155,7 @@ public class AccountRepository(AppDatabase db)
         ConfigJson: r.IsDBNull(r.GetOrdinal("config_json")) ? null : r.GetString(r.GetOrdinal("config_json")),
         CreatedAt: r.GetString(r.GetOrdinal("created_at")),
         UpdatedAt: r.GetString(r.GetOrdinal("updated_at")),
-        BackendType: r.GetString(r.GetOrdinal("backend_type"))
+        BackendType: r.GetString(r.GetOrdinal("backend_type")),
+        Enabled: r.GetInt32(r.GetOrdinal("enabled")) == 1
     );
 }
