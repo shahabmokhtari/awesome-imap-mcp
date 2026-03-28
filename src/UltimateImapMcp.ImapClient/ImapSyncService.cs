@@ -9,7 +9,8 @@ namespace UltimateImapMcp.ImapClient;
 
 /// <summary>
 /// Synchronises IMAP folder metadata and messages into the local SQLite cache.
-/// Phase 1: full UID-range sync. Incremental delta sync deferred to Phase 3.
+/// Uses contiguous UID-range sync: compares all server UIDs against the local
+/// cache and fetches missing messages newest-first in batches.
 /// </summary>
 public sealed class ImapSyncService
 {
@@ -340,9 +341,11 @@ public sealed class ImapSyncService
                 }
             }
             catch (Exception ex) when (ex is MailKit.Net.Imap.ImapProtocolException
-                or IOException or OperationCanceledException or InvalidOperationException)
+                or IOException or OperationCanceledException or InvalidOperationException
+                or FormatException)
             {
-                // Non-critical -- fall back to subject.
+                // Non-critical -- fall back to subject. FormatException occurs when
+                // MimeKit encounters malformed MIME headers in broken emails.
                 snippet = subject is not null
                     ? MessageParser.GenerateSnippet(subject)
                     : null;
