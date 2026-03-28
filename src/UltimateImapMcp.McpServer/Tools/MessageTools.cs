@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Text.Json;
 using ModelContextProtocol.Server;
+using UltimateImapMcp.Core;
 using UltimateImapMcp.Core.Email;
 using UltimateImapMcp.ImapClient.Repositories;
 
@@ -64,7 +65,7 @@ public class MessageTools(
 
         var attachments = attachmentRepo.GetByMessageId(msg.Id);
 
-        var body = msg.BodyText;
+        var (body, bodyFormat) = ResolveBody(msg);
         if (maxBodyLength > 0 && body != null && body.Length > maxBodyLength)
             body = body[..maxBodyLength];
 
@@ -86,7 +87,8 @@ public class MessageTools(
             size_bytes = msg.SizeBytes,
             has_attachments = msg.HasAttachments,
             body_fetched = msg.BodyFetched,
-            body = body,
+            body,
+            body_format = bodyFormat,
             snippet = msg.Snippet,
             attachments = attachments.Select(a => new
             {
@@ -131,7 +133,7 @@ public class MessageTools(
                 };
             }
 
-            var body = m.BodyText;
+            var (body, bodyFormat) = ResolveBody(m);
             if (maxBodyLength > 0 && body != null && body.Length > maxBodyLength)
                 body = body[..maxBodyLength] + "... [truncated]";
 
@@ -143,6 +145,7 @@ public class MessageTools(
                 to = m.ToAddresses,
                 date = m.Date,
                 body,
+                body_format = bodyFormat,
                 body_fetched = m.BodyFetched,
                 snippet = m.Snippet
             };
@@ -162,6 +165,27 @@ public class MessageTools(
                 messages_total = messages.Count,
             }
         }, JsonOptions);
+    }
+
+    /// <summary>
+    /// Returns the best available body text for a message.
+    /// If body_text is available, returns it with format "text".
+    /// If only body_html is available, converts it to plain text and returns with format "html_converted".
+    /// If neither is available, returns (null, null).
+    /// </summary>
+    private static (string? Body, string? Format) ResolveBody(MessageRecord msg)
+    {
+        if (msg.BodyText is not null)
+            return (msg.BodyText, "text");
+
+        if (msg.BodyHtml is not null)
+        {
+            var converted = HtmlTextExtractor.Convert(msg.BodyHtml);
+            if (converted is not null)
+                return (converted, "html_converted");
+        }
+
+        return (null, null);
     }
 
     private static string Error(string message) =>
