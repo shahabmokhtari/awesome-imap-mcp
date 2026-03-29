@@ -17,6 +17,14 @@ public record EmailVolumeRecord(string FolderPath, int MessageCount, long TotalS
 /// <summary>Top sender stats.</summary>
 public record TopSenderRecord(string FromEmail, int MessageCount, long TotalSizeBytes);
 
+/// <summary>Overall cache statistics.</summary>
+public record CacheStatsRecord(int TotalMessages, int BodiesFetched, long DbSizeBytes);
+
+/// <summary>Per-account cache statistics.</summary>
+public record AccountCacheStatsRecord(
+    string AccountId, string AccountName, int MessageCount, int BodiesFetched,
+    string? OldestCachedAt, string? NewestCachedAt);
+
 public record SearchFilter
 {
     public string? Query { get; init; }
@@ -180,7 +188,7 @@ public class MessageRepository(AppDatabase db)
         using var conn = db.GetReadConnection();
         using var cmd = conn.CreateCommand();
 
-        var where = "WHERE messages_fts MATCH $query";
+        var where = "WHERE messages_fts MATCH $query AND m.deleted_at IS NULL";
         if (accountId != null) where += " AND m.account_id = $accountId";
         if (folderId != null) where += " AND m.id IN (SELECT message_id FROM message_folders WHERE folder_id = $folderId)";
 
@@ -208,7 +216,7 @@ public class MessageRepository(AppDatabase db)
         using var conn = db.GetReadConnection();
         using var cmd = conn.CreateCommand();
 
-        var conditions = new List<string>();
+        var conditions = new List<string> { "m.deleted_at IS NULL" };
         var useFts = !string.IsNullOrEmpty(filter.Query);
 
         if (useFts) conditions.Add("messages_fts MATCH $query");
@@ -338,22 +346,26 @@ public class MessageRepository(AppDatabase db)
 
         return db.ExecuteWrite(conn =>
         {
+            // Batch UIDs into groups to reduce round-trips
+            const int batchSize = 100;
             var count = 0;
-            foreach (var uid in uidList)
+            for (var i = 0; i < uidList.Count; i += batchSize)
             {
-                // Find the message via junction table
+                var batch = uidList.Skip(i).Take(batchSize).ToList();
                 using var cmd = conn.CreateCommand();
-                cmd.CommandText = """
+                var placeholders = string.Join(", ", batch.Select((_, idx) => $"$u{idx}"));
+                cmd.CommandText = $"""
                     UPDATE messages SET deleted_at = datetime('now')
                     WHERE id IN (
                         SELECT mf.message_id FROM message_folders mf
                         JOIN messages m ON m.id = mf.message_id
-                        WHERE m.account_id = $a AND mf.folder_id = $f AND mf.uid = $u
+                        WHERE m.account_id = $a AND mf.folder_id = $f AND mf.uid IN ({placeholders})
                     ) AND deleted_at IS NULL;
                     """;
                 cmd.Parameters.AddWithValue("$a", accountId);
                 cmd.Parameters.AddWithValue("$f", folderId);
-                cmd.Parameters.AddWithValue("$u", uid);
+                for (var j = 0; j < batch.Count; j++)
+                    cmd.Parameters.AddWithValue($"$u{j}", batch[j]);
                 count += cmd.ExecuteNonQuery();
             }
             return count;
@@ -444,6 +456,18 @@ public class MessageRepository(AppDatabase db)
     {
         return db.ExecuteWrite(conn =>
         {
+            // Clean up junction table entries first to prevent orphaned rows
+            using var unlinkCmd = conn.CreateCommand();
+            unlinkCmd.CommandText = """
+                DELETE FROM message_folders WHERE message_id IN (
+                    SELECT id FROM messages
+                    ORDER BY cached_at ASC
+                    LIMIT $batchSize
+                );
+                """;
+            unlinkCmd.Parameters.AddWithValue("$batchSize", batchSize);
+            unlinkCmd.ExecuteNonQuery();
+
             using var cmd = conn.CreateCommand();
             cmd.CommandText = """
                 DELETE FROM messages WHERE id IN (
@@ -484,6 +508,17 @@ public class MessageRepository(AppDatabase db)
     {
         return db.ExecuteWrite(conn =>
         {
+            // Clean up junction table entries first to prevent orphaned rows
+            using var unlinkCmd = conn.CreateCommand();
+            unlinkCmd.CommandText = """
+                DELETE FROM message_folders WHERE message_id IN (
+                    SELECT id FROM messages
+                    WHERE cached_at < datetime('now', $days)
+                );
+                """;
+            unlinkCmd.Parameters.AddWithValue("$days", $"-{days} days");
+            unlinkCmd.ExecuteNonQuery();
+
             using var cmd = conn.CreateCommand();
             cmd.CommandText = """
                 DELETE FROM messages
@@ -579,8 +614,10 @@ public class MessageRepository(AppDatabase db)
                    COALESCE(SUM(m.size_bytes), 0) as total_size,
                    SUM(CASE WHEN m.has_attachments = 1 THEN 1 ELSE 0 END) as with_attachments
             FROM messages m
-            JOIN folders f ON f.id = m.folder_id
+            JOIN message_folders mf ON mf.message_id = m.id
+            JOIN folders f ON f.id = mf.folder_id
             WHERE m.account_id = $accountId
+              AND m.deleted_at IS NULL
               {dateFilter}
             GROUP BY f.path
             ORDER BY msg_count DESC;
@@ -625,6 +662,7 @@ public class MessageRepository(AppDatabase db)
             FROM messages
             WHERE account_id = $accountId
               AND from_email IS NOT NULL AND from_email != ''
+              AND deleted_at IS NULL
               {dateFilter}
             GROUP BY from_email
             ORDER BY msg_count DESC
@@ -718,6 +756,56 @@ public class MessageRepository(AppDatabase db)
             cmd.Parameters.AddWithValue("$fid", folderId);
             cmd.ExecuteNonQuery();
         });
+    }
+
+    /// <summary>Gets overall cache statistics (total messages, bodies fetched, DB size).</summary>
+    public CacheStatsRecord GetCacheStats()
+    {
+        using var conn = db.GetReadConnection();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT COUNT(*), COALESCE(SUM(CASE WHEN body_fetched = 1 THEN 1 ELSE 0 END), 0)
+            FROM messages WHERE deleted_at IS NULL;
+            """;
+        using var reader = cmd.ExecuteReader();
+        reader.Read();
+        var totalMessages = reader.GetInt32(0);
+        var bodiesFetched = reader.GetInt32(1);
+        var dbSize = new FileInfo(db.DbPath).Length;
+        return new CacheStatsRecord(totalMessages, bodiesFetched, dbSize);
+    }
+
+    /// <summary>Gets cache statistics broken down by account.</summary>
+    public List<AccountCacheStatsRecord> GetCacheStatsByAccount(AccountRepository accountRepo)
+    {
+        using var conn = db.GetReadConnection();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT account_id,
+                   COUNT(*) as msg_count,
+                   COALESCE(SUM(CASE WHEN body_fetched = 1 THEN 1 ELSE 0 END), 0) as bodies,
+                   MIN(cached_at) as oldest,
+                   MAX(cached_at) as newest
+            FROM messages
+            WHERE deleted_at IS NULL
+            GROUP BY account_id;
+            """;
+        using var reader = cmd.ExecuteReader();
+        var accounts = accountRepo.GetAll().ToDictionary(a => a.Id, a => a.Name);
+        var list = new List<AccountCacheStatsRecord>();
+        while (reader.Read())
+        {
+            var accountId = reader.GetString(0);
+            list.Add(new AccountCacheStatsRecord(
+                AccountId: accountId,
+                AccountName: accounts.TryGetValue(accountId, out var name) ? name : accountId,
+                MessageCount: reader.GetInt32(1),
+                BodiesFetched: reader.GetInt32(2),
+                OldestCachedAt: reader.IsDBNull(3) ? null : reader.GetString(3),
+                NewestCachedAt: reader.IsDBNull(4) ? null : reader.GetString(4)
+            ));
+        }
+        return list;
     }
 
     private static string EscapeLike(string value) =>

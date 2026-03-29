@@ -71,6 +71,38 @@ public static class CacheApi
             }
         });
 
+        app.MapGet("/api/cache/stats", (MessageRepository messageRepo, AccountRepository accountRepo,
+            ILoggerFactory loggerFactory) =>
+        {
+            try
+            {
+                var stats = messageRepo.GetCacheStats();
+                var byAccount = messageRepo.GetCacheStatsByAccount(accountRepo);
+                return Results.Ok(new
+                {
+                    totalMessages = stats.TotalMessages,
+                    bodiesFetched = stats.BodiesFetched,
+                    dbSizeBytes = stats.DbSizeBytes,
+                    dbSizeMb = Math.Round(stats.DbSizeBytes / (1024.0 * 1024.0), 2),
+                    accounts = byAccount.Select(a => new
+                    {
+                        a.AccountId,
+                        a.AccountName,
+                        a.MessageCount,
+                        a.BodiesFetched,
+                        a.OldestCachedAt,
+                        a.NewestCachedAt
+                    }).ToList()
+                });
+            }
+            catch (Exception ex)
+            {
+                var logger = loggerFactory.CreateLogger("CacheApi");
+                logger.LogError(ex, "Failed to get cache stats");
+                return Results.Json(new { error = ex.Message }, statusCode: 500);
+            }
+        });
+
         return app;
     }
 }
