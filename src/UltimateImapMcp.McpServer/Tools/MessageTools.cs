@@ -1,7 +1,9 @@
 using System.ComponentModel;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
 using UltimateImapMcp.Core;
+using UltimateImapMcp.Core.Configuration;
 using UltimateImapMcp.Core.Email;
 using UltimateImapMcp.ImapClient.Repositories;
 
@@ -12,10 +14,10 @@ public class MessageTools(
     MessageRepository messageRepo,
     AttachmentRepository attachmentRepo,
     FolderRepository folderRepo,
-    IEmailBackendFactory backendFactory)
+    IEmailBackendFactory backendFactory,
+    AppConfig config,
+    ILogger<MessageTools> logger)
 {
-    private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
-
     [McpServerTool, Description(
         "Get a single email message with full details including body and attachments. " +
         "Provide either 'messageId' (database ID) alone, or 'accountId' + 'uid' (with optional 'folderId'). " +
@@ -28,85 +30,98 @@ public class MessageTools(
         [Description("Max body length (0=unlimited, default: 0)")] int maxBodyLength = 0,
         [Description("Fetch body from server if not cached (default: true). Set false for metadata only.")] bool fetchBody = true)
     {
-        var msg = messageRepo.Resolve(messageId, accountId, folderId, uid, folderRepo);
-        if (msg is null)
-            return Error("Message not found. Provide 'messageId' or 'accountId'+'uid'.");
-
-        // Auto-fetch body if not yet cached and fetchBody is enabled
-        if (!msg.BodyFetched && fetchBody)
-        {
-            try
+        return await McpJsonDefaults.LogToolCallAsync(logger, "get_message",
+            new Dictionary<string, object?> { ["messageId"] = messageId, ["accountId"] = accountId, ["uid"] = uid },
+            async () =>
             {
-                var folder = folderRepo.GetByAccount(msg.AccountId)
-                    .FirstOrDefault(f => f.Id == msg.FolderId);
-                if (folder is not null)
+                try
                 {
-                    await using var backend = backendFactory.CreateSyncBackend(msg.AccountId);
-                    await backend.FetchMessageBodyAsync(msg.AccountId, folder.Path, msg.Uid).ConfigureAwait(false);
-                    // Re-read from DB after fetch
-                    msg = messageRepo.GetById(msg.Id) ?? msg;
+                    var msg = messageRepo.Resolve(messageId, accountId, folderId, uid, folderRepo);
+                    if (msg is null)
+                        return McpJsonDefaults.Error("Message not found. Provide 'messageId' or 'accountId'+'uid'.");
+
+                    // Auto-fetch body if not yet cached and fetchBody is enabled
+                    if (!msg.BodyFetched && fetchBody)
+                    {
+                        try
+                        {
+                            var folder = folderRepo.GetByAccount(msg.AccountId)
+                                .FirstOrDefault(f => f.Id == msg.FolderId);
+                            if (folder is not null)
+                            {
+                                await using var backend = backendFactory.CreateSyncBackend(msg.AccountId);
+                                await backend.FetchMessageBodyAsync(msg.AccountId, folder.Path, msg.Uid).ConfigureAwait(false);
+                                // Re-read from DB after fetch
+                                msg = messageRepo.GetById(msg.Id) ?? msg;
+                            }
+                        }
+                        catch (OperationCanceledException) { throw; }
+                        catch (Exception ex)
+                        {
+                            // Non-fatal — return what we have with a note
+                            return JsonSerializer.Serialize(new
+                            {
+                                id = msg.Id, uid = msg.Uid,
+                                account_id = msg.AccountId, folder_id = msg.FolderId,
+                                subject = msg.Subject, from = msg.FromAddress,
+                                body_fetched = false,
+                                body_fetch_error = ex.Message,
+                                snippet = msg.Snippet
+                            }, McpJsonDefaults.Options);
+                        }
+                    }
+
+                    var attachments = attachmentRepo.GetByMessageId(msg.Id);
+
+                    var (body, bodyFormat) = ResolveBody(msg);
+                    if (maxBodyLength > 0 && body != null && body.Length > maxBodyLength)
+                        body = body[..maxBodyLength];
+
+                    return JsonSerializer.Serialize(new
+                    {
+                        id = msg.Id,
+                        uid = msg.Uid,
+                        account_id = msg.AccountId,
+                        folder_id = msg.FolderId,
+                        message_id = msg.MessageId,
+                        thread_id = msg.ThreadId,
+                        subject = msg.Subject,
+                        from = msg.FromAddress,
+                        to = msg.ToAddresses,
+                        cc = msg.CcAddresses,
+                        bcc = msg.BccAddresses,
+                        date = msg.Date,
+                        flags = msg.Flags,
+                        size_bytes = msg.SizeBytes,
+                        has_attachments = msg.HasAttachments,
+                        body_fetched = msg.BodyFetched,
+                        body,
+                        body_format = bodyFormat,
+                        snippet = msg.Snippet,
+                        attachments = attachments.Select(a => new
+                        {
+                            id = a.Id,
+                            filename = a.Filename,
+                            content_type = a.ContentType,
+                            size_bytes = a.SizeBytes,
+                            is_inline = a.IsInline,
+                            content_id = a.ContentId,
+                            local_path = a.LocalPath,
+                            downloaded_at = a.DownloadedAt
+                        }).ToList(),
+                        cache_info = new
+                        {
+                            source = msg.BodyFetched ? "cache" : "server_fetch",
+                            body_available = msg.BodyFetched,
+                        }
+                    }, McpJsonDefaults.Options);
                 }
-            }
-            catch (OperationCanceledException) { throw; }
-            catch (Exception ex)
-            {
-                // Non-fatal — return what we have with a note
-                return JsonSerializer.Serialize(new
+                catch (Exception ex) when (ex is not OperationCanceledException)
                 {
-                    id = msg.Id, uid = msg.Uid,
-                    account_id = msg.AccountId, folder_id = msg.FolderId,
-                    subject = msg.Subject, from = msg.FromAddress,
-                    body_fetched = false,
-                    body_fetch_error = ex.Message,
-                    snippet = msg.Snippet
-                }, JsonOptions);
-            }
-        }
-
-        var attachments = attachmentRepo.GetByMessageId(msg.Id);
-
-        var (body, bodyFormat) = ResolveBody(msg);
-        if (maxBodyLength > 0 && body != null && body.Length > maxBodyLength)
-            body = body[..maxBodyLength];
-
-        return JsonSerializer.Serialize(new
-        {
-            id = msg.Id,
-            uid = msg.Uid,
-            account_id = msg.AccountId,
-            folder_id = msg.FolderId,
-            message_id = msg.MessageId,
-            thread_id = msg.ThreadId,
-            subject = msg.Subject,
-            from = msg.FromAddress,
-            to = msg.ToAddresses,
-            cc = msg.CcAddresses,
-            bcc = msg.BccAddresses,
-            date = msg.Date,
-            flags = msg.Flags,
-            size_bytes = msg.SizeBytes,
-            has_attachments = msg.HasAttachments,
-            body_fetched = msg.BodyFetched,
-            body,
-            body_format = bodyFormat,
-            snippet = msg.Snippet,
-            attachments = attachments.Select(a => new
-            {
-                id = a.Id,
-                filename = a.Filename,
-                content_type = a.ContentType,
-                size_bytes = a.SizeBytes,
-                is_inline = a.IsInline,
-                content_id = a.ContentId,
-                local_path = a.LocalPath,
-                downloaded_at = a.DownloadedAt
-            }).ToList(),
-            cache_info = new
-            {
-                source = msg.BodyFetched ? "cache" : "server_fetch",
-                body_available = msg.BodyFetched,
-            }
-        }, JsonOptions);
+                    logger.LogError(ex, "GetMessage failed");
+                    return McpJsonDefaults.Error(ex.Message);
+                }
+            }, config);
     }
 
     [McpServerTool, Description(
@@ -117,54 +132,67 @@ public class MessageTools(
         [Description("Summary only — omits body text (default: true)")] bool summaryOnly = true,
         [Description("Max body length in characters (0=unlimited, default: 0). Applied when summary_only=false.")] int maxBodyLength = 0)
     {
-        var messages = messageRepo.GetByThreadId(threadId);
-
-        var mapped = messages.Select(m =>
-        {
-            if (summaryOnly)
+        return McpJsonDefaults.LogToolCall(logger, "get_thread",
+            new Dictionary<string, object?> { ["threadId"] = threadId, ["summaryOnly"] = summaryOnly },
+            () =>
             {
-                return (object)new
+                try
                 {
-                    uid = m.Uid,
-                    subject = m.Subject,
-                    from = m.FromAddress,
-                    date = m.Date,
-                    snippet = m.Snippet
-                };
-            }
+                    var messages = messageRepo.GetByThreadId(threadId);
 
-            var (body, bodyFormat) = ResolveBody(m);
-            if (maxBodyLength > 0 && body != null && body.Length > maxBodyLength)
-                body = body[..maxBodyLength] + "... [truncated]";
+                    var mapped = messages.Select(m =>
+                    {
+                        if (summaryOnly)
+                        {
+                            return (object)new
+                            {
+                                uid = m.Uid,
+                                subject = m.Subject,
+                                from = m.FromAddress,
+                                date = m.Date,
+                                snippet = m.Snippet
+                            };
+                        }
 
-            return (object)new
-            {
-                uid = m.Uid,
-                subject = m.Subject,
-                from = m.FromAddress,
-                to = m.ToAddresses,
-                date = m.Date,
-                body,
-                body_format = bodyFormat,
-                body_fetched = m.BodyFetched,
-                snippet = m.Snippet
-            };
-        }).ToList();
+                        var (body, bodyFormat) = ResolveBody(m);
+                        if (maxBodyLength > 0 && body != null && body.Length > maxBodyLength)
+                            body = body[..maxBodyLength] + "... [truncated]";
 
-        var bodiesFetched = messages.Count(m => m.BodyFetched);
+                        return (object)new
+                        {
+                            uid = m.Uid,
+                            subject = m.Subject,
+                            from = m.FromAddress,
+                            to = m.ToAddresses,
+                            date = m.Date,
+                            body,
+                            body_format = bodyFormat,
+                            body_fetched = m.BodyFetched,
+                            snippet = m.Snippet
+                        };
+                    }).ToList();
 
-        return JsonSerializer.Serialize(new
-        {
-            thread_id = threadId,
-            message_count = mapped.Count,
-            messages = mapped,
-            cache_info = new
-            {
-                source = "cache",
-                messages_with_body = bodiesFetched,
-                messages_total = messages.Count,
-            }
-        }, JsonOptions);
+                    var bodiesFetched = messages.Count(m => m.BodyFetched);
+
+                    return JsonSerializer.Serialize(new
+                    {
+                        thread_id = threadId,
+                        message_count = mapped.Count,
+                        messages = mapped,
+                        cache_info = new
+                        {
+                            source = "cache",
+                            messages_with_body = bodiesFetched,
+                            messages_total = messages.Count,
+                        }
+                    }, McpJsonDefaults.Options);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    logger.LogError(ex, "GetThread failed");
+                    return McpJsonDefaults.Error(ex.Message);
+                }
+            }, config);
     }
 
     /// <summary>
@@ -187,7 +215,4 @@ public class MessageTools(
 
         return (null, null);
     }
-
-    private static string Error(string message) =>
-        JsonSerializer.Serialize(new { error = message }, JsonOptions);
 }

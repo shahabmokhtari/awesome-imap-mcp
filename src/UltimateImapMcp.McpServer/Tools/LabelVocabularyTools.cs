@@ -1,17 +1,15 @@
 using System.ComponentModel;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
 using UltimateImapMcp.Core.Configuration;
 
 namespace UltimateImapMcp.McpServer.Tools;
 
 [McpServerToolType]
-public partial class LabelVocabularyTools(AppConfig config)
+public partial class LabelVocabularyTools(AppConfig config, ILogger<LabelVocabularyTools> logger)
 {
-    private readonly AppConfig _config = config;
-    private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
-
     private static bool IsValidImapKeyword(string name) =>
         !string.IsNullOrEmpty(name) && ImapKeywordPattern().IsMatch(name);
 
@@ -23,12 +21,17 @@ public partial class LabelVocabularyTools(AppConfig config)
         "Use these labels for consistency across sessions. You may also use labels not in this list, but you'll get a warning.")]
     public string ListLabels()
     {
-        var labels = _config.Labels.Items.Select(l => new { l.Name, l.Description, l.Category }).ToList();
-        return JsonSerializer.Serialize(new
-        {
-            allow_cli_edits = _config.Labels.AllowCliEdits,
-            labels
-        }, JsonOptions);
+        return McpJsonDefaults.LogToolCall(logger, "list_labels",
+            new Dictionary<string, object?>(),
+            () =>
+            {
+                var labels = config.Labels.Items.Select(l => new { l.Name, l.Description, l.Category }).ToList();
+                return JsonSerializer.Serialize(new
+                {
+                    allow_cli_edits = config.Labels.AllowCliEdits,
+                    labels
+                }, McpJsonDefaults.Options);
+            }, config);
     }
 
     [McpServerTool, Description(
@@ -39,24 +42,29 @@ public partial class LabelVocabularyTools(AppConfig config)
         [Description("Short description of when to use this label")] string description,
         [Description("Category for grouping (e.g. Priority, Status, Topic)")] string category = "")
     {
-        try
-        {
-            if (!_config.Labels.AllowCliEdits)
-                return JsonSerializer.Serialize(new { error = "Label vocabulary editing is disabled by the administrator" }, JsonOptions);
-            if (!IsValidImapKeyword(name))
-                return JsonSerializer.Serialize(new { error = $"Invalid label name '{name}'. Must match pattern: letters, digits, hyphens, underscores, or $." }, JsonOptions);
-            if (_config.Labels.Items.Any(l => l.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))
-                return JsonSerializer.Serialize(new { error = $"Label '{name}' already exists" }, JsonOptions);
+        return McpJsonDefaults.LogToolCall(logger, "add_label",
+            new Dictionary<string, object?> { ["name"] = name, ["category"] = category },
+            () =>
+            {
+                try
+                {
+                    if (!config.Labels.AllowCliEdits)
+                        return McpJsonDefaults.Error("Label vocabulary editing is disabled by the administrator");
+                    if (!IsValidImapKeyword(name))
+                        return McpJsonDefaults.Error($"Invalid label name '{name}'. Must match pattern: letters, digits, hyphens, underscores, or $.");
+                    if (config.Labels.Items.Any(l => l.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))
+                        return McpJsonDefaults.Error($"Label '{name}' already exists");
 
-            var label = new LabelDefinition { Name = name, Description = description, Category = category };
-            _config.Labels.Items.Add(label);
-            PersistConfig();
-            return JsonSerializer.Serialize(new { added = new { label.Name, label.Description, label.Category }, total_labels = _config.Labels.Items.Count }, JsonOptions);
-        }
-        catch (Exception ex)
-        {
-            return JsonSerializer.Serialize(new { error = ex.Message }, JsonOptions);
-        }
+                    var label = new LabelDefinition { Name = name, Description = description, Category = category };
+                    config.Labels.Items.Add(label);
+                    PersistConfig();
+                    return JsonSerializer.Serialize(new { added = new { label.Name, label.Description, label.Category }, total_labels = config.Labels.Items.Count }, McpJsonDefaults.Options);
+                }
+                catch (Exception ex)
+                {
+                    return McpJsonDefaults.Error(ex.Message);
+                }
+            }, config);
     }
 
     [McpServerTool, Description(
@@ -66,22 +74,27 @@ public partial class LabelVocabularyTools(AppConfig config)
         [Description("New description (omit to keep current)")] string? description = null,
         [Description("New category (omit to keep current)")] string? category = null)
     {
-        try
-        {
-            if (!_config.Labels.AllowCliEdits)
-                return JsonSerializer.Serialize(new { error = "Label vocabulary editing is disabled by the administrator" }, JsonOptions);
-            var label = _config.Labels.Items.FirstOrDefault(l => l.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
-            if (label is null)
-                return JsonSerializer.Serialize(new { error = $"Label '{name}' not found" }, JsonOptions);
-            if (description is not null) label.Description = description;
-            if (category is not null) label.Category = category;
-            PersistConfig();
-            return JsonSerializer.Serialize(new { updated = new { label.Name, label.Description, label.Category } }, JsonOptions);
-        }
-        catch (Exception ex)
-        {
-            return JsonSerializer.Serialize(new { error = ex.Message }, JsonOptions);
-        }
+        return McpJsonDefaults.LogToolCall(logger, "update_label",
+            new Dictionary<string, object?> { ["name"] = name },
+            () =>
+            {
+                try
+                {
+                    if (!config.Labels.AllowCliEdits)
+                        return McpJsonDefaults.Error("Label vocabulary editing is disabled by the administrator");
+                    var label = config.Labels.Items.FirstOrDefault(l => l.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+                    if (label is null)
+                        return McpJsonDefaults.Error($"Label '{name}' not found");
+                    if (description is not null) label.Description = description;
+                    if (category is not null) label.Category = category;
+                    PersistConfig();
+                    return JsonSerializer.Serialize(new { updated = new { label.Name, label.Description, label.Category } }, McpJsonDefaults.Options);
+                }
+                catch (Exception ex)
+                {
+                    return McpJsonDefaults.Error(ex.Message);
+                }
+            }, config);
     }
 
     [McpServerTool, Description(
@@ -89,26 +102,31 @@ public partial class LabelVocabularyTools(AppConfig config)
     public string RemoveLabel(
         [Description("Name of the label to remove")] string name)
     {
-        try
-        {
-            if (!_config.Labels.AllowCliEdits)
-                return JsonSerializer.Serialize(new { error = "Label vocabulary editing is disabled by the administrator" }, JsonOptions);
-            var label = _config.Labels.Items.FirstOrDefault(l => l.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
-            if (label is null)
-                return JsonSerializer.Serialize(new { error = $"Label '{name}' not found" }, JsonOptions);
-            _config.Labels.Items.Remove(label);
-            PersistConfig();
-            return JsonSerializer.Serialize(new { removed = name, remaining_labels = _config.Labels.Items.Count }, JsonOptions);
-        }
-        catch (Exception ex)
-        {
-            return JsonSerializer.Serialize(new { error = ex.Message }, JsonOptions);
-        }
+        return McpJsonDefaults.LogToolCall(logger, "remove_label",
+            new Dictionary<string, object?> { ["name"] = name },
+            () =>
+            {
+                try
+                {
+                    if (!config.Labels.AllowCliEdits)
+                        return McpJsonDefaults.Error("Label vocabulary editing is disabled by the administrator");
+                    var label = config.Labels.Items.FirstOrDefault(l => l.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+                    if (label is null)
+                        return McpJsonDefaults.Error($"Label '{name}' not found");
+                    config.Labels.Items.Remove(label);
+                    PersistConfig();
+                    return JsonSerializer.Serialize(new { removed = name, remaining_labels = config.Labels.Items.Count }, McpJsonDefaults.Options);
+                }
+                catch (Exception ex)
+                {
+                    return McpJsonDefaults.Error(ex.Message);
+                }
+            }, config);
     }
 
     private void PersistConfig()
     {
-        if (_config.SourcePath is not null)
-            ConfigLoader.SaveToFile(_config, _config.SourcePath);
+        if (config.SourcePath is not null)
+            ConfigLoader.SaveToFile(config, config.SourcePath);
     }
 }

@@ -1,16 +1,16 @@
 using System.ComponentModel;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
+using UltimateImapMcp.Core.Configuration;
 using UltimateImapMcp.ImapClient;
 using UltimateImapMcp.ImapClient.Repositories;
 
 namespace UltimateImapMcp.McpServer.Tools;
 
 [McpServerToolType]
-public class SearchTools(MessageRepository messageRepo, FolderRepository folderRepo, SyncManager syncManager)
+public class SearchTools(MessageRepository messageRepo, FolderRepository folderRepo, SyncManager syncManager, AppConfig config, ILogger<SearchTools> logger)
 {
-    private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
-
     [McpServerTool, Description(
         "Search emails with flexible filters. Searches local cache by default. " +
         "Use server_search=true to search directly on the IMAP server (slower but searches all mail). " +
@@ -31,105 +31,110 @@ public class SearchTools(MessageRepository messageRepo, FolderRepository folderR
         [Description("Search on IMAP server instead of local cache (default: false)")] bool serverSearch = false,
         [Description("Max body length when summary_only=false (0=unlimited)")] int maxBodyLength = 0)
     {
-        try
-        {
-            // Parse dates to epoch
-            long? fromEpoch = null, toEpoch = null;
-            if (fromDate is not null)
+        return await McpJsonDefaults.LogToolCallAsync(logger, "search_emails",
+            new Dictionary<string, object?> { ["query"] = query, ["accountId"] = accountId, ["folder"] = folder, ["serverSearch"] = serverSearch },
+            async () =>
             {
-                if (!DateTimeOffset.TryParse(fromDate, out var fd))
-                    return Error($"Invalid fromDate format: '{fromDate}'. Use ISO 8601 (e.g., 2026-01-01).");
-                fromEpoch = fd.ToUnixTimeSeconds();
-            }
-            if (toDate is not null)
-            {
-                if (!DateTimeOffset.TryParse(toDate, out var td))
-                    return Error($"Invalid toDate format: '{toDate}'. Use ISO 8601 (e.g., 2026-03-25).");
-                toEpoch = td.ToUnixTimeSeconds();
-            }
-
-            // Resolve folder ID if folder path provided
-            int? folderId = null;
-            if (folder is not null && accountId is not null)
-            {
-                var folderRecord = folderRepo.GetByPath(accountId, folder);
-                folderId = folderRecord?.Id;
-            }
-
-            List<MessageRecord> results;
-
-            if (serverSearch)
-            {
-                if (string.IsNullOrEmpty(accountId))
-                    return Error("account_id is required for server_search.");
-
-                results = await syncManager.ServerSearchAsync(
-                    accountId, folder ?? "INBOX", query, from, to, subject,
-                    fromEpoch, toEpoch, maxResults).ConfigureAwait(false);
-            }
-            else
-            {
-                results = messageRepo.SearchAdvanced(new SearchFilter
+                try
                 {
-                    Query = query,
-                    AccountId = accountId,
-                    FolderId = folderId,
-                    FromAddress = from,
-                    ToAddress = to,
-                    Subject = subject,
-                    FromDateEpoch = fromEpoch,
-                    ToDateEpoch = toEpoch,
-                    OrderBy = order,
-                    MaxResults = maxResults,
-                    Offset = offset,
-                });
-            }
+                    // Parse dates to epoch
+                    long? fromEpoch = null, toEpoch = null;
+                    if (fromDate is not null)
+                    {
+                        if (!DateTimeOffset.TryParse(fromDate, out var fd))
+                            return McpJsonDefaults.Error($"Invalid fromDate format: '{fromDate}'. Use ISO 8601 (e.g., 2026-01-01).");
+                        fromEpoch = fd.ToUnixTimeSeconds();
+                    }
+                    if (toDate is not null)
+                    {
+                        if (!DateTimeOffset.TryParse(toDate, out var td))
+                            return McpJsonDefaults.Error($"Invalid toDate format: '{toDate}'. Use ISO 8601 (e.g., 2026-03-25).");
+                        toEpoch = td.ToUnixTimeSeconds();
+                    }
 
-            var mapped = results.Select(m => FormatMessage(m, summaryOnly, maxBodyLength)).ToList();
+                    // Resolve folder ID if folder path provided
+                    int? folderId = null;
+                    if (folder is not null && accountId is not null)
+                    {
+                        var folderRecord = folderRepo.GetByPath(accountId, folder);
+                        folderId = folderRecord?.Id;
+                    }
 
-            // Build cache info for local cache searches
-            object? cacheInfo = null;
-            if (serverSearch)
-            {
-                cacheInfo = new { source = "server" };
-            }
-            else
-            {
-                FolderRecord? targetFolder = null;
-                if (accountId is not null)
-                {
-                    targetFolder = folderId is not null
-                        ? folderRepo.GetByAccount(accountId).FirstOrDefault(f => f.Id == folderId)
-                        : folder is not null
-                            ? folderRepo.GetByPath(accountId, folder)
-                            : folderRepo.GetByAccount(accountId).FirstOrDefault(f => f.Role == "inbox");
+                    List<MessageRecord> results;
+
+                    if (serverSearch)
+                    {
+                        if (string.IsNullOrEmpty(accountId))
+                            return McpJsonDefaults.Error("account_id is required for server_search.");
+
+                        results = await syncManager.ServerSearchAsync(
+                            accountId, folder ?? "INBOX", query, from, to, subject,
+                            fromEpoch, toEpoch, maxResults).ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        results = messageRepo.SearchAdvanced(new SearchFilter
+                        {
+                            Query = query,
+                            AccountId = accountId,
+                            FolderId = folderId,
+                            FromAddress = from,
+                            ToAddress = to,
+                            Subject = subject,
+                            FromDateEpoch = fromEpoch,
+                            ToDateEpoch = toEpoch,
+                            OrderBy = order,
+                            MaxResults = maxResults,
+                            Offset = offset,
+                        });
+                    }
+
+                    var mapped = results.Select(m => FormatMessage(m, summaryOnly, maxBodyLength)).ToList();
+
+                    // Build cache info for local cache searches
+                    object? cacheInfo = null;
+                    if (serverSearch)
+                    {
+                        cacheInfo = new { source = "server" };
+                    }
+                    else
+                    {
+                        FolderRecord? targetFolder = null;
+                        if (accountId is not null)
+                        {
+                            targetFolder = folderId is not null
+                                ? folderRepo.GetByAccount(accountId).FirstOrDefault(f => f.Id == folderId)
+                                : folder is not null
+                                    ? folderRepo.GetByPath(accountId, folder)
+                                    : folderRepo.GetByAccount(accountId).FirstOrDefault(f => f.Role == "inbox");
+                        }
+
+                        var backfillDone = targetFolder is not null && targetFolder.OldestSyncedUid <= 1;
+                        cacheInfo = new
+                        {
+                            source = "cache",
+                            backfill_complete = backfillDone,
+                            total_on_server = targetFolder?.MessageCount ?? 0,
+                            cached_in_results = mapped.Count,
+                            hint = backfillDone
+                                ? (string?)null
+                                : "Older messages may exist on server. Use server_search=true or wait for backfill sync to complete."
+                        };
+                    }
+
+                    return JsonSerializer.Serialize(new
+                    {
+                        count = mapped.Count,
+                        source = serverSearch ? "server" : "cache",
+                        results = mapped,
+                        cache_info = cacheInfo,
+                    }, McpJsonDefaults.Options);
                 }
-
-                var backfillDone = targetFolder is not null && targetFolder.OldestSyncedUid <= 1;
-                cacheInfo = new
+                catch (Exception ex) when (ex is not OperationCanceledException)
                 {
-                    source = "cache",
-                    backfill_complete = backfillDone,
-                    total_on_server = targetFolder?.MessageCount ?? 0,
-                    cached_in_results = mapped.Count,
-                    hint = backfillDone
-                        ? (string?)null
-                        : "Older messages may exist on server. Use server_search=true or wait for backfill sync to complete."
-                };
-            }
-
-            return JsonSerializer.Serialize(new
-            {
-                count = mapped.Count,
-                source = serverSearch ? "server" : "cache",
-                results = mapped,
-                cache_info = cacheInfo,
-            }, JsonOptions);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            return Error($"Search failed: {ex.Message}");
-        }
+                    return McpJsonDefaults.Error($"Search failed: {ex.Message}");
+                }
+            }, config);
     }
 
     private static object FormatMessage(MessageRecord m, bool summaryOnly, int maxBodyLength)
@@ -159,7 +164,4 @@ public class SearchTools(MessageRepository messageRepo, FolderRepository folderR
             thread_id = m.ThreadId
         };
     }
-
-    private static string Error(string message) =>
-        JsonSerializer.Serialize(new { error = message }, JsonOptions);
 }
