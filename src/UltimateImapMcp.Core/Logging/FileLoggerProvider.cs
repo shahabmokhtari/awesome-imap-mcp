@@ -21,14 +21,17 @@ public sealed class FileLoggerProvider : ILoggerProvider, IDisposable
     private readonly ConcurrentQueue<(string Scope, string Line)> _buffer = new();
     private readonly Timer _flushTimer;
     private readonly object _writerLock = new();
+    private readonly long _maxDirSizeBytes;
+    private int _flushCount;
     private bool _disposed;
 
     private static readonly TimeSpan FlushInterval = TimeSpan.FromSeconds(2);
 
-    public FileLoggerProvider(string logDir, string instanceId)
+    public FileLoggerProvider(string logDir, string instanceId, int maxDirSizeMb = 100)
     {
         _logDir = logDir;
         _instanceId = instanceId;
+        _maxDirSizeBytes = maxDirSizeMb * 1024L * 1024L;
         _flushTimer = new Timer(_ => Flush(), null, FlushInterval, FlushInterval);
     }
 
@@ -70,6 +73,45 @@ public sealed class FileLoggerProvider : ILoggerProvider, IDisposable
             {
                 Console.Error.WriteLine($"[FileLoggerProvider] Failed to write logs for scope '{group.Key}': {ex.Message}");
             }
+        }
+
+        // Check directory size every 30 flushes (~60 seconds)
+        if (_maxDirSizeBytes > 0 && ++_flushCount % 30 == 0)
+            EnforceDirectorySize();
+    }
+
+    private void EnforceDirectorySize()
+    {
+        try
+        {
+            var dir = new DirectoryInfo(_logDir);
+            if (!dir.Exists) return;
+
+            var files = dir.GetFiles("*.log", SearchOption.AllDirectories)
+                .OrderBy(f => f.LastWriteTimeUtc)
+                .ToList();
+
+            var totalSize = files.Sum(f => f.Length);
+            var index = 0;
+
+            while (totalSize > _maxDirSizeBytes && index < files.Count)
+            {
+                var file = files[index];
+                // Don't delete the current instance's active log files
+                if (file.Name.StartsWith(_instanceId))
+                {
+                    index++;
+                    continue;
+                }
+                totalSize -= file.Length;
+                try { file.Delete(); }
+                catch { /* best effort */ }
+                index++;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[FileLoggerProvider] Directory size enforcement failed: {ex.Message}");
         }
     }
 

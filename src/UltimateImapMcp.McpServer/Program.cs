@@ -85,7 +85,7 @@ builder.Services.AddSingleton(healthDatabase);
 builder.Services.AddSingleton<Func<int>>(sp =>
 {
     var repo = sp.GetRequiredService<AccountRepository>();
-    return () => { try { return repo.GetAll().Count; } catch { return 0; } };
+    return () => { try { return repo.GetAll().Count; } catch (Exception ex) { Console.Error.WriteLine($"[Heartbeat] Account count failed: {ex.Message}"); return 0; } };
 });
 builder.Services.AddSingleton<IInstanceCoordinator, InstanceCoordinator>();
 builder.Services.AddHostedService(sp => (InstanceCoordinator)sp.GetRequiredService<IInstanceCoordinator>());
@@ -245,7 +245,7 @@ builder.Logging.AddProvider(new SqliteLoggerProvider(logsRepository, instanceId)
     var logDir = config.Server.LogDir
         ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
             ".ultimate-imap-mcp", "logs");
-    builder.Logging.AddProvider(new FileLoggerProvider(logDir, instanceId));
+    builder.Logging.AddProvider(new FileLoggerProvider(logDir, instanceId, config.Server.LogDirMaxSizeMb));
 }
 
 var transport = config.Server.Transport;
