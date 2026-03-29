@@ -22,6 +22,7 @@ using UltimateImapMcp.Queue.Executors;
 using UltimateImapMcp.Core.Email;
 using UltimateImapMcp.RestBackend;
 using UltimateImapMcp.RestBackend.Zoho;
+using UltimateImapMcp.McpServer;
 
 var builder = Host.CreateApplicationBuilder(args);
 builder.Logging.AddConsole(options =>
@@ -249,6 +250,24 @@ builder.Logging.AddProvider(new SqliteLoggerProvider(logsRepository, instanceId)
 }
 
 var transport = config.Server.Transport;
+
+// Wrap stdio streams with protocol logger when verbose logging is enabled
+if (config.Server.LogProtocol && transport is "stdio" or "both")
+{
+    var protocolLogDir = config.Server.LogDir
+        ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            ".ultimate-imap-mcp", "logs");
+    var protocolLogger = LoggerFactory.Create(lb =>
+    {
+        lb.SetMinimumLevel(LogLevel.Debug);
+        lb.AddProvider(new FileLoggerProvider(protocolLogDir, instanceId, config.Server.LogDirMaxSizeMb));
+    }).CreateLogger("MCP.Protocol");
+
+    var wrappedIn = new McpProtocolLogger(Console.OpenStandardInput(), protocolLogger, "IN");
+    var wrappedOut = new McpProtocolLogger(Console.OpenStandardOutput(), protocolLogger, "OUT");
+    Console.SetIn(new StreamReader(wrappedIn));
+    Console.SetOut(new StreamWriter(wrappedOut) { AutoFlush = true });
+}
 
 // Dashboard (conditional) — DashboardHost handles port standby internally
 if (config.Server.DashboardEnabled)
