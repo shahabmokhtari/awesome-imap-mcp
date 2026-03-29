@@ -24,7 +24,10 @@ public static class SettingsApi
                     config.Server.DashboardEnabled,
                     config.Server.DashboardAuth,
                     config.Server.DashboardAutoOpen,
-                    config.Server.LogLevel
+                    config.Server.LogLevel,
+                    config.Server.LogToolCalls,
+                    config.Server.LogProtocol,
+                    config.Server.LogDirMaxSizeMb
                 },
                 cache = new
                 {
@@ -95,6 +98,13 @@ public static class SettingsApi
                 if (s.DashboardAuth is not null) { config.Server.DashboardAuth = s.DashboardAuth; changed.Add("dashboard_auth"); }
                 if (s.DashboardAutoOpen is { } dao) { config.Server.DashboardAutoOpen = dao; changed.Add("dashboard_auto_open"); }
                 if (s.LogLevel is not null) { config.Server.LogLevel = s.LogLevel; changed.Add("log_level"); }
+                if (s.LogToolCalls is { } ltc) { config.Server.LogToolCalls = ltc; changed.Add("log_tool_calls"); }
+                if (s.LogProtocol is { } lp) { config.Server.LogProtocol = lp; changed.Add("log_protocol"); }
+                if (s.LogDirMaxSizeMb is { } ldm)
+                {
+                    if (ldm <= 0) return Results.BadRequest(new { error = "log_dir_max_size_mb must be > 0" });
+                    config.Server.LogDirMaxSizeMb = ldm; changed.Add("log_dir_max_size_mb");
+                }
             }
 
             // Cache settings
@@ -254,6 +264,9 @@ file record ServerSettingsUpdate
     public string? DashboardAuth { get; init; }
     public bool? DashboardAutoOpen { get; init; }
     public string? LogLevel { get; init; }
+    public bool? LogToolCalls { get; init; }
+    public bool? LogProtocol { get; init; }
+    public int? LogDirMaxSizeMb { get; init; }
 }
 
 file record CacheSettingsUpdate

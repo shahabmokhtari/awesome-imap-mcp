@@ -75,6 +75,15 @@ public class ServerConfig
 
     [JsonPropertyName("heartbeat_stale_after")]
     public int HeartbeatStaleAfter { get; set; } = 5;
+
+    [JsonPropertyName("log_tool_calls")]
+    public bool LogToolCalls { get; set; } = true;
+
+    [JsonPropertyName("log_protocol")]
+    public bool LogProtocol { get; set; } = false;
+
+    [JsonPropertyName("log_dir_max_size_mb")]
+    public int LogDirMaxSizeMb { get; set; } = 100;
 }
 
 /// <summary>IMAP/SMTP account configuration.</summary>
@@ -140,9 +149,6 @@ public class SyncConfig
 
     [JsonPropertyName("poll_interval")]
     public int PollInterval { get; set; } = 300;
-
-    [JsonPropertyName("interval_minutes")]
-    public int IntervalMinutes { get; set; } = 5;
 
     [JsonPropertyName("max_messages_per_sync")]
     public int MaxMessagesPerSync { get; set; } = 500;
@@ -228,12 +234,6 @@ public class QueueConfig
 
     [JsonPropertyName("max_concurrent_operations")]
     public int MaxConcurrentOperations { get; set; } = 3;
-
-    [JsonPropertyName("retry_attempts")]
-    public int RetryAttempts { get; set; } = 3;
-
-    [JsonPropertyName("retry_delay_seconds")]
-    public int RetryDelaySeconds { get; set; } = 5;
 }
 
 /// <summary>Optional LLM integration settings.</summary>
@@ -320,7 +320,7 @@ public class AcpConfig
     public AcpProviderConfig Copilot { get; set; } = new()
     {
         Command = "gh",
-        Args = ["copilot", "--acp"],
+        Args = ["copilot", "--acp", "--verbose"],
     };
 
     /// <summary>Legacy command field — if set, overrides claude provider command.</summary>
