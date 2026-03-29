@@ -1,5 +1,13 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 
+class ApiError extends Error {
+  status: number
+  constructor(message: string, status: number) {
+    super(message)
+    this.status = status
+  }
+}
+
 async function apiFetch<T>(url: string, options?: RequestInit): Promise<T> {
   const token = localStorage.getItem('dashboard_token')
   const headers: HeadersInit = { 'Content-Type': 'application/json' }
@@ -9,8 +17,9 @@ async function apiFetch<T>(url: string, options?: RequestInit): Promise<T> {
   const res = await fetch(url, { ...options, headers: { ...headers, ...options?.headers } })
   if (!res.ok) {
     const body = await res.json().catch(() => null)
-    throw new Error(body?.error || body?.message || `API error: ${res.status}`)
+    throw new ApiError(body?.error || body?.message || `API error: ${res.status}`, res.status)
   }
+  if (res.status === 204) return undefined as T
   return res.json()
 }
 
@@ -254,7 +263,7 @@ export function useDeleteAccount() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (id: string) =>
-      apiFetch<unknown>(`/api/accounts/${id}`, { method: 'DELETE' }),
+      apiFetch<unknown>(`/api/accounts/${encodeURIComponent(id)}`, { method: 'DELETE' }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['accounts'] }),
   })
 }
@@ -264,7 +273,7 @@ export function useToggleAccountEnabled() {
   return useMutation({
     mutationFn: (params: { id: string; enabled: boolean }) =>
       apiFetch<{ id: string; enabled: boolean }>(
-        `/api/accounts/${params.id}/toggle-enabled`,
+        `/api/accounts/${encodeURIComponent(params.id)}/toggle-enabled`,
         { method: 'POST', body: JSON.stringify({ enabled: params.enabled }) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['accounts'] }),
   })
@@ -273,7 +282,7 @@ export function useToggleAccountEnabled() {
 export function useTestAccount() {
   return useMutation({
     mutationFn: (id: string) =>
-      apiFetch<{ success: boolean; message: string }>(`/api/accounts/${id}/test`, { method: 'POST' }),
+      apiFetch<{ success: boolean; message: string }>(`/api/accounts/${encodeURIComponent(id)}/test`, { method: 'POST' }),
   })
 }
 
@@ -287,7 +296,7 @@ export function useFetchRecent() {
   return useMutation({
     mutationFn: (id: string) =>
       apiFetch<{ success: boolean; total: number; emails: RecentEmail[]; message?: string }>(
-        `/api/accounts/${id}/fetch-recent`, { method: 'POST' }),
+        `/api/accounts/${encodeURIComponent(id)}/fetch-recent`, { method: 'POST' }),
   })
 }
 
@@ -339,12 +348,15 @@ export function useOAuthProviders() {
 
 export function useStartOAuth() {
   return useMutation({
-    mutationFn: (params: { provider: string; clientId?: string; clientSecret?: string }) => {
-      const qs = new URLSearchParams({ provider: params.provider })
-      if (params.clientId) qs.set('client_id', params.clientId)
-      if (params.clientSecret) qs.set('client_secret', params.clientSecret)
-      return apiFetch<{ auth_url: string; state: string }>(`/api/oauth/start?${qs}`)
-    },
+    mutationFn: (params: { provider: string; clientId?: string; clientSecret?: string }) =>
+      apiFetch<{ auth_url: string; state: string }>('/api/oauth/start', {
+        method: 'POST',
+        body: JSON.stringify({
+          provider: params.provider,
+          client_id: params.clientId,
+          client_secret: params.clientSecret,
+        }),
+      }),
   })
 }
 
@@ -421,7 +433,7 @@ export function useMessages(accountId: string | undefined, folderId?: number, li
 export function useMessage(accountId: string | undefined, folderId: number | undefined, uid: number | undefined) {
   return useQuery({
     queryKey: ['message', accountId, folderId, uid],
-    queryFn: () => apiFetch<MessageDetail>(`/api/messages/${accountId}/${folderId}/${uid}`),
+    queryFn: () => apiFetch<MessageDetail>(`/api/messages/${encodeURIComponent(accountId!)}/${folderId}/${uid}`),
     enabled: !!accountId && folderId != null && uid != null,
   })
 }
@@ -500,6 +512,31 @@ export function useClearFolderCache() {
     onError: (error) => {
       console.error('[useClearFolderCache] failed:', error)
     },
+  })
+}
+
+// ---------- Cache stats ----------
+
+export interface CacheStats {
+  totalMessages: number
+  bodiesFetched: number
+  dbSizeBytes: number
+  dbSizeMb: number
+  accounts: Array<{
+    accountId: string
+    accountName: string
+    messageCount: number
+    bodiesFetched: number
+    oldestCachedAt: string | null
+    newestCachedAt: string | null
+  }>
+}
+
+export function useCacheStats() {
+  return useQuery({
+    queryKey: ['cache-stats'],
+    queryFn: () => apiFetch<CacheStats>('/api/cache/stats'),
+    refetchInterval: 30000,
   })
 }
 

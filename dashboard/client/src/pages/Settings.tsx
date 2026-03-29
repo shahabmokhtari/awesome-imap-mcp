@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useSettings, useUpdateSettings, useAuthStatus, useChangePin, useSetupPin, useLlmModels, useTestLlm, useServerInfo, useShutdownServer, useInstances, useShutdownInstance, useAccounts, useClearCache, useClearAccountCache, type InstanceHeartbeat } from '../hooks/useApi'
+import { useSettings, useUpdateSettings, useAuthStatus, useChangePin, useSetupPin, useLlmModels, useTestLlm, useServerInfo, useShutdownServer, useInstances, useShutdownInstance, useAccounts, useClearCache, useClearAccountCache, useCacheStats, type InstanceHeartbeat } from '../hooks/useApi'
 
 /** Fields that require a server restart when changed. */
 const RESTART_FIELDS = new Set([
@@ -798,6 +798,68 @@ function AnalysisPromptsCard({ settings, onSave, saving }: {
 }
 
 // ---------------------------------------------------------------------------
+// Cache Statistics card
+// ---------------------------------------------------------------------------
+
+function CacheStatsCard() {
+  const { data: stats, isLoading, error } = useCacheStats()
+
+  if (isLoading) return <div className="bg-white rounded-xl shadow p-6"><p className="text-gray-400">Loading cache stats...</p></div>
+  if (error || !stats) return null
+
+  const fmt = (n: number) => n.toLocaleString()
+  const fmtDate = (d: string | null) => {
+    if (!d) return '\u2014'
+    try { return new Date(d).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) }
+    catch { return d }
+  }
+
+  return (
+    <div className="bg-white rounded-xl shadow p-6">
+      <h2 className="text-lg font-semibold mb-4">Cache Statistics</h2>
+      <div className="grid grid-cols-3 gap-4 mb-4">
+        <div className="text-center">
+          <div className="text-2xl font-bold text-blue-600">{fmt(stats.totalMessages)}</div>
+          <div className="text-xs text-gray-500">Total Messages</div>
+        </div>
+        <div className="text-center">
+          <div className="text-2xl font-bold text-green-600">{fmt(stats.bodiesFetched)}</div>
+          <div className="text-xs text-gray-500">Bodies Cached</div>
+        </div>
+        <div className="text-center">
+          <div className="text-2xl font-bold text-purple-600">{stats.dbSizeMb} MB</div>
+          <div className="text-xs text-gray-500">Database Size</div>
+        </div>
+      </div>
+      {stats.accounts.length > 0 && (
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-left text-gray-500 border-b">
+              <th className="py-1">Account</th>
+              <th className="py-1 text-right">Messages</th>
+              <th className="py-1 text-right">Bodies</th>
+              <th className="py-1 text-right">Oldest</th>
+              <th className="py-1 text-right">Newest</th>
+            </tr>
+          </thead>
+          <tbody>
+            {stats.accounts.map(a => (
+              <tr key={a.accountId} className="border-b border-gray-100">
+                <td className="py-1 truncate max-w-[160px]" title={a.accountId}>{a.accountName}</td>
+                <td className="py-1 text-right">{fmt(a.messageCount)}</td>
+                <td className="py-1 text-right">{fmt(a.bodiesFetched)}</td>
+                <td className="py-1 text-right text-xs">{fmtDate(a.oldestCachedAt)}</td>
+                <td className="py-1 text-right text-xs">{fmtDate(a.newestCachedAt)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Cache Management card
 // ---------------------------------------------------------------------------
 
@@ -1178,6 +1240,9 @@ export default function Settings() {
 
         {/* Dashboard PIN card - always shown */}
         <DashboardPinCard />
+
+        {/* Cache statistics card */}
+        <CacheStatsCard />
 
         {/* Cache management card */}
         <CacheManagementCard />
