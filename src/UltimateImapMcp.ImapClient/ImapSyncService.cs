@@ -176,7 +176,10 @@ public sealed class ImapSyncService
         }
         finally
         {
-            await imapFolder.CloseAsync(false, ct).ConfigureAwait(false);
+            try { await imapFolder.CloseAsync(false, ct).ConfigureAwait(false); }
+            catch (Exception ex) when (ex is MailKit.ServiceNotConnectedException
+                or MailKit.ServiceNotAuthenticatedException
+                or IOException or OperationCanceledException) { /* connection already dead */ }
         }
     }
 
@@ -258,7 +261,10 @@ public sealed class ImapSyncService
         }
         finally
         {
-            await imapFolder.CloseAsync(false, ct).ConfigureAwait(false);
+            try { await imapFolder.CloseAsync(false, ct).ConfigureAwait(false); }
+            catch (Exception ex) when (ex is MailKit.ServiceNotConnectedException
+                or MailKit.ServiceNotAuthenticatedException
+                or IOException or OperationCanceledException) { /* connection already dead */ }
         }
     }
 
