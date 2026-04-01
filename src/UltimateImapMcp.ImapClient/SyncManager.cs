@@ -507,7 +507,8 @@ public class SyncManager(
             logger.LogError(ex, "Sync failed for {Account}/{Folder}", accountId, folder.Path);
 
             // Rethrow connection-level errors so the parent stops trying more folders on a dead connection
-            if (ex is IOException or SocketException or ImapProtocolException)
+            if (ex is IOException or SocketException or ImapProtocolException
+                or MailKit.ServiceNotConnectedException or MailKit.ServiceNotAuthenticatedException)
                 throw;
 
             return 0; // On error, don't signal remaining — let the next cycle retry
