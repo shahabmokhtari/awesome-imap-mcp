@@ -76,6 +76,7 @@ public static class MessagesApi
                     flags = m.Flags ?? "",
                     snippet = m.Snippet ?? "",
                     hasAttachments = m.HasAttachments,
+                    bodyFetched = m.BodyFetched,
                     folderPath,
                 }).ToList()
             });

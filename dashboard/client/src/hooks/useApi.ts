@@ -426,6 +426,7 @@ export interface MessageSummary {
   flags: string
   snippet: string
   hasAttachments: boolean
+  bodyFetched: boolean
   folderPath: string
 }
 

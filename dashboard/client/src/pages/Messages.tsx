@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import {
   useAccounts,
   useFolders,
@@ -36,6 +36,28 @@ function formatDate(dateEpoch: number | null, dateStr: string): string {
 function isUnread(flags: string): boolean {
   // Messages are unread if they do NOT have the \Seen flag
   return !flags.toLowerCase().includes('\\seen')
+}
+
+/** Extract custom labels/keywords from flags (exclude standard IMAP flags). */
+function getLabels(flags: string): string[] {
+  if (!flags) return []
+  const standard = new Set(['\\seen', '\\flagged', '\\answered', '\\deleted', '\\draft', '\\recent', '$forwarded', '$mdnsent'])
+  return flags.split(' ').filter(f => f && !standard.has(f.toLowerCase()))
+}
+
+const LABEL_COLORS = [
+  'bg-purple-100 text-purple-700',
+  'bg-teal-100 text-teal-700',
+  'bg-orange-100 text-orange-700',
+  'bg-pink-100 text-pink-700',
+  'bg-cyan-100 text-cyan-700',
+  'bg-lime-100 text-lime-700',
+]
+
+function labelColor(label: string): string {
+  let hash = 0
+  for (let i = 0; i < label.length; i++) hash = ((hash << 5) - hash + label.charCodeAt(i)) | 0
+  return LABEL_COLORS[Math.abs(hash) % LABEL_COLORS.length]
 }
 
 function folderIcon(role: string | null, path: string): string {
@@ -139,11 +161,19 @@ function MessageRow({
           </div>
           <div className={`text-sm truncate mt-0.5 ${unread ? 'font-medium text-gray-900' : 'text-gray-600'}`}>
             {msg.hasAttachments && <span className="mr-1 text-gray-400" title="Has attachments">{'\u{1F4CE}'}</span>}
+            {msg.bodyFetched && <span className="mr-1 text-green-400" title="Body cached">{'\u{2709}'}</span>}
             {msg.subject}
           </div>
-          {msg.snippet && (
-            <div className="text-xs text-gray-400 truncate mt-0.5">{msg.snippet}</div>
-          )}
+          <div className="flex items-center gap-1 mt-0.5">
+            {msg.snippet && (
+              <span className="text-xs text-gray-400 truncate">{msg.snippet}</span>
+            )}
+            {getLabels(msg.flags).map(label => (
+              <span key={label} className={`inline-block px-1.5 py-0 rounded text-[10px] font-medium flex-shrink-0 ${labelColor(label)}`}>
+                {label}
+              </span>
+            ))}
+          </div>
         </div>
       </div>
     </button>
@@ -391,6 +421,34 @@ export default function Messages() {
 
   const clearFolderCache = useClearFolderCache()
   const isSearching = searchQuery.length > 0
+
+  // Keyboard navigation: arrow up/down moves between messages
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (!messages || messages.length === 0 || isSearching) return
+    if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return
+
+    e.preventDefault()
+    const currentIdx = selectedMsg
+      ? messages.findIndex(m => m.uid === selectedMsg.uid)
+      : -1
+
+    let nextIdx: number
+    if (e.key === 'ArrowDown') {
+      nextIdx = currentIdx < messages.length - 1 ? currentIdx + 1 : currentIdx
+    } else {
+      nextIdx = currentIdx > 0 ? currentIdx - 1 : 0
+    }
+
+    const nextMsg = messages[nextIdx]
+    if (nextMsg) {
+      setSelectedMsg({ uid: nextMsg.uid, folderId: nextMsg.folderId ?? effectiveFolderId! })
+    }
+  }, [messages, selectedMsg, effectiveFolderId, isSearching])
+
+  useEffect(() => {
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [handleKeyDown])
 
   const handleAccountChange = (id: string) => {
     setSelectedAccountId(id)
