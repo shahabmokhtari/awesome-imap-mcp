@@ -67,6 +67,35 @@ export function useTriggerSyncAll() {
   })
 }
 
+export interface SyncState {
+  stopped: boolean
+  syncing: boolean
+}
+
+export function useSyncState() {
+  return useQuery({
+    queryKey: ['sync-state'],
+    queryFn: () => apiFetch<SyncState>('/api/sync/state'),
+    refetchInterval: 3000,
+  })
+}
+
+export function useStopSync() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => apiFetch<{ stopped: boolean }>('/api/sync/stop', { method: 'POST' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['sync-state'] }),
+  })
+}
+
+export function useStartSync() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => apiFetch<{ stopped: boolean }>('/api/sync/start', { method: 'POST' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['sync-state'] }),
+  })
+}
+
 export interface SyncLogEntry {
   id: number
   accountId: string
@@ -522,6 +551,8 @@ export interface CacheStats {
   bodiesFetched: number
   dbSizeBytes: number
   dbSizeMb: number
+  dbFreeSpaceBytes: number
+  dbFreeSpaceMb: number
   accounts: Array<{
     accountId: string
     accountName: string

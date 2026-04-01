@@ -58,6 +58,9 @@ public class ServerConfig
     [JsonPropertyName("dashboard_auth")]
     public string? DashboardAuth { get; set; }
 
+    [JsonPropertyName("dashboard_pin_hash")]
+    public string? DashboardPinHash { get; set; }
+
     [JsonPropertyName("dashboard_auto_open")]
     public bool DashboardAutoOpen { get; set; } = false;
 

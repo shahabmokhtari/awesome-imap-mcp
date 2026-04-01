@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
 using UltimateImapMcp.Core.Configuration;
+using UltimateImapMcp.Core.Email;
 using UltimateImapMcp.ImapClient.Repositories;
 using UltimateImapMcp.Llm;
 using UltimateImapMcp.Llm.Repositories;
@@ -15,6 +16,7 @@ public class AnalysisTools(
     LlmAnalysisRepository analysisRepo,
     MessageRepository messageRepo,
     FolderRepository folderRepo,
+    IEmailBackendFactory backendFactory,
     BudgetTracker budgetTracker,
     AppConfig config,
     ILogger<AnalysisTools> logger)
@@ -41,6 +43,26 @@ public class AnalysisTools(
                     var msg = messageRepo.Resolve(messageId, accountId, folderId, uid, folderRepo);
                     if (msg is null)
                         return McpJsonDefaults.Error("Message not found. Provide 'messageId' or 'accountId'+'uid'.");
+
+                    // Auto-fetch body if not yet cached — analysis is much better with full body
+                    if (!msg.BodyFetched)
+                    {
+                        try
+                        {
+                            var folder = folderRepo.GetByAccount(msg.AccountId)
+                                .FirstOrDefault(f => f.Id == msg.FolderId);
+                            if (folder is not null)
+                            {
+                                await using var backend = backendFactory.CreateSyncBackend(msg.AccountId);
+                                await backend.FetchMessageBodyAsync(msg.AccountId, folder.Path, msg.Uid).ConfigureAwait(false);
+                                msg = messageRepo.GetById(msg.Id) ?? msg;
+                            }
+                        }
+                        catch (Exception ex) when (ex is not OperationCanceledException)
+                        {
+                            logger.LogWarning(ex, "Failed to fetch body for analysis, proceeding with snippet");
+                        }
+                    }
 
                     var analysisType = ParseAnalysisType(type);
 
@@ -136,12 +158,28 @@ public class AnalysisTools(
                     var totalTokensOut = 0;
                     var totalCost = 0m;
 
-                    foreach (var msg in messages)
+                    foreach (var msg0 in messages)
                     {
+                        var msg = msg0;
                         if (analyzer.SupportsBackgroundAnalysis && !budgetTracker.CanSpend(1000))
                         {
                             results.Add(new { uid = msg.Uid, status = "skipped", reason = "budget_exceeded" });
                             continue;
+                        }
+
+                        // Auto-fetch body if not yet cached
+                        if (!msg.BodyFetched)
+                        {
+                            try
+                            {
+                                await using var backend = backendFactory.CreateSyncBackend(msg.AccountId);
+                                await backend.FetchMessageBodyAsync(msg.AccountId, folder.Path, msg.Uid).ConfigureAwait(false);
+                                msg = messageRepo.GetById(msg.Id) ?? msg;
+                            }
+                            catch (Exception ex) when (ex is not OperationCanceledException)
+                            {
+                                logger.LogWarning(ex, "Failed to fetch body for UID {Uid}, proceeding with snippet", msg.Uid);
+                            }
                         }
 
                         var email = new EmailContent(

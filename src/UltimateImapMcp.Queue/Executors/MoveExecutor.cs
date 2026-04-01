@@ -1,5 +1,6 @@
 using System.Text.Json;
 using MailKit;
+using Microsoft.Extensions.Logging;
 using UltimateImapMcp.Core.Encryption;
 using UltimateImapMcp.Core.OAuth;
 using UltimateImapMcp.ImapClient;
@@ -10,7 +11,8 @@ namespace UltimateImapMcp.Queue.Executors;
 
 public class MoveExecutor(AccountRepository accountRepo, CredentialEncryptor encryptor,
     IOAuthAccessTokenProvider oauthProvider,
-    MessageRepository messageRepo, FolderRepository folderRepo) : IOperationExecutor
+    MessageRepository messageRepo, FolderRepository folderRepo,
+    ILogger<MoveExecutor> logger) : IOperationExecutor
 {
     public IReadOnlyList<string> SupportedOperations { get; } = ["move", "bulkmove"];
 
@@ -69,7 +71,7 @@ public class MoveExecutor(AccountRepository accountRepo, CredentialEncryptor enc
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[MoveExecutor] Cache update warning: {ex.Message}");
+            logger.LogWarning(ex, "Cache update failed after move operation");
         }
     }
 }

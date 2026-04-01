@@ -1,5 +1,6 @@
 using System.Text.Json;
 using MailKit;
+using Microsoft.Extensions.Logging;
 using UltimateImapMcp.Core.Encryption;
 using UltimateImapMcp.Core.OAuth;
 using UltimateImapMcp.ImapClient;
@@ -10,7 +11,8 @@ namespace UltimateImapMcp.Queue.Executors;
 
 public class DeleteExecutor(AccountRepository accountRepo, CredentialEncryptor encryptor,
     IOAuthAccessTokenProvider oauthProvider,
-    MessageRepository messageRepo, FolderRepository folderRepo) : IOperationExecutor
+    MessageRepository messageRepo, FolderRepository folderRepo,
+    ILogger<DeleteExecutor> logger) : IOperationExecutor
 {
     public IReadOnlyList<string> SupportedOperations { get; } = ["delete", "bulkdelete"];
 
@@ -46,7 +48,7 @@ public class DeleteExecutor(AccountRepository accountRepo, CredentialEncryptor e
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[DeleteExecutor] Cache update warning: {ex.Message}");
+            logger.LogWarning(ex, "Cache update failed after delete operation");
         }
     }
 }

@@ -1,13 +1,19 @@
 import { useState } from 'react'
-import { useSyncStatus, useTriggerSync, useTriggerSyncAll, useSyncLogs } from '../hooks/useApi'
+import { useSyncStatus, useTriggerSync, useTriggerSyncAll, useSyncLogs, useSyncState, useStopSync, useStartSync } from '../hooks/useApi'
 import type { SyncLogEntry } from '../hooks/useApi'
 
 export default function Sync() {
   const { data: syncStatus, isLoading, error } = useSyncStatus()
+  const { data: syncState } = useSyncState()
   const triggerSync = useTriggerSync()
   const triggerSyncAll = useTriggerSyncAll()
+  const stopSync = useStopSync()
+  const startSync = useStartSync()
   const [triggerResult, setTriggerResult] = useState<{ accountId: string; message: string; success: boolean } | null>(null)
   const [syncingAccountId, setSyncingAccountId] = useState<string | null>(null)
+
+  const isSyncing = syncState?.syncing || triggerSyncAll.isPending || triggerSync.isPending
+  const isStopped = syncState?.stopped ?? false
 
   const handleSyncAllAccounts = () => {
     setTriggerResult(null)
@@ -25,7 +31,7 @@ export default function Sync() {
     setTriggerResult(null)
     setSyncingAccountId(accountId)
     triggerSync.mutate({ accountId }, {
-      onSuccess: () => { setTriggerResult({ accountId, message: 'Sync triggered', success: true }); setSyncingAccountId(null) },
+      onSuccess: () => { setTriggerResult({ accountId, message: 'Sync triggered for all folders', success: true }); setSyncingAccountId(null) },
       onError: (err) => { setTriggerResult({ accountId, message: err.message, success: false }); setSyncingAccountId(null) },
     })
   }
@@ -42,14 +48,46 @@ export default function Sync() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-semibold text-gray-900">Sync Status</h2>
-        <button
-          onClick={handleSyncAllAccounts}
-          disabled={triggerSyncAll.isPending || triggerSync.isPending}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {triggerSyncAll.isPending ? 'Syncing All...' : 'Sync All Accounts'}
-        </button>
+        <div className="flex items-center gap-3">
+          <h2 className="text-2xl font-semibold text-gray-900">Sync Status</h2>
+          {isSyncing && !isStopped && (
+            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+              <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
+              Syncing
+            </span>
+          )}
+          {isStopped && (
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
+              Stopped
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {isStopped ? (
+            <button
+              onClick={() => startSync.mutate()}
+              disabled={startSync.isPending}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors disabled:opacity-50"
+            >
+              {startSync.isPending ? 'Starting...' : 'Start Sync'}
+            </button>
+          ) : (
+            <button
+              onClick={() => stopSync.mutate()}
+              disabled={stopSync.isPending}
+              className="px-4 py-2 bg-red-500 text-white rounded-lg text-sm font-medium hover:bg-red-600 transition-colors disabled:opacity-50"
+            >
+              {stopSync.isPending ? 'Stopping...' : 'Stop Sync'}
+            </button>
+          )}
+          <button
+            onClick={handleSyncAllAccounts}
+            disabled={isSyncing || isStopped}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {triggerSyncAll.isPending ? 'Syncing All...' : 'Sync All Accounts'}
+          </button>
+        </div>
       </div>
 
       {isLoading && (
@@ -87,10 +125,10 @@ export default function Sync() {
               <h3 className="text-lg font-medium text-gray-800">{accountLabel}</h3>
               <button
                 onClick={() => handleTriggerAll(accountId)}
-                disabled={syncingAccountId === accountId}
+                disabled={syncingAccountId === accountId || isStopped}
                 className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs hover:bg-blue-700 transition-colors disabled:opacity-50"
               >
-                {syncingAccountId === accountId ? 'Syncing...' : 'Sync All Folders'}
+                {syncingAccountId === accountId ? 'Syncing...' : 'Sync Account'}
               </button>
             </div>
             <div className="bg-white rounded-lg shadow overflow-hidden">
@@ -141,10 +179,10 @@ export default function Sync() {
                           <td className="px-4 py-3">
                             <button
                               onClick={() => handleTriggerFolder(accountId, folderPath)}
-                              disabled={syncingAccountId === accountId}
+                              disabled={syncingAccountId === accountId || isStopped}
                               className="text-blue-600 hover:text-blue-800 text-xs disabled:opacity-50"
                             >
-                              Sync
+                              {syncingAccountId === accountId ? 'Syncing...' : 'Sync'}
                             </button>
                           </td>
                         </tr>

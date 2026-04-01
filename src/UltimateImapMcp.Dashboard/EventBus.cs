@@ -1,4 +1,4 @@
-using System.Threading.Channels;
+using Microsoft.Extensions.Logging;
 
 namespace UltimateImapMcp.Dashboard;
 
@@ -13,8 +13,8 @@ public record QueueCompletedEvent(string PendingId, string Operation) : IEvent;
 public record QueueFailedEvent(string PendingId, string Operation, string Error) : IEvent;
 
 /// <summary>
-/// In-memory pub/sub event bus using Channel&lt;T&gt; for decoupled communication
-/// between services and the SignalR hub.
+/// In-memory pub/sub event bus using lock-synchronized handler lists for decoupled
+/// communication between services and the SignalR hub.
 /// </summary>
 public interface IEventBus
 {
@@ -22,7 +22,7 @@ public interface IEventBus
     IDisposable Subscribe<T>(Action<T> handler) where T : IEvent;
 }
 
-public sealed class EventBus : IEventBus
+public sealed class EventBus(ILogger<EventBus> logger) : IEventBus
 {
     private readonly object _lock = new();
     private readonly Dictionary<Type, List<object>> _handlers = new();
@@ -45,7 +45,7 @@ public sealed class EventBus : IEventBus
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"[EventBus] Subscriber failed for {typeof(T).Name}: {ex.Message}");
+                logger.LogWarning(ex, "EventBus subscriber failed for {EventType}", typeof(T).Name);
             }
         }
     }

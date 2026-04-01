@@ -18,7 +18,7 @@ public record EmailVolumeRecord(string FolderPath, int MessageCount, long TotalS
 public record TopSenderRecord(string FromEmail, int MessageCount, long TotalSizeBytes);
 
 /// <summary>Overall cache statistics.</summary>
-public record CacheStatsRecord(int TotalMessages, int BodiesFetched, long DbSizeBytes);
+public record CacheStatsRecord(int TotalMessages, int BodiesFetched, long DbSizeBytes, long DbFreeSpaceBytes);
 
 /// <summary>Per-account cache statistics.</summary>
 public record AccountCacheStatsRecord(
@@ -137,8 +137,10 @@ public class MessageRepository(AppDatabase db)
             date ?? DateTimeOffset.UtcNow.ToString("o"), dateEpoch, flags, sizeBytes, hasAttachments, snippet,
             synced: synced);
 
-        // Get the inserted record's ID
+        // Get the inserted record's ID and create the junction table link
         var inserted = GetByUidDirect(accountId, folderId, uid);
+        if (inserted is not null)
+            LinkToFolder(inserted.Id, folderId, uid);
         return inserted?.Id ?? 0;
     }
 
@@ -732,6 +734,29 @@ public class MessageRepository(AppDatabase db)
         });
     }
 
+    /// <summary>
+    /// Repairs orphaned messages that exist in the messages table but have no
+    /// corresponding entry in message_folders. Creates junction entries using
+    /// the message's folder_id and uid columns. Returns the number of repaired rows.
+    /// </summary>
+    public int RepairMissingFolderLinks()
+    {
+        return db.ExecuteWrite(conn =>
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = """
+                INSERT OR IGNORE INTO message_folders (message_id, folder_id, uid)
+                SELECT m.id, m.folder_id, m.uid
+                FROM messages m
+                LEFT JOIN message_folders mf ON mf.message_id = m.id AND mf.folder_id = m.folder_id
+                WHERE mf.message_id IS NULL
+                  AND m.deleted_at IS NULL
+                  AND m.folder_id IS NOT NULL;
+                """;
+            return cmd.ExecuteNonQuery();
+        });
+    }
+
     /// <summary>Update the flags column for a cached message.</summary>
     public void UpdateFlags(int messageId, string? flags)
     {
@@ -771,8 +796,19 @@ public class MessageRepository(AppDatabase db)
         reader.Read();
         var totalMessages = reader.GetInt32(0);
         var bodiesFetched = reader.GetInt32(1);
-        var dbSize = new FileInfo(db.DbPath).Length;
-        return new CacheStatsRecord(totalMessages, bodiesFetched, dbSize);
+        // File size includes DB + WAL + SHM
+        var dbFile = new FileInfo(db.DbPath);
+        var dbSize = dbFile.Exists ? dbFile.Length : 0;
+        var walFile = new FileInfo(db.DbPath + "-wal");
+        var walSize = walFile.Exists ? walFile.Length : 0;
+        var totalFileSize = dbSize + walSize;
+
+        // Actual data size = (page_count - freelist_count) * page_size
+        using var sizeCmd = conn.CreateCommand();
+        sizeCmd.CommandText = "SELECT (page_count - freelist_count) * page_size FROM pragma_page_count, pragma_freelist_count, pragma_page_size;";
+        var dataSize = Convert.ToInt64(sizeCmd.ExecuteScalar() ?? 0);
+
+        return new CacheStatsRecord(totalMessages, bodiesFetched, totalFileSize, totalFileSize - dataSize);
     }
 
     /// <summary>Gets cache statistics broken down by account.</summary>

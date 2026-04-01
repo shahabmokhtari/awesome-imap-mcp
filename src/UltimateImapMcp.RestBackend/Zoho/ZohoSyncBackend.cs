@@ -324,6 +324,6 @@ internal sealed class ZohoSyncBackend : IEmailSyncBackend
     {
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(messageId));
         var value = BitConverter.ToInt64(hash, 0);
-        return Math.Abs(value);
+        return value & long.MaxValue; // Mask sign bit to avoid OverflowException on long.MinValue
     }
 }

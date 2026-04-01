@@ -283,7 +283,7 @@ function MessageView({
             srcDoc={msg.bodyHtml!}
             title="Email body"
             className="w-full h-full border-0 min-h-[400px] rounded bg-white"
-            sandbox="allow-same-origin"
+            sandbox=""
           />
         ) : hasText ? (
           <pre className="text-sm text-gray-800 whitespace-pre-wrap break-words font-sans leading-relaxed">

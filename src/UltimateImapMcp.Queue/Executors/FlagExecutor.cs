@@ -1,5 +1,6 @@
 using System.Text.Json;
 using MailKit;
+using Microsoft.Extensions.Logging;
 using UltimateImapMcp.Core.Encryption;
 using UltimateImapMcp.Core.OAuth;
 using UltimateImapMcp.ImapClient;
@@ -10,7 +11,8 @@ namespace UltimateImapMcp.Queue.Executors;
 
 public class FlagExecutor(AccountRepository accountRepo, CredentialEncryptor encryptor,
     IOAuthAccessTokenProvider oauthProvider,
-    MessageRepository messageRepo, FolderRepository folderRepo) : IOperationExecutor
+    MessageRepository messageRepo, FolderRepository folderRepo,
+    ILogger<FlagExecutor> logger) : IOperationExecutor
 {
     public IReadOnlyList<string> SupportedOperations { get; } = ["markread", "markunread", "flag", "unflag"];
 
@@ -77,7 +79,7 @@ public class FlagExecutor(AccountRepository accountRepo, CredentialEncryptor enc
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[FlagExecutor] Cache update warning: {ex.Message}");
+            logger.LogWarning(ex, "Cache update failed after flag operation");
         }
     }
 

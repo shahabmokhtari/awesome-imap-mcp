@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using UltimateImapMcp.Core.Database;
 using UltimateImapMcp.ImapClient;
 using UltimateImapMcp.ImapClient.Repositories;
 
@@ -11,26 +13,32 @@ public static class CacheApi
 {
     public static IEndpointRouteBuilder MapCacheApi(this IEndpointRouteBuilder app)
     {
-        app.MapDelete("/api/cache", (MessageRepository messageRepo, FolderRepository folderRepo,
-            SyncManager syncManager, ILoggerFactory loggerFactory) =>
+        app.MapDelete("/api/cache", (AppDatabase db, SyncManager syncManager,
+            IHostApplicationLifetime lifetime, ILoggerFactory loggerFactory) =>
         {
             var logger = loggerFactory.CreateLogger("CacheApi");
-            var wasActive = !syncManager.IsPaused;
             try
             {
-                if (wasActive) syncManager.PauseSync();
-                var deleted = messageRepo.DeleteAll();
-                folderRepo.ResetAllSyncState();
-                return Results.Ok(new { deleted, message = "All cached messages cleared. Folders will re-sync." });
+                // Stop all sync operations
+                syncManager.StopSync();
+
+                // Delete the DB files — they'll be recreated on next startup
+                db.DeleteDatabaseFiles();
+                logger.LogInformation("Cache database deleted. Server will restart.");
+
+                // Trigger graceful shutdown — MCP host will restart the process
+                _ = Task.Run(async () =>
+                {
+                    await Task.Delay(500); // give response time to send
+                    lifetime.StopApplication();
+                });
+
+                return Results.Ok(new { message = "Cache cleared. Server restarting..." });
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Failed to clear all cached messages");
+                logger.LogError(ex, "Failed to clear cache");
                 return Results.Json(new { error = $"Cache clear failed: {ex.Message}" }, statusCode: 500);
-            }
-            finally
-            {
-                if (wasActive) syncManager.ResumeSync();
             }
         });
 
@@ -46,22 +54,17 @@ public static class CacheApi
             if (account is null)
                 return Results.NotFound(new { error = $"Account '{accountId}' not found." });
 
-            var wasActive = !syncManager.IsPaused;
             try
             {
-                if (wasActive) syncManager.PauseSync();
+                syncManager.StopSync();
                 var deleted = messageRepo.DeleteByAccount(accountId);
                 folderRepo.ResetSyncState(accountId);
-                return Results.Ok(new { deleted, accountId, message = "Cache cleared for account. Folders will re-sync." });
+                return Results.Ok(new { deleted, accountId, message = "Cache cleared for account. Use Start Sync to resume." });
             }
             catch (Exception ex)
             {
                 logger.LogError(ex, "Failed to clear cache for account {AccountId}", accountId);
                 return Results.Json(new { error = $"Cache clear failed: {ex.Message}" }, statusCode: 500);
-            }
-            finally
-            {
-                if (wasActive) syncManager.ResumeSync();
             }
         });
 
@@ -73,22 +76,17 @@ public static class CacheApi
             if (string.IsNullOrWhiteSpace(accountId))
                 return Results.BadRequest(new { error = "accountId is required" });
 
-            var wasActive = !syncManager.IsPaused;
             try
             {
-                if (wasActive) syncManager.PauseSync();
+                syncManager.StopSync();
                 var deleted = messageRepo.DeleteByFolder(accountId, folderId);
                 folderRepo.ResetFolderSyncState(accountId, folderId);
-                return Results.Ok(new { deleted, accountId, folderId, message = "Cache cleared for folder. Folder will re-sync." });
+                return Results.Ok(new { deleted, accountId, folderId, message = "Cache cleared for folder. Use Start Sync to resume." });
             }
             catch (Exception ex)
             {
                 logger.LogError(ex, "Failed to clear cache for account {AccountId} folder {FolderId}", accountId, folderId);
                 return Results.Json(new { error = $"Cache clear failed: {ex.Message}" }, statusCode: 500);
-            }
-            finally
-            {
-                if (wasActive) syncManager.ResumeSync();
             }
         });
 

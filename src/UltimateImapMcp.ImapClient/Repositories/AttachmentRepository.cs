@@ -19,6 +19,20 @@ public class AttachmentRepository(AppDatabase db)
     {
         db.ExecuteWrite(conn =>
         {
+            // Skip if this attachment already exists for the message (prevents duplicates on re-sync)
+            using var check = conn.CreateCommand();
+            check.CommandText = """
+                SELECT 1 FROM attachments
+                WHERE message_id = $messageId
+                  AND COALESCE(filename, '') = COALESCE($filename, '')
+                  AND COALESCE(content_id, '') = COALESCE($contentId, '')
+                LIMIT 1;
+                """;
+            check.Parameters.AddWithValue("$messageId", messageId);
+            check.Parameters.AddWithValue("$filename", (object?)filename ?? DBNull.Value);
+            check.Parameters.AddWithValue("$contentId", (object?)contentId ?? DBNull.Value);
+            if (check.ExecuteScalar() is not null) return;
+
             using var cmd = conn.CreateCommand();
             cmd.CommandText = """
                 INSERT INTO attachments (message_id, filename, content_type, size_bytes, content_id, is_inline)

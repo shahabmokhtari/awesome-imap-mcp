@@ -41,6 +41,7 @@ public class SyncManager(
     private Action<string, object>? _onSyncEvent;
     private volatile bool _paused;
     private volatile bool _isSyncing;
+    private CancellationTokenSource _pauseCts = new();
 
     /// <summary>
     /// Sets a callback to receive sync lifecycle events (sync:progress, sync:complete, sync:error).
@@ -286,20 +287,30 @@ public class SyncManager(
             accountId, interval.TotalSeconds);
 
         // Initial sync of all folders on startup — only the leader performs IMAP work.
-        if (coordinator.IsLeader)
+        if (coordinator.IsLeader && !_paused)
         {
             try
             {
-                var remaining = await SyncAllFoldersAsync(accountId, account, connMgr, "poll", ct).ConfigureAwait(false);
+                _isSyncing = true;
+                using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, _pauseCts.Token);
+                var remaining = await SyncAllFoldersAsync(accountId, account, connMgr, "poll", linked.Token).ConfigureAwait(false);
                 _hasPendingMessages[accountId] = remaining > 0;
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
                 return;
             }
+            catch (OperationCanceledException) when (_paused)
+            {
+                logger.LogDebug("Initial sync cancelled by pause for {Account}", accountId);
+            }
             catch (Exception ex)
             {
                 logger.LogError(ex, "Initial sync failed for {Account}", accountId);
+            }
+            finally
+            {
+                _isSyncing = false;
             }
         }
 
@@ -342,12 +353,18 @@ public class SyncManager(
             try
             {
                 _isSyncing = true;
-                var remaining = await SyncAllFoldersAsync(accountId, account, connMgr, "poll", ct).ConfigureAwait(false);
+                using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, _pauseCts.Token);
+                var remaining = await SyncAllFoldersAsync(accountId, account, connMgr, "poll", linked.Token).ConfigureAwait(false);
                 _hasPendingMessages[accountId] = remaining > 0;
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
                 break;
+            }
+            catch (OperationCanceledException) when (_paused)
+            {
+                // Sync was cancelled by pause — not an error, loop will wait
+                logger.LogDebug("Sync cancelled by pause for {Account}", accountId);
             }
             catch (Exception ex)
             {
@@ -507,18 +524,24 @@ public class SyncManager(
     /// <summary>Whether any sync operation is currently running.</summary>
     public bool IsSyncing => _isSyncing;
 
-    /// <summary>Pause all sync operations. Currently running syncs will complete.</summary>
-    public void PauseSync()
+    /// <summary>
+    /// Stop sync immediately — cancels any in-flight sync operation.
+    /// Call StartSync() to resume.
+    /// </summary>
+    public void StopSync()
     {
         _paused = true;
-        logger.LogInformation("Sync paused");
+        _pauseCts.Cancel();
+        logger.LogInformation("Sync stopped");
     }
 
-    /// <summary>Resume sync operations.</summary>
-    public void ResumeSync()
+    /// <summary>Start/resume sync with a fresh cancellation token.</summary>
+    public void StartSync()
     {
+        _pauseCts.Dispose();
+        _pauseCts = new CancellationTokenSource();
         _paused = false;
-        logger.LogInformation("Sync resumed");
+        logger.LogInformation("Sync started");
     }
 
     /// <summary>
@@ -555,14 +578,15 @@ public class SyncManager(
         try
         {
             _isSyncing = true;
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, _pauseCts.Token);
             if (folderPath is not null)
             {
-                await SyncFolderAsync(accountId, account, connMgr, folderPath, "manual", ct)
+                await SyncFolderAsync(accountId, account, connMgr, folderPath, "manual", linked.Token)
                     .ConfigureAwait(false);
             }
             else
             {
-                await SyncAllFoldersAsync(accountId, account, connMgr, "manual", ct)
+                await SyncAllFoldersAsync(accountId, account, connMgr, "manual", linked.Token)
                     .ConfigureAwait(false);
             }
         }

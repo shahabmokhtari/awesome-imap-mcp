@@ -343,6 +343,14 @@ static T GetProp<T>(object obj, string name)
     return prop is not null ? (T)prop.GetValue(obj)! : default!;
 }
 
+// Repair orphaned messages missing junction table entries (one-time fix on startup)
+{
+    var repairRepo = new MessageRepository(database);
+    var repaired = repairRepo.RepairMissingFolderLinks();
+    if (repaired > 0)
+        Console.Error.WriteLine($"  [Startup] Repaired {repaired} messages with missing folder links.");
+}
+
 // Print startup banner to stderr (stdout is reserved for MCP stdio protocol)
 {
     var bannerRepo = new AccountRepository(database);

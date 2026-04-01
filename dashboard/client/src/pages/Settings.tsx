@@ -817,7 +817,7 @@ function CacheStatsCard() {
   return (
     <div className="bg-white rounded-xl shadow p-6">
       <h2 className="text-lg font-semibold mb-4">Cache Statistics</h2>
-      <div className="grid grid-cols-3 gap-4 mb-4">
+      <div className="grid grid-cols-4 gap-4 mb-4">
         <div className="text-center">
           <div className="text-2xl font-bold text-blue-600">{fmt(stats.totalMessages)}</div>
           <div className="text-xs text-gray-500">Total Messages</div>
@@ -829,6 +829,10 @@ function CacheStatsCard() {
         <div className="text-center">
           <div className="text-2xl font-bold text-purple-600">{stats.dbSizeMb} MB</div>
           <div className="text-xs text-gray-500">Database Size</div>
+        </div>
+        <div className="text-center">
+          <div className="text-2xl font-bold text-orange-500">{stats.dbFreeSpaceMb} MB</div>
+          <div className="text-xs text-gray-500">Reclaimable</div>
         </div>
       </div>
       {stats.accounts.length > 0 && (

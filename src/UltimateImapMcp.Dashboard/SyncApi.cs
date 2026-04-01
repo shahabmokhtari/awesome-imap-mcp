@@ -22,41 +22,12 @@ public static class SyncApi
             return Results.Ok(result);
         });
 
-        app.MapPost("/api/sync/trigger-all", async (SyncManager syncManager, AccountRepository accountRepo) =>
+        app.MapPost("/api/sync/trigger-all", (SyncManager syncManager) =>
         {
-            var accounts = accountRepo.GetAll();
-            if (accounts.Count == 0)
-                return Results.Ok(new { triggered = 0, message = "No accounts found." });
-
-            var triggered = 0;
-            var skipped = 0;
-            var errors = new List<string>();
-            foreach (var account in accounts)
-            {
-                if (!account.Enabled)
-                {
-                    skipped++;
-                    continue;
-                }
-
-                try
-                {
-                    await syncManager.TriggerSyncAsync(account.Id).ConfigureAwait(false);
-                    triggered++;
-                }
-                catch (OperationCanceledException)
-                {
-                    throw;
-                }
-                catch (Exception ex)
-                {
-                    errors.Add($"{account.Name}: {ex.Message}");
-                }
-            }
-
-            if (errors.Count > 0)
-                return Results.Json(new { triggered, total = accounts.Count, skipped, errors }, statusCode: 207);
-            return Results.Ok(new { triggered, total = accounts.Count, skipped, errors });
+            // Stop current sync, then start fresh — polling loop will pick up all accounts
+            syncManager.StopSync();
+            syncManager.StartSync();
+            return Results.Ok(new { message = "Sync restarted for all accounts." });
         });
 
         app.MapGet("/api/sync/logs", (HttpContext ctx, SyncLogRepository syncLogRepo) =>
@@ -83,23 +54,24 @@ public static class SyncApi
             }));
         });
 
-        app.MapPost("/api/sync/pause", (SyncManager syncManager) =>
+        app.MapPost("/api/sync/stop", (SyncManager syncManager) =>
         {
-            syncManager.PauseSync();
-            return Results.Ok(new { paused = true, message = "Sync paused. Running operations will complete." });
+            syncManager.StopSync();
+            return Results.Ok(new { stopped = true, message = "Sync stopped. Use /api/sync/start to resume." });
         });
 
-        app.MapPost("/api/sync/resume", (SyncManager syncManager) =>
+        app.MapPost("/api/sync/start", (SyncManager syncManager) =>
         {
-            syncManager.ResumeSync();
-            return Results.Ok(new { paused = false, message = "Sync resumed." });
+            syncManager.StartSync();
+            return Results.Ok(new { stopped = false, message = "Sync started." });
         });
 
         app.MapGet("/api/sync/state", (SyncManager syncManager) =>
         {
-            return Results.Ok(new { paused = syncManager.IsPaused, syncing = syncManager.IsSyncing });
+            return Results.Ok(new { stopped = syncManager.IsPaused, syncing = syncManager.IsSyncing });
         });
 
+        // Trigger sync for an account or folder: stops current sync, runs manual sync, resumes periodic
         app.MapPost("/api/sync/trigger", async (HttpContext ctx, SyncManager syncManager) =>
         {
             var body = await ctx.Request.ReadFromJsonAsync<SyncTriggerRequest>().ConfigureAwait(false);
@@ -108,8 +80,22 @@ public static class SyncApi
 
             try
             {
+                // Stop ongoing sync to avoid conflicts
+                syncManager.StopSync();
+
+                // Start fresh CTS for this manual operation
+                syncManager.StartSync();
+
+                // Sync the specific folder or all folders for the account
                 await syncManager.TriggerSyncAsync(body.AccountId, body.FolderPath).ConfigureAwait(false);
-                return Results.Ok(new { triggered = true, accountId = body.AccountId, folderPath = body.FolderPath });
+
+                // Periodic sync is already resumed by StartSync above
+                return Results.Ok(new
+                {
+                    triggered = true,
+                    accountId = body.AccountId,
+                    folderPath = body.FolderPath ?? "(all folders)"
+                });
             }
             catch (InvalidOperationException ex)
             {
@@ -117,6 +103,7 @@ public static class SyncApi
             }
             catch (Exception ex)
             {
+                syncManager.StartSync(); // ensure sync resumes on error
                 return Results.Json(new { error = ex.Message }, statusCode: 500);
             }
         });
