@@ -1,25 +1,31 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using UltimateImapMcp.Core;
 using UltimateImapMcp.Core.Configuration;
 using UltimateImapMcp.Core.Database;
+using UltimateImapMcp.Core.Email;
 using UltimateImapMcp.Core.Encryption;
 using UltimateImapMcp.Core.OAuth;
+using UltimateImapMcp.Core.Providers;
 using UltimateImapMcp.Core.Repositories;
+using UltimateImapMcp.Dashboard;
 using UltimateImapMcp.ImapClient;
 using UltimateImapMcp.ImapClient.Repositories;
 using UltimateImapMcp.Llm;
 using UltimateImapMcp.Llm.Repositories;
+using UltimateImapMcp.McpServer.Tools;
 using UltimateImapMcp.Queue;
 
 namespace UltimateImapMcp.McpServer;
 
 /// <summary>
 /// Background service that hosts the MCP server over HTTP+SSE transport
-/// on the configured http_port. Only activated when transport is "http" or "both".
+/// on the configured http_port. Always started to serve the tool API for
+/// multi-instance proxy. MCP HTTP transport is only added when configured.
 /// If the port is already in use, enters standby mode and takes over when it frees up.
 /// </summary>
 public sealed class HttpMcpTransportHost : BackgroundService
@@ -30,6 +36,7 @@ public sealed class HttpMcpTransportHost : BackgroundService
     private WebApplication? _webApp;
     private int _consecutiveFailures;
     private bool _hasStartedOnce;
+    private string? _proxyBaseUrl;
 
     public HttpMcpTransportHost(AppConfig config, IServiceProvider rootServices,
         ILogger<HttpMcpTransportHost> logger)
@@ -38,6 +45,9 @@ public sealed class HttpMcpTransportHost : BackgroundService
         _rootServices = rootServices;
         _logger = logger;
     }
+
+    /// <summary>Set the proxy URL for failover recovery.</summary>
+    public void SetProxyBaseUrl(string url) => _proxyBaseUrl = url;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -65,6 +75,10 @@ public sealed class HttpMcpTransportHost : BackgroundService
                 else
                     _logger.LogDebug(ex, "MCP HTTP transport retry #{Count} for port {Port}", _consecutiveFailures, port);
                 _webApp = null;
+
+                // Lost primary status — re-enable proxy
+                if (_proxyBaseUrl is not null)
+                    McpJsonDefaults.ToolProxy = new UltimateImapMcp.Core.Coordination.ProxyToolExecutor(_proxyBaseUrl);
 
                 // Wait for port to become available again before retrying
                 await PortUtils.WaitForPortWithBackoffAsync(port, _logger, "MCP HTTP", stoppingToken).ConfigureAwait(false);
@@ -101,18 +115,36 @@ public sealed class HttpMcpTransportHost : BackgroundService
         builder.Services.AddSingleton(_rootServices.GetRequiredService<LogsRepository>());
         builder.Services.AddSingleton(_rootServices.GetRequiredService<IOAuthAccessTokenProvider>());
 
-        // Register MCP server with HTTP transport
-        builder.Services.AddMcpServer(options =>
+        // Additional services needed for tool API execution
+        builder.Services.AddSingleton(_rootServices.GetRequiredService<IEmailBackendFactory>());
+        builder.Services.AddSingleton(_rootServices.GetRequiredService<ProviderProfileRegistry>());
+        builder.Services.AddSingleton(_rootServices.GetRequiredService<AccountsStore>());
+
+        // Register MCP server with HTTP transport only when configured
+        var addMcpTransport = _config.Server.Transport is "http" or "both";
+        if (addMcpTransport)
         {
-            options.ServerInfo = new() { Name = "ultimate-imap-mcp", Version = "0.1.0" };
-        })
-        .WithHttpTransport()
-        .WithToolsFromAssembly();
+            builder.Services.AddMcpServer(options =>
+            {
+                options.ServerInfo = new() { Name = "ultimate-imap-mcp", Version = "0.1.0" };
+            })
+            .WithHttpTransport()
+            .WithToolsFromAssembly();
+        }
 
         var app = builder.Build();
         _webApp = app;
 
-        app.MapMcp();
+        // Tool API endpoint — always available for multi-instance proxy
+        app.MapToolsApi();
+
+        // Health check endpoint
+        app.MapGet("/api/health", () => Results.Ok(new { status = "ok" }));
+
+        if (addMcpTransport)
+        {
+            app.MapMcp();
+        }
 
         if (!_hasStartedOnce)
         {
@@ -123,6 +155,9 @@ public sealed class HttpMcpTransportHost : BackgroundService
         {
             _logger.LogDebug("MCP HTTP transport reconnecting on http://0.0.0.0:{Port}", port);
         }
+
+        // We're now serving — clear proxy (we are primary)
+        McpJsonDefaults.ToolProxy = null;
 
         await app.RunAsync(stoppingToken).ConfigureAwait(false);
     }

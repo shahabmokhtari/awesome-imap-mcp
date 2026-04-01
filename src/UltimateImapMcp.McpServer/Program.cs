@@ -23,6 +23,7 @@ using UltimateImapMcp.Core.Email;
 using UltimateImapMcp.RestBackend;
 using UltimateImapMcp.RestBackend.Zoho;
 using UltimateImapMcp.McpServer;
+using UltimateImapMcp.McpServer.Tools;
 
 var builder = Host.CreateApplicationBuilder(args);
 builder.Logging.AddConsole(options =>
@@ -296,11 +297,10 @@ if (transport is "stdio" or "both")
     .WithToolsFromAssembly();
 }
 
-if (transport is "http" or "both")
-{
-    builder.Services.AddSingleton<UltimateImapMcp.McpServer.HttpMcpTransportHost>();
-    builder.Services.AddHostedService(sp => sp.GetRequiredService<UltimateImapMcp.McpServer.HttpMcpTransportHost>());
-}
+// Always register HTTP host — serves tool API for multi-instance proxy.
+// MCP HTTP transport is only added when configured (handled inside HttpMcpTransportHost).
+builder.Services.AddSingleton<UltimateImapMcp.McpServer.HttpMcpTransportHost>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<UltimateImapMcp.McpServer.HttpMcpTransportHost>());
 
 var host = builder.Build();
 
@@ -311,6 +311,26 @@ var host = builder.Build();
         .OfType<UltimateImapMcp.Dashboard.DashboardHost>().FirstOrDefault();
     if (coordinator is not null && dashboardHost is not null)
         coordinator.SetDashboardActiveProvider(() => dashboardHost.IsActivelyServing);
+}
+
+// Multi-instance mode detection
+{
+    var httpPort = config.Server.HttpPort;
+    var isSecondary = PortUtils.IsPortInUse(httpPort);
+
+    if (isSecondary)
+    {
+        var proxyUrl = $"http://localhost:{httpPort}";
+        Console.Error.WriteLine($"  [Multi-Instance] Port {httpPort} in use — running as secondary. Proxying tools to {proxyUrl}");
+        McpJsonDefaults.ToolProxy = new UltimateImapMcp.Core.Coordination.ProxyToolExecutor(proxyUrl);
+
+        var httpHost = host.Services.GetRequiredService<UltimateImapMcp.McpServer.HttpMcpTransportHost>();
+        httpHost.SetProxyBaseUrl(proxyUrl);
+    }
+    else
+    {
+        Console.Error.WriteLine($"  [Multi-Instance] Port {httpPort} available — running as primary");
+    }
 }
 
 // Wire sync events to the dashboard event bus (if dashboard is enabled)
