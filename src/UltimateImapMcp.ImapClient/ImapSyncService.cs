@@ -17,6 +17,8 @@ public sealed class ImapSyncService
     private readonly FolderRepository _folderRepo;
     private readonly MessageRepository _messageRepo;
     private readonly AttachmentRepository _attachmentRepo;
+    // Tracks accounts where BodyStructure fetch causes ImapProtocolException
+    private readonly HashSet<string> _skipBodyStructureAccounts = new();
 
     public ImapSyncService(
         FolderRepository folderRepo,
@@ -145,8 +147,18 @@ public sealed class ImapSyncService
             {
                 const int batchSize = 200;
                 var batch = missingUids.Take(batchSize).ToList();
-                await FetchAndStoreMessagesAsync(imapFolder, accountId, folder.Id, batch, ct)
-                    .ConfigureAwait(false);
+                try
+                {
+                    await FetchAndStoreMessagesAsync(imapFolder, accountId, folder.Id, batch, ct)
+                        .ConfigureAwait(false);
+                }
+                catch (MailKit.Net.Imap.ImapProtocolException) when (!_skipBodyStructureAccounts.Contains(accountId))
+                {
+                    // BodyStructure parsing failed — mark account and rethrow so connection
+                    // gets rebuilt. Next sync cycle will skip BodyStructure for this account.
+                    _skipBodyStructureAccounts.Add(accountId);
+                    throw;
+                }
             }
 
             // Soft-delete messages that were removed from the server
@@ -280,36 +292,21 @@ public sealed class ImapSyncService
         IMailFolder imapFolder, string accountId, int folderId,
         IList<UniqueId> uids, CancellationToken ct, bool synced = true)
     {
-        IList<IMessageSummary> summaries;
-        try
-        {
-            var fetchRequest = new FetchRequest(
-                MessageSummaryItems.UniqueId |
-                MessageSummaryItems.Envelope |
-                MessageSummaryItems.Flags |
-                MessageSummaryItems.Size |
-                MessageSummaryItems.BodyStructure,
-                new[] { "References" });
+        // Some servers (e.g., Zoho) return malformed BODYSTRUCTURE that kills the connection.
+        // Once detected for an account, skip BodyStructure on all subsequent fetches.
+        var useBodyStructure = !_skipBodyStructureAccounts.Contains(accountId);
 
-            summaries = await imapFolder
-                .FetchAsync(uids, fetchRequest, ct)
-                .ConfigureAwait(false);
-        }
-        catch (MailKit.Net.Imap.ImapProtocolException)
-        {
-            // Some servers (e.g., Zoho) return malformed BODYSTRUCTURE.
-            // Retry without BodyStructure — we lose attachment detection but sync works.
-            var fallbackRequest = new FetchRequest(
-                MessageSummaryItems.UniqueId |
-                MessageSummaryItems.Envelope |
-                MessageSummaryItems.Flags |
-                MessageSummaryItems.Size,
-                new[] { "References" });
+        var items = MessageSummaryItems.UniqueId |
+            MessageSummaryItems.Envelope |
+            MessageSummaryItems.Flags |
+            MessageSummaryItems.Size;
+        if (useBodyStructure) items |= MessageSummaryItems.BodyStructure;
 
-            summaries = await imapFolder
-                .FetchAsync(uids, fallbackRequest, ct)
-                .ConfigureAwait(false);
-        }
+        var fetchRequest = new FetchRequest(items, new[] { "References" });
+
+        IList<IMessageSummary> summaries = await imapFolder
+            .FetchAsync(uids, fetchRequest, ct)
+            .ConfigureAwait(false);
 
         var insertedIds = new List<int>();
 
