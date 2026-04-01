@@ -33,10 +33,7 @@ public class QueueWorkerTests : IDisposable
         _dbPath = Path.Combine(Path.GetTempPath(), $"test_{Guid.NewGuid()}.db");
         _db = new AppDatabase(_dbPath);
         MigrationRunner.Migrate(_db);
-        var conn = _db.GetWriteConnection();
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = "INSERT INTO accounts (id, name, imap_host, username, auth_type, credentials_enc) VALUES ('test', 'Test', 'imap.test.com', 'u@test.com', 'password', 'enc');";
-        cmd.ExecuteNonQuery();
+        // Accounts are now in accounts.json, not SQLite — no FK seed needed
         _repo = new QueueRepository(_db);
         _config = new QueueConfig();
     }

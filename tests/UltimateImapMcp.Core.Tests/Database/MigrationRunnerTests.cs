@@ -53,13 +53,14 @@ public class MigrationRunnerTests : IDisposable
     }
 
     [Fact]
-    public void Migrate_CreatesAccountsTable()
+    public void Migrate_AccountsTable_NotInSqlite()
     {
+        // Accounts are stored in accounts.json, not in SQLite
         var conn = _db.GetWriteConnection();
         using var cmd = conn.CreateCommand();
         cmd.CommandText = "SELECT name FROM sqlite_master WHERE type='table' AND name='accounts';";
         var result = cmd.ExecuteScalar();
-        Assert.Equal("accounts", result);
+        Assert.Null(result);
     }
 
     [Fact]

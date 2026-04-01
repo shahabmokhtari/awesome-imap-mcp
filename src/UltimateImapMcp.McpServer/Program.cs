@@ -76,11 +76,15 @@ if (args.Contains("--dashboard-auto-open"))
 }
 
 var dbPath = ConfigLoader.ResolveDbPath(config.Cache.DbPath);
+var dbDir = Path.GetDirectoryName(dbPath)!;
 var database = new AppDatabase(dbPath);
 MigrationRunner.Migrate(database);
 
-var healthDbPath = Path.Combine(Path.GetDirectoryName(dbPath)!, "health.db");
+var healthDbPath = Path.Combine(dbDir, "health.db");
 var healthDatabase = new HealthDatabase(healthDbPath);
+
+var metricsDb = new MetricsDatabase(Path.Combine(dbDir, "metrics.db"));
+var logsDb = new LogsDatabase(Path.Combine(dbDir, "logs.db"));
 builder.Services.AddSingleton(healthDatabase);
 
 builder.Services.AddSingleton<Func<int>>(sp =>
@@ -91,15 +95,19 @@ builder.Services.AddSingleton<Func<int>>(sp =>
 builder.Services.AddSingleton<IInstanceCoordinator, InstanceCoordinator>();
 builder.Services.AddHostedService(sp => (InstanceCoordinator)sp.GetRequiredService<IInstanceCoordinator>());
 
+// Create the shared accounts store (accounts.json, same directory as config.json)
+var accountsPath = AccountsStore.ResolveAccountsPath(config.SourcePath);
+var accountsStore = new AccountsStore(accountsPath);
+
 // Clean up orphaned OAuth tokens from previously deleted accounts
-new OAuthTokenRepository(database).CleanOrphans();
+new OAuthTokenRepository(accountsStore).CleanOrphans();
 
 var passphrase = Environment.GetEnvironmentVariable("UIMAP_PASSPHRASE");
 var encryptor = passphrase != null ? new CredentialEncryptor(passphrase) : CredentialEncryptor.FromMachineId();
 
-// --- Import config-file accounts into the DB (seed data) ---
+// --- Import config-file accounts into accounts.json (seed data) ---
 {
-    var accountRepo = new AccountRepository(database);
+    var accountRepo = new AccountRepository(accountsStore);
     var imported = 0;
     foreach (var acct in config.Accounts)
     {
@@ -141,14 +149,15 @@ var encryptor = passphrase != null ? new CredentialEncryptor(passphrase) : Crede
         }
 
         imported++;
-        Console.Error.WriteLine($"  Imported config account '{acct.Name}' into DB (id: {id})");
+        Console.Error.WriteLine($"  Imported config account '{acct.Name}' into accounts.json (id: {id})");
     }
     if (imported > 0)
-        Console.Error.WriteLine($"  Imported {imported} config account(s) into database.");
+        Console.Error.WriteLine($"  Imported {imported} config account(s) into accounts.json.");
 }
 
 builder.Services.AddSingleton(config);
 builder.Services.AddSingleton(database);
+builder.Services.AddSingleton(accountsStore);
 builder.Services.AddSingleton(encryptor);
 builder.Services.AddSingleton<ProviderProfileRegistry>();
 builder.Services.AddSingleton<AccountRepository>();
@@ -231,9 +240,11 @@ builder.Services.AddSingleton<IEmailAnalyzer>(sp =>
     };
 });
 
-// Observability
-builder.Services.AddSingleton<MetricsRepository>();
-var logsRepository = new LogsRepository(database);
+// Observability — separate databases for metrics and logs
+builder.Services.AddSingleton(metricsDb);
+builder.Services.AddSingleton(new MetricsRepository(metricsDb));
+var logsRepository = new LogsRepository(logsDb);
+builder.Services.AddSingleton(logsDb);
 builder.Services.AddSingleton(logsRepository);
 builder.Services.AddSingleton(config.Metrics);
 builder.Services.AddHostedService<MetricsCollector>();
@@ -353,7 +364,7 @@ static T GetProp<T>(object obj, string name)
 
 // Print startup banner to stderr (stdout is reserved for MCP stdio protocol)
 {
-    var bannerRepo = new AccountRepository(database);
+    var bannerRepo = new AccountRepository(accountsStore);
     var dbAccounts = bannerRepo.GetAll();
     PrintStartupBanner(config, configPath, dbAccounts);
 }

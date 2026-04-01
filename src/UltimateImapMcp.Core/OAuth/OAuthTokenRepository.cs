@@ -1,144 +1,117 @@
-using UltimateImapMcp.Core.Database;
+using UltimateImapMcp.Core.Configuration;
 
 namespace UltimateImapMcp.Core.OAuth;
 
 /// <summary>
-/// Persists OAuth token records in the oauth_tokens SQLite table.
-/// Follows the same raw ADO.NET pattern as AccountRepository.
+/// Persists OAuth token records in the accounts.json file.
+/// Shares the same <see cref="AccountsStore"/> as AccountRepository.
 /// </summary>
-public class OAuthTokenRepository(AppDatabase db)
+public class OAuthTokenRepository(AccountsStore store)
 {
     public void Upsert(string accountId, string provider, string clientId,
         string? clientSecretEnc, string refreshTokenEnc, string? accessTokenEnc,
         string? tokenExpiry, string? scopes, string? email,
         string? apiDomain = null)
     {
-        db.ExecuteWrite(conn =>
+        store.Write(data =>
         {
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                INSERT INTO oauth_tokens (account_id, provider, client_id, client_secret_enc,
-                    refresh_token_enc, access_token_enc, token_expiry, scopes, email, api_domain)
-                VALUES ($accountId, $provider, $clientId, $clientSecretEnc,
-                    $refreshTokenEnc, $accessTokenEnc, $tokenExpiry, $scopes, $email, $apiDomain)
-                ON CONFLICT(account_id) DO UPDATE SET
-                    provider = excluded.provider,
-                    client_id = excluded.client_id,
-                    client_secret_enc = excluded.client_secret_enc,
-                    refresh_token_enc = excluded.refresh_token_enc,
-                    access_token_enc = excluded.access_token_enc,
-                    token_expiry = excluded.token_expiry,
-                    scopes = excluded.scopes,
-                    email = excluded.email,
-                    api_domain = excluded.api_domain,
-                    updated_at = datetime('now');
-                """;
-            cmd.Parameters.AddWithValue("$accountId", accountId);
-            cmd.Parameters.AddWithValue("$provider", provider);
-            cmd.Parameters.AddWithValue("$clientId", clientId);
-            cmd.Parameters.AddWithValue("$clientSecretEnc", (object?)clientSecretEnc ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("$refreshTokenEnc", refreshTokenEnc);
-            cmd.Parameters.AddWithValue("$accessTokenEnc", (object?)accessTokenEnc ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("$tokenExpiry", (object?)tokenExpiry ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("$scopes", (object?)scopes ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("$email", (object?)email ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("$apiDomain", (object?)apiDomain ?? DBNull.Value);
-            cmd.ExecuteNonQuery();
+            var existing = data.OAuthTokens.Find(t => t.AccountId == accountId);
+            var now = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss");
+
+            if (existing is not null)
+            {
+                existing.Provider = provider;
+                existing.ClientId = clientId;
+                existing.ClientSecretEnc = clientSecretEnc;
+                existing.RefreshTokenEnc = refreshTokenEnc;
+                existing.AccessTokenEnc = accessTokenEnc;
+                existing.TokenExpiry = tokenExpiry;
+                existing.Scopes = scopes;
+                existing.Email = email;
+                existing.ApiDomain = apiDomain;
+                existing.UpdatedAt = now;
+            }
+            else
+            {
+                data.OAuthTokens.Add(new OAuthTokenEntry
+                {
+                    AccountId = accountId,
+                    Provider = provider,
+                    ClientId = clientId,
+                    ClientSecretEnc = clientSecretEnc,
+                    RefreshTokenEnc = refreshTokenEnc,
+                    AccessTokenEnc = accessTokenEnc,
+                    TokenExpiry = tokenExpiry,
+                    Scopes = scopes,
+                    Email = email,
+                    ApiDomain = apiDomain,
+                    CreatedAt = now,
+                    UpdatedAt = now,
+                });
+            }
         });
     }
 
     public OAuthTokenRecord? GetByAccountId(string accountId)
     {
-        using var conn = db.GetReadConnection();
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT * FROM oauth_tokens WHERE account_id = $accountId;";
-        cmd.Parameters.AddWithValue("$accountId", accountId);
-        using var reader = cmd.ExecuteReader();
-        return reader.Read() ? ReadRecord(reader) : null;
+        var data = store.Read();
+        var entry = data.OAuthTokens.Find(t => t.AccountId == accountId);
+        return entry is null ? null : ToRecord(entry);
     }
 
     public List<OAuthTokenRecord> GetAll()
     {
-        using var conn = db.GetReadConnection();
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT * FROM oauth_tokens;";
-        using var reader = cmd.ExecuteReader();
-        var list = new List<OAuthTokenRecord>();
-        while (reader.Read())
-            list.Add(ReadRecord(reader));
-        return list;
+        var data = store.Read();
+        return data.OAuthTokens.Select(ToRecord).ToList();
     }
 
     public void UpdateAccessToken(string accountId, string? accessTokenEnc, string? tokenExpiry,
         string? apiDomain = null)
     {
-        db.ExecuteWrite(conn =>
+        store.Write(data =>
         {
-            using var cmd = conn.CreateCommand();
+            var entry = data.OAuthTokens.Find(t => t.AccountId == accountId);
+            if (entry is null) return;
+
+            entry.AccessTokenEnc = accessTokenEnc;
+            entry.TokenExpiry = tokenExpiry;
             if (apiDomain is not null)
-            {
-                cmd.CommandText = """
-                    UPDATE oauth_tokens
-                    SET access_token_enc = $accessTokenEnc,
-                        token_expiry = $tokenExpiry,
-                        api_domain = $apiDomain,
-                        updated_at = datetime('now')
-                    WHERE account_id = $accountId;
-                    """;
-                cmd.Parameters.AddWithValue("$apiDomain", apiDomain);
-            }
-            else
-            {
-                cmd.CommandText = """
-                    UPDATE oauth_tokens
-                    SET access_token_enc = $accessTokenEnc,
-                        token_expiry = $tokenExpiry,
-                        updated_at = datetime('now')
-                    WHERE account_id = $accountId;
-                    """;
-            }
-            cmd.Parameters.AddWithValue("$accountId", accountId);
-            cmd.Parameters.AddWithValue("$accessTokenEnc", (object?)accessTokenEnc ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("$tokenExpiry", (object?)tokenExpiry ?? DBNull.Value);
-            cmd.ExecuteNonQuery();
+                entry.ApiDomain = apiDomain;
+            entry.UpdatedAt = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss");
         });
     }
 
     public void Delete(string accountId)
     {
-        db.ExecuteWrite(conn =>
+        store.Write(data =>
         {
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = "DELETE FROM oauth_tokens WHERE account_id = $accountId;";
-            cmd.Parameters.AddWithValue("$accountId", accountId);
-            cmd.ExecuteNonQuery();
+            data.OAuthTokens.RemoveAll(t => t.AccountId == accountId);
         });
     }
 
-    /// <summary>Removes oauth_tokens rows that have no matching account.</summary>
+    /// <summary>Removes oauth_tokens entries that have no matching account.</summary>
     public void CleanOrphans()
     {
-        db.ExecuteWrite(conn =>
+        store.Write(data =>
         {
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = "DELETE FROM oauth_tokens WHERE account_id NOT IN (SELECT id FROM accounts);";
-            cmd.ExecuteNonQuery();
+            var accountIds = new HashSet<string>(data.Accounts.Select(a => a.Id));
+            data.OAuthTokens.RemoveAll(t => !accountIds.Contains(t.AccountId));
         });
     }
 
-    private static OAuthTokenRecord ReadRecord(Microsoft.Data.Sqlite.SqliteDataReader r) => new(
-        AccountId: r.GetString(r.GetOrdinal("account_id")),
-        Provider: r.GetString(r.GetOrdinal("provider")),
-        ClientId: r.GetString(r.GetOrdinal("client_id")),
-        ClientSecretEnc: r.IsDBNull(r.GetOrdinal("client_secret_enc")) ? null : r.GetString(r.GetOrdinal("client_secret_enc")),
-        RefreshTokenEnc: r.GetString(r.GetOrdinal("refresh_token_enc")),
-        AccessTokenEnc: r.IsDBNull(r.GetOrdinal("access_token_enc")) ? null : r.GetString(r.GetOrdinal("access_token_enc")),
-        TokenExpiry: r.IsDBNull(r.GetOrdinal("token_expiry")) ? null : r.GetString(r.GetOrdinal("token_expiry")),
-        Scopes: r.IsDBNull(r.GetOrdinal("scopes")) ? null : r.GetString(r.GetOrdinal("scopes")),
-        Email: r.IsDBNull(r.GetOrdinal("email")) ? null : r.GetString(r.GetOrdinal("email")),
-        CreatedAt: r.GetString(r.GetOrdinal("created_at")),
-        UpdatedAt: r.GetString(r.GetOrdinal("updated_at")),
-        ApiDomain: r.IsDBNull(r.GetOrdinal("api_domain")) ? null : r.GetString(r.GetOrdinal("api_domain"))
+    private static OAuthTokenRecord ToRecord(OAuthTokenEntry e) => new(
+        AccountId: e.AccountId,
+        Provider: e.Provider,
+        ClientId: e.ClientId,
+        ClientSecretEnc: e.ClientSecretEnc,
+        RefreshTokenEnc: e.RefreshTokenEnc,
+        AccessTokenEnc: e.AccessTokenEnc,
+        TokenExpiry: e.TokenExpiry,
+        Scopes: e.Scopes,
+        Email: e.Email,
+        CreatedAt: e.CreatedAt,
+        UpdatedAt: e.UpdatedAt,
+        ApiDomain: e.ApiDomain
     );
 }
 

@@ -8,7 +8,7 @@ public record MetricRecord(int Id, string Name, double Value, string? Tags, stri
 /// <summary>
 /// Reads and writes the metrics table for internal observability data.
 /// </summary>
-public class MetricsRepository(AppDatabase db)
+public class MetricsRepository(MetricsDatabase db)
 {
     /// <summary>
     /// Records a single metric data point.
