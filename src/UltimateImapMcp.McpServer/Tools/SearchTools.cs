@@ -3,13 +3,14 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
 using UltimateImapMcp.Core.Configuration;
+using UltimateImapMcp.Core.Email;
 using UltimateImapMcp.ImapClient;
 using UltimateImapMcp.ImapClient.Repositories;
 
 namespace UltimateImapMcp.McpServer.Tools;
 
 [McpServerToolType]
-public class SearchTools(MessageRepository messageRepo, FolderRepository folderRepo, SyncManager syncManager, AppConfig config, ILogger<SearchTools> logger)
+public class SearchTools(MessageRepository messageRepo, FolderRepository folderRepo, SyncManager syncManager, IEmailBackendFactory backendFactory, AppConfig config, ILogger<SearchTools> logger)
 {
     [McpServerTool, Description(
         "Search emails with flexible filters. Searches local cache by default. " +
@@ -29,7 +30,8 @@ public class SearchTools(MessageRepository messageRepo, FolderRepository folderR
         [Description("Offset for pagination (default: 0)")] int offset = 0,
         [Description("Summary only (default: true)")] bool summaryOnly = true,
         [Description("Search on IMAP server instead of local cache (default: false)")] bool serverSearch = false,
-        [Description("Max body length when summary_only=false (0=unlimited)")] int maxBodyLength = 0)
+        [Description("Max body length when summary_only=false (0=unlimited)")] int maxBodyLength = 0,
+        [Description("Auto-fetch bodies for results before returning (default: false)")] bool fetchBodies = false)
     {
         return await McpJsonDefaults.LogToolCallAsync(logger, "search_emails",
             new Dictionary<string, object?> { ["query"] = query, ["accountId"] = accountId, ["folder"] = folder, ["serverSearch"] = serverSearch },
@@ -91,6 +93,47 @@ public class SearchTools(MessageRepository messageRepo, FolderRepository folderR
 
                     var mapped = results.Select(m => FormatMessage(m, summaryOnly, maxBodyLength)).ToList();
 
+                    var bodiesFetched = 0;
+                    if (fetchBodies && results.Count > 0)
+                    {
+                        var groups = results
+                            .Where(m => !m.BodyFetched)
+                            .GroupBy(m => (m.AccountId, m.FolderId));
+
+                        foreach (var group in groups)
+                        {
+                            try
+                            {
+                                var folderRecord = folderRepo.GetByAccount(group.Key.AccountId)
+                                    .FirstOrDefault(f => f.Id == group.Key.FolderId);
+                                if (folderRecord is null) continue;
+
+                                var groupUids = group.Select(m => (long)m.Uid).ToList();
+                                await using var backend = backendFactory.CreateSyncBackend(group.Key.AccountId);
+                                bodiesFetched += await backend.FetchMessageBodiesBatchAsync(
+                                    group.Key.AccountId, folderRecord.Path, groupUids).ConfigureAwait(false);
+                            }
+                            catch (Exception ex) when (ex is not OperationCanceledException)
+                            {
+                                logger.LogWarning(ex, "Failed to batch-fetch bodies for search results");
+                            }
+                        }
+
+                        if (bodiesFetched > 0)
+                        {
+                            results = results.Select(m =>
+                            {
+                                if (!m.BodyFetched)
+                                {
+                                    var refreshed = messageRepo.GetById(m.Id);
+                                    return refreshed ?? m;
+                                }
+                                return m;
+                            }).ToList();
+                            mapped = results.Select(m => FormatMessage(m, summaryOnly, maxBodyLength)).ToList();
+                        }
+                    }
+
                     // Build cache info for local cache searches
                     object? cacheInfo = null;
                     if (serverSearch)
@@ -126,6 +169,7 @@ public class SearchTools(MessageRepository messageRepo, FolderRepository folderR
                     {
                         count = mapped.Count,
                         source = serverSearch ? "server" : "cache",
+                        bodies_fetched = fetchBodies ? bodiesFetched : (int?)null,
                         results = mapped,
                         cache_info = cacheInfo,
                     }, McpJsonDefaults.Options);
