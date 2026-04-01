@@ -55,27 +55,30 @@ public static class MessagesApi
                 offset = Math.Max(0, parsedOffset);
 
             var messages = messageRepo.GetByFolder(accountId, folderId, limit, offset);
+            var totalCount = messageRepo.CountByFolder(accountId, folderId);
 
             // Look up the folder path for context
             var folders = folderRepo.GetByAccount(accountId);
             var folderPath = folders.FirstOrDefault(f => f.Id == folderId)?.Path ?? "";
 
-            var result = messages.Select(m => new
+            return Results.Ok(new
             {
-                id = m.Id,
-                uid = m.Uid,
-                subject = m.Subject ?? "(no subject)",
-                fromAddress = m.FromAddress ?? "",
-                fromEmail = m.FromEmail ?? "",
-                dateEpoch = m.DateEpoch,
-                date = m.Date,
-                flags = m.Flags ?? "",
-                snippet = m.Snippet ?? "",
-                hasAttachments = m.HasAttachments,
-                folderPath,
+                totalCount,
+                messages = messages.Select(m => new
+                {
+                    id = m.Id,
+                    uid = m.Uid,
+                    subject = m.Subject ?? "(no subject)",
+                    fromAddress = m.FromAddress ?? "",
+                    fromEmail = m.FromEmail ?? "",
+                    dateEpoch = m.DateEpoch,
+                    date = m.Date,
+                    flags = m.Flags ?? "",
+                    snippet = m.Snippet ?? "",
+                    hasAttachments = m.HasAttachments,
+                    folderPath,
+                }).ToList()
             });
-
-            return Results.Ok(result);
         });
 
         // GET /api/messages/{accountId}/{folderId}/{uid} — Get a single message with full body

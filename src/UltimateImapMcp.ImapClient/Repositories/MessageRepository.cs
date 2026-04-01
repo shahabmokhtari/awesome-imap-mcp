@@ -427,6 +427,21 @@ public class MessageRepository(AppDatabase db)
         return list;
     }
 
+    /// <summary>Count total non-deleted messages in a folder (for pagination).</summary>
+    public int CountByFolder(string accountId, int folderId)
+    {
+        using var conn = db.GetReadConnection();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT COUNT(*) FROM messages m
+            JOIN message_folders mf ON mf.message_id = m.id
+            WHERE mf.folder_id = $f AND m.account_id = $a AND m.deleted_at IS NULL;
+            """;
+        cmd.Parameters.AddWithValue("$a", accountId);
+        cmd.Parameters.AddWithValue("$f", folderId);
+        return Convert.ToInt32(cmd.ExecuteScalar());
+    }
+
     /// <summary>
     /// Null out body_text and body_html on the oldest messages (by cached_at)
     /// that have bodies fetched. Returns the number of rows affected.

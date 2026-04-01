@@ -385,7 +385,9 @@ export default function Messages() {
     return inbox?.id ?? folders[0].id
   }, [selectedFolderId, folders])
 
-  const { data: messages, isLoading: messagesLoading } = useMessages(accountId, effectiveFolderId, pageSize, page * pageSize)
+  const { data: messagesData, isLoading: messagesLoading } = useMessages(accountId, effectiveFolderId, pageSize, page * pageSize)
+  const messages = messagesData?.messages
+  const totalCount = messagesData?.totalCount ?? 0
 
   const clearFolderCache = useClearFolderCache()
   const isSearching = searchQuery.length > 0
@@ -518,7 +520,7 @@ export default function Messages() {
             <>
               <div className="px-4 py-2 text-xs text-gray-500 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
                 <span>
-                  {messages.length} message{messages.length !== 1 ? 's' : ''}
+                  {totalCount.toLocaleString()} message{totalCount !== 1 ? 's' : ''}
                   {folders && (
                     <> in {folders.find(f => f.id === effectiveFolderId)?.displayName ?? 'folder'}</>
                   )}
@@ -559,12 +561,11 @@ export default function Messages() {
                   &larr; Previous
                 </button>
                 <span className="text-xs text-gray-500">
-                  Page {page + 1}
-                  {messages && messages.length === pageSize && ' \u2014 more available'}
+                  Page {page + 1} of {Math.max(1, Math.ceil(totalCount / pageSize))}
                 </span>
                 <button
                   onClick={() => setPage(p => p + 1)}
-                  disabled={!messages || messages.length < pageSize}
+                  disabled={(page + 1) * pageSize >= totalCount}
                   className="px-3 py-1 text-xs text-gray-600 bg-white border border-gray-200 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Next &rarr;

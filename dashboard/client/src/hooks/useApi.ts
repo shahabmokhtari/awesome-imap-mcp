@@ -446,6 +446,11 @@ export function useFolders(accountId: string | undefined) {
   })
 }
 
+export interface MessagesResponse {
+  totalCount: number
+  messages: MessageSummary[]
+}
+
 export function useMessages(accountId: string | undefined, folderId?: number, limit?: number, offset?: number) {
   const qs = new URLSearchParams()
   if (accountId) qs.set('account_id', accountId)
@@ -454,7 +459,7 @@ export function useMessages(accountId: string | undefined, folderId?: number, li
   if (offset != null && offset > 0) qs.set('offset', String(offset))
   return useQuery({
     queryKey: ['messages', accountId, folderId, limit, offset],
-    queryFn: () => apiFetch<MessageSummary[]>(`/api/messages?${qs}`),
+    queryFn: () => apiFetch<MessagesResponse>(`/api/messages?${qs}`),
     enabled: !!accountId && folderId != null,
   })
 }
