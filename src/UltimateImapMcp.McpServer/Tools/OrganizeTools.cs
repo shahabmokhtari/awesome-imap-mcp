@@ -177,6 +177,17 @@ public class OrganizeTools(QueueManager queueManager, AppConfig config, ILogger<
             {
                 try
                 {
+                    if (string.IsNullOrWhiteSpace(label))
+                        return McpJsonDefaults.Error("Label name cannot be empty.");
+                    // IMAP keywords must be valid atoms — no spaces, parens, braces, %, *, ", \, ], or control chars
+                    foreach (var c in label)
+                    {
+                        if (c <= ' ' || c >= 0x7F || c is '(' or ')' or '{' or '%' or '*' or '"' or '\\' or ']')
+                            return McpJsonDefaults.Error(
+                                $"Label '{label}' contains invalid character '{c}'. " +
+                                "IMAP keywords must not contain spaces, parentheses, braces, %, *, quotes, backslash, or control characters.");
+                    }
+
                     var uidList = ParseUids(uids);
                     var operationType = action.Equals("remove", StringComparison.OrdinalIgnoreCase)
                         ? OperationType.Unlabel

@@ -34,12 +34,27 @@ public class LabelExecutor(AccountRepository accountRepo, CredentialEncryptor en
         {
             var folder = await client.GetFolderAsync(folderPath, ct);
             await folder.OpenAsync(FolderAccess.ReadWrite, ct);
-            var keywords = new HashSet<string> { label };
-            if (add)
-                await folder.AddFlagsAsync(uids, MessageFlags.None, keywords, true, ct);
-            else
-                await folder.RemoveFlagsAsync(uids, MessageFlags.None, keywords, true, ct);
-            await folder.CloseAsync(false, ct);
+            try
+            {
+                // Check if server supports custom keywords (\* in PERMANENTFLAGS)
+                if (!folder.PermanentFlags.HasFlag(MessageFlags.UserDefined))
+                    throw new NotSupportedException(
+                        $"IMAP server for account '{operation.AccountId}' does not support custom keywords/labels. " +
+                        "Labels require the server to advertise \\* in PERMANENTFLAGS.");
+
+                var keywords = new HashSet<string> { label };
+                if (add)
+                    await folder.AddFlagsAsync(uids, MessageFlags.None, keywords, true, ct);
+                else
+                    await folder.RemoveFlagsAsync(uids, MessageFlags.None, keywords, true, ct);
+            }
+            finally
+            {
+                try { await folder.CloseAsync(false, ct); }
+                catch (Exception ex) when (ex is MailKit.ServiceNotConnectedException
+                    or MailKit.ServiceNotAuthenticatedException
+                    or IOException or OperationCanceledException) { }
+            }
         }, ct);
 
         // Best-effort cache update: reflect the keyword change in the local DB
