@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useQueue, useCancelOperation, useConfirmOperation } from '../hooks/useApi'
+import { useState, useMemo } from 'react'
+import { useQueue, useCancelOperation, useConfirmOperation, useAccounts } from '../hooks/useApi'
 
 const statusFilters = [
   { label: 'All', value: undefined },
@@ -14,9 +14,20 @@ const statusFilters = [
 export default function Queue() {
   const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined)
   const { data: operations, isLoading, error } = useQueue(statusFilter)
+  const { data: accounts } = useAccounts()
   const cancelOp = useCancelOperation()
   const confirmOp = useConfirmOperation()
   const [expandedId, setExpandedId] = useState<string | null>(null)
+
+  const accountNameMap = useMemo(() => {
+    const map: Record<string, string> = {}
+    if (accounts) {
+      for (const a of accounts) {
+        map[a.id as string] = a.name as string
+      }
+    }
+    return map
+  }, [accounts])
 
   const handleCancel = (id: string) => {
     cancelOp.mutate(id)
@@ -73,6 +84,7 @@ export default function Queue() {
             <thead className="bg-gray-50 border-b">
               <tr>
                 <th className="text-left px-4 py-3 font-medium text-gray-500">ID</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-500">Account</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-500">Operation</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-500">Status</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-500">Retries</th>
@@ -94,6 +106,16 @@ export default function Queue() {
                       >
                         {id.slice(0, 8)}...
                       </button>
+                    </td>
+                    <td className="px-4 py-3 text-xs">
+                      {accountNameMap[op.accountId as string] ? (
+                        <div>
+                          <span className="text-gray-900">{accountNameMap[op.accountId as string]}</span>
+                          <span className="block font-mono text-gray-400">{op.accountId as string}</span>
+                        </div>
+                      ) : (
+                        <span className="font-mono text-gray-600">{op.accountId as string}</span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-gray-900">{op.operation as string}</td>
                     <td className="px-4 py-3">
@@ -121,7 +143,7 @@ export default function Queue() {
                         {isExpanded && (
                           <div className="mt-2 p-2 bg-gray-50 rounded text-xs space-y-1 max-w-lg">
                             <p><span className="font-medium text-gray-500">Full ID:</span> <span className="font-mono">{id}</span></p>
-                            <p><span className="font-medium text-gray-500">Account:</span> <span className="font-mono">{op.accountId as string}</span></p>
+                            <p><span className="font-medium text-gray-500">Account:</span> {accountNameMap[op.accountId as string] ? <><span>{accountNameMap[op.accountId as string]}</span> <span className="font-mono text-gray-400">({op.accountId as string})</span></> : <span className="font-mono">{op.accountId as string}</span>}</p>
                             <p><span className="font-medium text-gray-500">Priority:</span> P{String(op.priority)}</p>
                             {(op.errorMessage as string | null) && (
                               <p><span className="font-medium text-gray-500">Error:</span> <span className="text-red-600">{op.errorMessage as string}</span></p>
