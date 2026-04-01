@@ -10,6 +10,7 @@ import {
   type MessageSummary,
   type FolderInfo,
 } from '../hooks/useApi'
+import { sanitizeEmailHtml } from '../lib/sanitizeEmail'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -198,6 +199,12 @@ function MessageView({
   const { data: msg, isLoading, error } = useMessage(accountId, folderId, uid)
   const fetchBody = useFetchBody()
   const [showHtml, setShowHtml] = useState(false)
+  const [allowRemoteImages, setAllowRemoteImages] = useState(false)
+
+  useEffect(() => {
+    setAllowRemoteImages(false)
+    setShowHtml(false)
+  }, [uid])
 
   if (isLoading) {
     return (
@@ -309,12 +316,25 @@ function MessageView({
             )}
           </div>
         ) : hasHtml && (showHtml || !hasText) ? (
-          <iframe
-            srcDoc={msg.bodyHtml!}
-            title="Email body"
-            className="w-full h-full border-0 min-h-[400px] rounded bg-white"
-            sandbox=""
-          />
+          <div className="h-full flex flex-col">
+            {!allowRemoteImages && (
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 border-b border-amber-200 text-xs text-amber-700 flex-shrink-0">
+                <span>Remote images are blocked.</span>
+                <button
+                  onClick={() => setAllowRemoteImages(true)}
+                  className="underline hover:text-amber-900"
+                >
+                  Load remote images
+                </button>
+              </div>
+            )}
+            <iframe
+              srcDoc={sanitizeEmailHtml(msg.bodyHtml!, allowRemoteImages)}
+              title="Email body"
+              className="w-full flex-1 border-0 min-h-[400px] rounded bg-white"
+              sandbox=""
+            />
+          </div>
         ) : hasText ? (
           <pre className="text-sm text-gray-800 whitespace-pre-wrap break-words font-sans leading-relaxed">
             {msg.bodyText}
