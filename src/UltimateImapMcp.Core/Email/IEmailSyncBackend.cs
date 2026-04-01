@@ -19,6 +19,16 @@ public interface IEmailSyncBackend : IAsyncDisposable
     /// <summary>Fetch the full message body and store it in the local cache.</summary>
     Task FetchMessageBodyAsync(string accountId, string folderPath, long uid, CancellationToken ct = default);
 
+    /// <summary>
+    /// Fetches message bodies in batch for the given UIDs in one IMAP session.
+    /// Returns the count of bodies successfully fetched.
+    /// </summary>
+    Task<int> FetchMessageBodiesBatchAsync(string accountId, string folderPath,
+        IReadOnlyList<long> uids, CancellationToken ct = default)
+    {
+        throw new NotSupportedException($"Batch body fetch is not supported by the {BackendType} backend.");
+    }
+
     /// <summary>Whether this backend supports real-time push notifications (e.g., IMAP IDLE).</summary>
     bool SupportsRealtimeSync { get; }
 

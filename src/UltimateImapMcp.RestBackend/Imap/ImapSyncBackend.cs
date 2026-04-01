@@ -119,6 +119,68 @@ internal sealed class ImapSyncBackend : IEmailSyncBackend
         }, ct).ConfigureAwait(false);
     }
 
+    public async Task<int> FetchMessageBodiesBatchAsync(string accountId, string folderPath,
+        IReadOnlyList<long> uids, CancellationToken ct = default)
+    {
+        var folder = _folderRepo.GetByPath(accountId, folderPath);
+        if (folder is null) return 0;
+
+        // Filter to UIDs that haven't been fetched yet
+        var toFetch = new List<long>();
+        foreach (var uid in uids)
+        {
+            var existing = _messageRepo.GetByUid(accountId, folder.Id, uid);
+            if (existing is not null && !existing.BodyFetched)
+                toFetch.Add(uid);
+        }
+
+        if (toFetch.Count == 0) return 0;
+
+        var fetched = 0;
+
+        await _connMgr.ExecuteAsync(async client =>
+        {
+            var imapFolder = await client.GetFolderAsync(folderPath, ct).ConfigureAwait(false);
+            await imapFolder.OpenAsync(FolderAccess.ReadOnly, ct).ConfigureAwait(false);
+
+            try
+            {
+                foreach (var uid in toFetch)
+                {
+                    ct.ThrowIfCancellationRequested();
+                    try
+                    {
+                        var uidObj = new UniqueId((uint)uid);
+                        var message = await imapFolder.GetMessageAsync(uidObj, ct).ConfigureAwait(false);
+                        if (message is not null)
+                        {
+                            var dbMessage = _messageRepo.GetByUid(accountId, folder.Id, uid);
+                            if (dbMessage is not null)
+                            {
+                                _messageRepo.UpdateBody(dbMessage.Id, message.TextBody, message.HtmlBody);
+                                fetched++;
+                            }
+                        }
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        _logger.LogWarning(ex, "Failed to fetch body for UID {Uid} in {AccountId}/{FolderPath}",
+                            uid, accountId, folderPath);
+                    }
+                }
+            }
+            finally
+            {
+                try { await imapFolder.CloseAsync(false, ct).ConfigureAwait(false); }
+                catch (Exception ex) when (ex is MailKit.ServiceNotConnectedException
+                    or MailKit.ServiceNotAuthenticatedException
+                    or IOException or OperationCanceledException) { }
+            }
+        }, ct).ConfigureAwait(false);
+
+        return fetched;
+    }
+
     public async Task<long> DownloadAttachmentAsync(string accountId, string folderPath, long uid,
         string? targetFilename, string? contentId, string savePath, CancellationToken ct = default)
     {
