@@ -29,7 +29,7 @@ public sealed class AppDatabase : IDisposable
         {
             DataSource = dbPath,
             Mode = SqliteOpenMode.ReadWriteCreate,
-            ForeignKeys = true
+            ForeignKeys = false
         };
         _writeConnection = new SqliteConnection(writeBuilder.ToString());
         _writeConnection.Open();
@@ -106,7 +106,7 @@ public sealed class AppDatabase : IDisposable
         {
             DataSource = _dbPath,
             Mode = SqliteOpenMode.ReadOnly,
-            ForeignKeys = true
+            ForeignKeys = false
         };
         var conn = new SqliteConnection(readBuilder.ToString());
         conn.Open();

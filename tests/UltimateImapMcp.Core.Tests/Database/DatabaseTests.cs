@@ -33,14 +33,15 @@ public class DatabaseTests : IDisposable
     }
 
     [Fact]
-    public void Constructor_CreatesDatabase_WithForeignKeys()
+    public void Constructor_CreatesDatabase_WithoutForeignKeys()
     {
+        // Cache DB has ForeignKeys disabled since accounts table moved to config file
         using var db = new AppDatabase(_dbPath);
         var conn = db.GetWriteConnection();
         using var cmd = conn.CreateCommand();
         cmd.CommandText = "PRAGMA foreign_keys;";
         var result = cmd.ExecuteScalar();
-        Assert.Equal(1L, result);
+        Assert.Equal(0L, result);
     }
 
     [Fact]
