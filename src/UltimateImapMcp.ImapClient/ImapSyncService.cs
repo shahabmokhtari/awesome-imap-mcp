@@ -280,17 +280,36 @@ public sealed class ImapSyncService
         IMailFolder imapFolder, string accountId, int folderId,
         IList<UniqueId> uids, CancellationToken ct, bool synced = true)
     {
-        var fetchRequest = new FetchRequest(
-            MessageSummaryItems.UniqueId |
-            MessageSummaryItems.Envelope |
-            MessageSummaryItems.Flags |
-            MessageSummaryItems.Size |
-            MessageSummaryItems.BodyStructure,
-            new[] { "References" });
+        IList<IMessageSummary> summaries;
+        try
+        {
+            var fetchRequest = new FetchRequest(
+                MessageSummaryItems.UniqueId |
+                MessageSummaryItems.Envelope |
+                MessageSummaryItems.Flags |
+                MessageSummaryItems.Size |
+                MessageSummaryItems.BodyStructure,
+                new[] { "References" });
 
-        IList<IMessageSummary> summaries = await imapFolder
-            .FetchAsync(uids, fetchRequest, ct)
-            .ConfigureAwait(false);
+            summaries = await imapFolder
+                .FetchAsync(uids, fetchRequest, ct)
+                .ConfigureAwait(false);
+        }
+        catch (MailKit.Net.Imap.ImapProtocolException)
+        {
+            // Some servers (e.g., Zoho) return malformed BODYSTRUCTURE.
+            // Retry without BodyStructure — we lose attachment detection but sync works.
+            var fallbackRequest = new FetchRequest(
+                MessageSummaryItems.UniqueId |
+                MessageSummaryItems.Envelope |
+                MessageSummaryItems.Flags |
+                MessageSummaryItems.Size,
+                new[] { "References" });
+
+            summaries = await imapFolder
+                .FetchAsync(uids, fallbackRequest, ct)
+                .ConfigureAwait(false);
+        }
 
         var insertedIds = new List<int>();
 
