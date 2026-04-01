@@ -87,7 +87,9 @@
 - This applies to the iframe srcDoc rendering in Messages.tsx
 
 ### Implementation
-- Use a sanitizer on the HTML before passing to srcDoc
+- Default view: show plain text version of the email (even for HTML-only emails, use the extracted text version from HtmlTextExtractor — same as what MCP tools see)
+- Toggle button to switch to HTML view (sanitized)
+- HTML view: use a sanitizer on the HTML before passing to srcDoc
 - Block all external resource loading (images, stylesheets, fonts, iframes)
 - Strip all script tags and inline JS event handlers
 - Optionally allow user to click "Load remote images" for a specific email
