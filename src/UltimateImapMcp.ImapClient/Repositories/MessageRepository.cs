@@ -835,8 +835,8 @@ public class MessageRepository(AppDatabase db)
             SELECT account_id,
                    COUNT(*) as msg_count,
                    COALESCE(SUM(CASE WHEN body_fetched = 1 THEN 1 ELSE 0 END), 0) as bodies,
-                   MIN(cached_at) as oldest,
-                   MAX(cached_at) as newest
+                   MIN(date) as oldest,
+                   MAX(date) as newest
             FROM messages
             WHERE deleted_at IS NULL
             GROUP BY account_id;
