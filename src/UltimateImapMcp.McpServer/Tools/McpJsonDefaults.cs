@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using UltimateImapMcp.Core.Configuration;
+using UltimateImapMcp.Core.Coordination;
 
 namespace UltimateImapMcp.McpServer.Tools;
 
@@ -12,6 +13,12 @@ internal static class McpJsonDefaults
 {
     internal static readonly JsonSerializerOptions Options = new() { WriteIndented = true };
 
+    /// <summary>
+    /// When set, all tool calls are proxied to a remote primary instance.
+    /// Set by Program.cs when running in secondary mode.
+    /// </summary>
+    internal static volatile IToolProxy? ToolProxy = null;
+
     /// <summary>Serializes an error response in the standard { error: "message" } format.</summary>
     internal static string Error(string message) =>
         JsonSerializer.Serialize(new { error = message }, Options);
@@ -19,6 +26,13 @@ internal static class McpJsonDefaults
     internal static string LogToolCall(ILogger logger, string toolName,
         Dictionary<string, object?> parameters, Func<string> execute, AppConfig config)
     {
+        var proxy = ToolProxy;
+        if (proxy is not null)
+        {
+            logger.LogDebug("Proxying tool {Tool} to primary instance", toolName);
+            return proxy.Execute(toolName, parameters);
+        }
+
         if (!config.Server.LogToolCalls)
             return execute();
 
@@ -51,6 +65,13 @@ internal static class McpJsonDefaults
     internal static async Task<string> LogToolCallAsync(ILogger logger, string toolName,
         Dictionary<string, object?> parameters, Func<Task<string>> execute, AppConfig config)
     {
+        var proxy = ToolProxy;
+        if (proxy is not null)
+        {
+            logger.LogDebug("Proxying tool {Tool} to primary instance", toolName);
+            return await proxy.ExecuteAsync(toolName, parameters).ConfigureAwait(false);
+        }
+
         if (!config.Server.LogToolCalls)
             return await execute().ConfigureAwait(false);
 
