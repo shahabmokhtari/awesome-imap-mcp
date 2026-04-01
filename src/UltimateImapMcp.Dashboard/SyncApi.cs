@@ -83,6 +83,23 @@ public static class SyncApi
             }));
         });
 
+        app.MapPost("/api/sync/pause", (SyncManager syncManager) =>
+        {
+            syncManager.PauseSync();
+            return Results.Ok(new { paused = true, message = "Sync paused. Running operations will complete." });
+        });
+
+        app.MapPost("/api/sync/resume", (SyncManager syncManager) =>
+        {
+            syncManager.ResumeSync();
+            return Results.Ok(new { paused = false, message = "Sync resumed." });
+        });
+
+        app.MapGet("/api/sync/state", (SyncManager syncManager) =>
+        {
+            return Results.Ok(new { paused = syncManager.IsPaused, syncing = syncManager.IsSyncing });
+        });
+
         app.MapPost("/api/sync/trigger", async (HttpContext ctx, SyncManager syncManager) =>
         {
             var body = await ctx.Request.ReadFromJsonAsync<SyncTriggerRequest>().ConfigureAwait(false);

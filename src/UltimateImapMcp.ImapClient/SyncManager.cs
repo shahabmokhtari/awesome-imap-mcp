@@ -39,6 +39,8 @@ public class SyncManager(
     private readonly ConcurrentDictionary<string, CancellationTokenSource> _idleCts = new();
     private readonly ConcurrentDictionary<string, bool> _hasPendingMessages = new();
     private Action<string, object>? _onSyncEvent;
+    private volatile bool _paused;
+    private volatile bool _isSyncing;
 
     /// <summary>
     /// Sets a callback to receive sync lifecycle events (sync:progress, sync:complete, sync:error).
@@ -107,24 +109,32 @@ public class SyncManager(
 
     public override async Task StopAsync(CancellationToken ct)
     {
-        // Cancel all IDLE listeners
+        // Step 1: Cancel all IDLE listeners (signal them to stop)
         foreach (var (_, cts) in _idleCts)
         {
-            cts.Cancel();
-            cts.Dispose();
+            try { cts.Cancel(); }
+            catch (ObjectDisposedException) { }
+        }
+
+        // Step 2: Wait for ExecuteAsync to finish (base.StopAsync cancels stoppingToken)
+        await base.StopAsync(ct).ConfigureAwait(false);
+
+        // Step 3: Now safe to dispose resources
+        foreach (var (_, cts) in _idleCts)
+        {
+            try { cts.Dispose(); }
+            catch (ObjectDisposedException) { }
         }
         _idleCts.Clear();
 
-        // Disconnect all connections
         foreach (var (_, connMgr) in _connections)
         {
             try { await connMgr.DisconnectAsync(ct).ConfigureAwait(false); }
-            catch (Exception ex) { logger.LogDebug(ex, "Connection cleanup failed for account (non-fatal)"); }
-            connMgr.Dispose();
+            catch (Exception ex) { logger.LogDebug(ex, "Connection cleanup failed (non-fatal)"); }
+            try { connMgr.Dispose(); }
+            catch (ObjectDisposedException) { }
         }
         _connections.Clear();
-
-        await base.StopAsync(ct).ConfigureAwait(false);
     }
 
     // ------------------------------------------------------------------
@@ -141,19 +151,26 @@ public class SyncManager(
             accountId, folderPath);
 
         // IDLE requires its own dedicated connection (separate from the shared one)
-        while (!idleCts.Token.IsCancellationRequested)
+        while (!ct.IsCancellationRequested)
         {
             if (!coordinator.IsLeader || !appConfig.Sync.Enabled)
             {
                 try
                 {
-                    await Task.Delay(TimeSpan.FromSeconds(appConfig.Server.HeartbeatInterval), idleCts.Token)
+                    await Task.Delay(TimeSpan.FromSeconds(appConfig.Server.HeartbeatInterval), ct)
                         .ConfigureAwait(false);
                 }
                 catch (OperationCanceledException)
                 {
                     break;
                 }
+                continue;
+            }
+
+            if (_paused)
+            {
+                try { await Task.Delay(TimeSpan.FromSeconds(2), ct).ConfigureAwait(false); }
+                catch (OperationCanceledException) { break; }
                 continue;
             }
 
@@ -211,7 +228,7 @@ public class SyncManager(
 
                 // IDLE loop — MailKit recommends re-issuing IDLE every ~9 minutes
                 // (IMAP servers typically drop IDLE after 30 minutes)
-                while (!idleCts.Token.IsCancellationRequested)
+                while (!ct.IsCancellationRequested)
                 {
                     using var doneCts = new CancellationTokenSource(TimeSpan.FromMinutes(9));
                     using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
@@ -227,20 +244,22 @@ public class SyncManager(
                     }
                 }
             }
-            catch (OperationCanceledException) when (idleCts.Token.IsCancellationRequested)
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
                 // Shutting down
                 break;
             }
             catch (Exception ex)
             {
+                if (ct.IsCancellationRequested) break; // shutting down, don't reconnect
+
                 logger.LogWarning(ex,
                     "IDLE listener for {Account}/{Folder} disconnected — reconnecting in 5s",
                     accountId, folderPath);
 
                 try
                 {
-                    await Task.Delay(TimeSpan.FromSeconds(5), idleCts.Token).ConfigureAwait(false);
+                    await Task.Delay(TimeSpan.FromSeconds(5), ct).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException)
                 {
@@ -299,6 +318,13 @@ public class SyncManager(
                 continue;
             }
 
+            if (_paused)
+            {
+                try { await Task.Delay(TimeSpan.FromSeconds(2), ct).ConfigureAwait(false); }
+                catch (OperationCanceledException) { break; }
+                continue;
+            }
+
             // Wait before next sync — short delay (2s) if still catching up, full interval if caught up
             var delay = _hasPendingMessages.GetValueOrDefault(accountId, false)
                 ? TimeSpan.FromSeconds(2)
@@ -315,6 +341,7 @@ public class SyncManager(
 
             try
             {
+                _isSyncing = true;
                 var remaining = await SyncAllFoldersAsync(accountId, account, connMgr, "poll", ct).ConfigureAwait(false);
                 _hasPendingMessages[accountId] = remaining > 0;
             }
@@ -326,6 +353,10 @@ public class SyncManager(
             {
                 logger.LogWarning(ex, "Polling sync failed for {Account} — will retry next interval",
                     accountId);
+            }
+            finally
+            {
+                _isSyncing = false;
             }
         }
     }
@@ -404,17 +435,6 @@ public class SyncManager(
         }, ct).ConfigureAwait(false);
     }
 
-    /// <summary>Syncs a single folder using ExecuteAsync for thread safety.</summary>
-    private async Task SyncFolderInternalAsync(string accountId, ImapConnectionManager connMgr,
-        FolderRecord folder, string syncType, CancellationToken ct)
-    {
-        await connMgr.ExecuteAsync(async client =>
-        {
-            await SyncFolderInternalCoreAsync(client, accountId, folder, syncType, ct)
-                .ConfigureAwait(false);
-        }, ct).ConfigureAwait(false);
-    }
-
     /// <summary>Core folder sync logic. Returns remaining messages. Caller must ensure exclusive IMAP client access.</summary>
     private async Task<int> SyncFolderInternalCoreAsync(MailKit.Net.Imap.ImapClient client,
         string accountId, FolderRecord folder, string syncType, CancellationToken ct)
@@ -481,6 +501,26 @@ public class SyncManager(
     // Public API (for MCP tools)
     // ------------------------------------------------------------------
 
+    /// <summary>Whether sync is currently paused.</summary>
+    public bool IsPaused => _paused;
+
+    /// <summary>Whether any sync operation is currently running.</summary>
+    public bool IsSyncing => _isSyncing;
+
+    /// <summary>Pause all sync operations. Currently running syncs will complete.</summary>
+    public void PauseSync()
+    {
+        _paused = true;
+        logger.LogInformation("Sync paused");
+    }
+
+    /// <summary>Resume sync operations.</summary>
+    public void ResumeSync()
+    {
+        _paused = false;
+        logger.LogInformation("Sync resumed");
+    }
+
     /// <summary>
     /// Trigger an on-demand sync for a specific folder or all folders of an account.
     /// </summary>
@@ -512,15 +552,23 @@ public class SyncManager(
                 oauthProvider, accountId);
         });
 
-        if (folderPath is not null)
+        try
         {
-            await SyncFolderAsync(accountId, account, connMgr, folderPath, "manual", ct)
-                .ConfigureAwait(false);
+            _isSyncing = true;
+            if (folderPath is not null)
+            {
+                await SyncFolderAsync(accountId, account, connMgr, folderPath, "manual", ct)
+                    .ConfigureAwait(false);
+            }
+            else
+            {
+                await SyncAllFoldersAsync(accountId, account, connMgr, "manual", ct)
+                    .ConfigureAwait(false);
+            }
         }
-        else
+        finally
         {
-            await SyncAllFoldersAsync(accountId, account, connMgr, "manual", ct)
-                .ConfigureAwait(false);
+            _isSyncing = false;
         }
     }
 
