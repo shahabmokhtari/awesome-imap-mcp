@@ -78,3 +78,16 @@
 - Smart search (natural language → IMAP query)
 - Email templates
 - Unsubscribe detection
+
+## 5. Email Security in Dashboard
+
+### Requirements
+- When rendering HTML emails in the Messages tab, do NOT load remote images or external content by default
+- Always strip JavaScript from email HTML (script tags, event handlers, javascript: URLs)
+- This applies to the iframe srcDoc rendering in Messages.tsx
+
+### Implementation
+- Use a sanitizer on the HTML before passing to srcDoc
+- Block all external resource loading (images, stylesheets, fonts, iframes)
+- Strip all script tags and inline JS event handlers
+- Optionally allow user to click "Load remote images" for a specific email
