@@ -492,11 +492,11 @@ export function useMessage(accountId: string | undefined, folderId: number | und
   })
 }
 
-export function useSearchMessages(accountId: string | undefined, query: string, limit?: number) {
+export function useSearchMessages(accountId: string | undefined, query: string, limit: number = 50) {
   const qs = new URLSearchParams()
   if (accountId) qs.set('account_id', accountId)
   if (query) qs.set('query', query)
-  if (limit != null) qs.set('limit', String(limit))
+  qs.set('limit', String(limit))
   return useQuery({
     queryKey: ['messages-search', accountId, query, limit],
     queryFn: () => apiFetch<MessageSummary[]>(`/api/messages/search?${qs}`),

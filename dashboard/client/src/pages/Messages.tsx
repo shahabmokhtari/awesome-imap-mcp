@@ -672,6 +672,9 @@ export default function Messages() {
     e.preventDefault()
     setSearchQuery(searchInput.trim())
     setSelectedMsg(undefined)
+    if (searchInput.trim()) {
+      setSelectedFolderId(undefined) // Clear folder selection for cross-folder search
+    }
   }
 
   const handleClearSearch = () => {
@@ -719,7 +722,7 @@ export default function Messages() {
             type="text"
             value={searchInput}
             onChange={e => setSearchInput(e.target.value)}
-            placeholder="Search subject, sender, or body — e.g. invoice, john@example.com, meeting notes"
+            placeholder="Search emails — from:user@example.com subject:&quot;meeting&quot; label:urgent has:attachments before:2026-03-01"
             className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
           <button
@@ -750,7 +753,7 @@ export default function Messages() {
           ) : folders && folders.length > 0 ? (
             <FolderList
               folders={folders}
-              selectedFolderId={effectiveFolderId}
+              selectedFolderId={isSearching ? undefined : effectiveFolderId}
               onSelect={handleFolderSelect}
             />
           ) : (

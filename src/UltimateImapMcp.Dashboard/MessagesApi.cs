@@ -173,7 +173,7 @@ public static class MessagesApi
             });
         });
 
-        // GET /api/messages/search?account_id=X&query=text&limit=20 — Full-text search
+        // GET /api/messages/search?account_id=X&query=text&limit=50 — Advanced search with structured operators
         app.MapGet("/api/messages/search", (HttpContext ctx, MessageRepository messageRepo, FolderRepository folderRepo) =>
         {
             var accountId = ctx.Request.Query["account_id"].FirstOrDefault();
@@ -182,7 +182,7 @@ public static class MessagesApi
                 return Results.BadRequest(new { error = "query is required" });
 
             var limitStr = ctx.Request.Query["limit"].FirstOrDefault();
-            var limit = 20;
+            var limit = 50;
             if (!string.IsNullOrEmpty(limitStr) && int.TryParse(limitStr, out var parsedLimit))
                 limit = Math.Clamp(parsedLimit, 1, 100);
 
@@ -191,17 +191,19 @@ public static class MessagesApi
             if (!string.IsNullOrEmpty(folderIdStr) && int.TryParse(folderIdStr, out var parsedFolderId))
                 folderId = parsedFolderId;
 
+            var filter = ParseAdvancedQuery(query, accountId, folderId, limit);
+
             List<MessageRecord> messages;
             try
             {
-                messages = messageRepo.SearchFts(query, accountId, folderId, limit);
+                messages = messageRepo.SearchAdvanced(filter);
             }
             catch (Microsoft.Data.Sqlite.SqliteException ex)
             {
                 return Results.BadRequest(new { error = $"Search query error: {ex.Message}" });
             }
 
-            // Build a folder ID -> path lookup
+            // Build a folder ID -> path lookup for ALL account folders (cross-folder search)
             Dictionary<int, string> folderPaths = new();
             if (!string.IsNullOrEmpty(accountId))
             {
@@ -223,6 +225,7 @@ public static class MessagesApi
                 flags = m.Flags ?? "",
                 snippet = m.Snippet ?? "",
                 hasAttachments = m.HasAttachments,
+                bodyFetched = m.BodyFetched,
                 folderPath = folderPaths.TryGetValue(m.FolderId, out var path) ? path : "",
             });
 
@@ -230,5 +233,121 @@ public static class MessagesApi
         });
 
         return app;
+    }
+
+    private static SearchFilter ParseAdvancedQuery(string rawQuery, string? accountId, int? folderId, int limit)
+    {
+        var from = (string?)null;
+        var to = (string?)null;
+        var subject = (string?)null;
+        var label = (string?)null;
+        long? fromDateEpoch = null;
+        long? toDateEpoch = null;
+        bool? hasAttachments = null;
+        var ftsTerms = new List<string>();
+
+        // Tokenize: handle quoted strings and key:value pairs
+        var tokens = TokenizeQuery(rawQuery);
+        foreach (var token in tokens)
+        {
+            var colonIdx = token.IndexOf(':');
+            if (colonIdx > 0)
+            {
+                var key = token[..colonIdx].ToLowerInvariant();
+                var value = token[(colonIdx + 1)..].Trim('"');
+                switch (key)
+                {
+                    case "from":
+                        from = value;
+                        break;
+                    case "to":
+                        to = value;
+                        break;
+                    case "subject":
+                        subject = value;
+                        break;
+                    case "label":
+                        label = value;
+                        break;
+                    case "from-date" or "fromdate" or "after":
+                        if (DateTimeOffset.TryParse(value, out var fd))
+                            fromDateEpoch = fd.ToUnixTimeSeconds();
+                        break;
+                    case "to-date" or "todate" or "before":
+                        if (DateTimeOffset.TryParse(value, out var td))
+                            toDateEpoch = td.ToUnixTimeSeconds();
+                        break;
+                    case "has" or "hasattachments":
+                        hasAttachments = value.Equals("true", StringComparison.OrdinalIgnoreCase)
+                            || value.Equals("attachments", StringComparison.OrdinalIgnoreCase)
+                            || value.Equals("yes", StringComparison.OrdinalIgnoreCase);
+                        break;
+                    default:
+                        ftsTerms.Add(token); // Unknown operator, treat as search term
+                        break;
+                }
+            }
+            else
+            {
+                ftsTerms.Add(token);
+            }
+        }
+
+        var ftsQuery = ftsTerms.Count > 0 ? string.Join(" ", ftsTerms) : null;
+
+        return new SearchFilter
+        {
+            Query = ftsQuery,
+            AccountId = accountId,
+            FolderId = folderId,
+            FromAddress = from,
+            ToAddress = to,
+            Subject = subject,
+            Label = label,
+            FromDateEpoch = fromDateEpoch,
+            ToDateEpoch = toDateEpoch,
+            HasAttachments = hasAttachments,
+            MaxResults = limit,
+        };
+    }
+
+    /// <summary>
+    /// Tokenizes a search query, respecting quoted strings.
+    /// "from:john subject:\"hello world\" meeting" -> ["from:john", "subject:hello world", "meeting"]
+    /// </summary>
+    private static List<string> TokenizeQuery(string query)
+    {
+        var tokens = new List<string>();
+        var i = 0;
+        while (i < query.Length)
+        {
+            // Skip whitespace
+            while (i < query.Length && char.IsWhiteSpace(query[i])) i++;
+            if (i >= query.Length) break;
+
+            var start = i;
+
+            // Check for key:value where value might be quoted
+            var colonIdx = -1;
+            while (i < query.Length && !char.IsWhiteSpace(query[i]))
+            {
+                if (query[i] == ':' && colonIdx < 0) colonIdx = i;
+                if (query[i] == '"' && colonIdx >= 0)
+                {
+                    // Quoted value after colon
+                    i++; // skip opening quote
+                    var valueStart = i;
+                    while (i < query.Length && query[i] != '"') i++;
+                    var token = query[start..colonIdx] + ":" + query[valueStart..i];
+                    if (i < query.Length) i++; // skip closing quote
+                    tokens.Add(token);
+                    goto next;
+                }
+                i++;
+            }
+            tokens.Add(query[start..i]);
+            next:;
+        }
+        return tokens;
     }
 }

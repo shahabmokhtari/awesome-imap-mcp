@@ -33,8 +33,10 @@ public record SearchFilter
     public string? FromAddress { get; init; }
     public string? ToAddress { get; init; }
     public string? Subject { get; init; }
+    public string? Label { get; init; }
     public long? FromDateEpoch { get; init; }
     public long? ToDateEpoch { get; init; }
+    public bool? HasAttachments { get; init; }
     public string OrderBy { get; init; } = "date_desc";
     public int MaxResults { get; init; } = 50;
     public int Offset { get; init; } = 0;
@@ -227,6 +229,8 @@ public class MessageRepository(AppDatabase db)
         if (filter.FromAddress is not null) conditions.Add("m.from_email LIKE $from ESCAPE '\\'");
         if (filter.ToAddress is not null) conditions.Add("m.to_addresses LIKE $to ESCAPE '\\'");
         if (filter.Subject is not null) conditions.Add("m.subject LIKE $subject ESCAPE '\\'");
+        if (filter.Label is not null) conditions.Add("m.flags LIKE $label ESCAPE '\\'");
+        if (filter.HasAttachments == true) conditions.Add("m.has_attachments = 1");
         if (filter.FromDateEpoch is not null) conditions.Add("m.date_epoch >= $fromDate");
         if (filter.ToDateEpoch is not null) conditions.Add("m.date_epoch <= $toDate");
 
@@ -250,6 +254,7 @@ public class MessageRepository(AppDatabase db)
         if (filter.FromAddress is not null) cmd.Parameters.AddWithValue("$from", $"%{EscapeLike(filter.FromAddress)}%");
         if (filter.ToAddress is not null) cmd.Parameters.AddWithValue("$to", $"%{EscapeLike(filter.ToAddress)}%");
         if (filter.Subject is not null) cmd.Parameters.AddWithValue("$subject", $"%{EscapeLike(filter.Subject)}%");
+        if (filter.Label is not null) cmd.Parameters.AddWithValue("$label", $"%{EscapeLike(filter.Label)}%");
         if (filter.FromDateEpoch is not null) cmd.Parameters.AddWithValue("$fromDate", filter.FromDateEpoch.Value);
         if (filter.ToDateEpoch is not null) cmd.Parameters.AddWithValue("$toDate", filter.ToDateEpoch.Value);
         cmd.Parameters.AddWithValue("$limit", filter.MaxResults);
