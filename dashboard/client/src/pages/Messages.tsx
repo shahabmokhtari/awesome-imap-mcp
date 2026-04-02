@@ -214,6 +214,21 @@ function MessageView({
     setActionStatus(null)
   }, [uid])
 
+  // Listen for link clicks from the sandboxed email iframe
+  useEffect(() => {
+    const handler = (e: MessageEvent) => {
+      if (e.data?.type !== 'email-link-click' || typeof e.data?.url !== 'string') return
+      const url = e.data.url
+      // Block javascript: URLs entirely
+      if (url.trim().toLowerCase().startsWith('javascript:')) return
+      if (window.confirm(`Open this link in a new window?\n\n${url}`)) {
+        window.open(url, '_blank', 'noopener,noreferrer')
+      }
+    }
+    window.addEventListener('message', handler)
+    return () => window.removeEventListener('message', handler)
+  }, [])
+
   const handleMarkRead = () => {
     setActionStatus('Queuing mark as read...')
     executeTool.mutate(
@@ -511,7 +526,7 @@ function MessageView({
               srcDoc={sanitizeEmailHtml(msg.bodyHtml!, allowRemoteImages)}
               title="Email body"
               className="w-full flex-1 border-0 min-h-[400px] rounded bg-white"
-              sandbox=""
+              sandbox="allow-scripts"
             />
           </div>
         ) : hasText ? (
