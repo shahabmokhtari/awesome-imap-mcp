@@ -30,6 +30,7 @@ public static class AccountsApi
                 authType = a.AuthType,
                 provider = a.Provider,
                 enabled = a.Enabled,
+                configJson = a.ConfigJson,
                 createdAt = a.CreatedAt,
                 updatedAt = a.UpdatedAt
             }));
@@ -71,7 +72,7 @@ public static class AccountsApi
                 return Results.BadRequest(new { error = "Invalid request body" });
 
             repo.Update(id, body.Name, body.ImapHost, body.ImapPort,
-                body.SmtpHost, body.SmtpPort, body.SmtpUseSsl, body.Username);
+                body.SmtpHost, body.SmtpPort, body.SmtpUseSsl, body.Username, body.ConfigJson);
 
             return Results.Ok(new { id, updated = true });
         });
@@ -275,6 +276,7 @@ public record UpdateAccountRequest
     public int? SmtpPort { get; init; }
     public bool? SmtpUseSsl { get; init; }
     public string? Username { get; init; }
+    public string? ConfigJson { get; init; }
 }
 
 public record ToggleEnabledRequest

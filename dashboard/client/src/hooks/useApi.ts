@@ -288,6 +288,20 @@ export function useCreateAccount() {
   })
 }
 
+export function useUpdateAccount() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id, ...data }: { id: string } & Record<string, unknown>) => {
+      const res = await apiFetch<{ id: string; updated: boolean }>(
+        `/api/accounts/${encodeURIComponent(id)}`,
+        { method: 'PUT', body: JSON.stringify(data) },
+      )
+      return res
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['accounts'] }),
+  })
+}
+
 export function useDeleteAccount() {
   const qc = useQueryClient()
   return useMutation({
@@ -663,6 +677,23 @@ export function useExecuteTool() {
 }
 
 // ---------- Types ----------
+
+export interface Account {
+  id: string
+  name: string
+  imapHost: string
+  imapPort: number
+  smtpHost: string | null
+  smtpPort: number
+  smtpUseSsl: boolean
+  username: string
+  authType: string
+  provider: string
+  enabled: boolean
+  configJson?: string | null
+  createdAt: string
+  updatedAt: string
+}
 
 export interface CreateAccountRequest {
   name: string

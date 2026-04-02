@@ -41,7 +41,7 @@ public class AccountRepository(AccountsStore store)
     }
 
     public void Update(string id, string? name, string? imapHost, int? imapPort,
-        string? smtpHost, int? smtpPort, bool? smtpUseSsl, string? username)
+        string? smtpHost, int? smtpPort, bool? smtpUseSsl, string? username, string? configJson)
     {
         store.Write(data =>
         {
@@ -55,6 +55,7 @@ public class AccountRepository(AccountsStore store)
             if (smtpPort is not null) entry.SmtpPort = smtpPort.Value;
             if (smtpUseSsl is not null) entry.SmtpUseSsl = smtpUseSsl.Value;
             if (username is not null) entry.Username = username;
+            if (configJson is not null) entry.ConfigJson = configJson;
             entry.UpdatedAt = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss");
         });
     }

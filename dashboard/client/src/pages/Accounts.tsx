@@ -5,15 +5,222 @@ import {
   useTestAccount,
   useFetchRecent,
   useToggleAccountEnabled,
+  useUpdateAccount,
   type RecentEmail,
+  type Account,
 } from '../hooks/useApi'
 import AddAccountForm from '../components/AddAccountForm'
+
+// ---------------------------------------------------------------------------
+// Edit Account Modal
+// ---------------------------------------------------------------------------
+
+function EditAccountModal({ account, onClose }: { account: Account; onClose: () => void }) {
+  // Parse existing configJson
+  const existingConfig = account.configJson ? JSON.parse(account.configJson) : {}
+  const syncConfig = existingConfig.Sync || {}
+
+  // Basic settings
+  const [name, setName] = useState(account.name)
+  const [username, setUsername] = useState(account.username)
+
+  // Server settings
+  const [imapHost, setImapHost] = useState(account.imapHost)
+  const [imapPort, setImapPort] = useState(account.imapPort)
+  const [smtpHost, setSmtpHost] = useState(account.smtpHost ?? '')
+  const [smtpPort, setSmtpPort] = useState(account.smtpPort)
+  const [smtpUseSsl, setSmtpUseSsl] = useState(account.smtpUseSsl)
+
+  // Sync settings
+  const [maxConnections, setMaxConnections] = useState(syncConfig.max_connections ?? 5)
+  const [pollInterval, setPollInterval] = useState(syncConfig.poll_interval ?? 300)
+  const [maxMessagesPerSync, setMaxMessagesPerSync] = useState(syncConfig.max_messages_per_sync ?? 500)
+  const [idleFolders, setIdleFolders] = useState((syncConfig.idle_folders || []).join(', '))
+
+  // Queue settings
+  const [confirmMode, setConfirmMode] = useState(existingConfig.confirm_mode ?? 'implicit')
+  const [undoWindow, setUndoWindow] = useState(existingConfig.undo_window_seconds ?? 10)
+
+  const updateAccount = useUpdateAccount()
+  const [error, setError] = useState<string | null>(null)
+
+  const handleSave = () => {
+    setError(null)
+    const configJson = JSON.stringify({
+      Sync: {
+        idle_folders: idleFolders.split(',').map((s: string) => s.trim()).filter(Boolean),
+        poll_interval: pollInterval,
+        max_messages_per_sync: maxMessagesPerSync,
+        max_connections: maxConnections,
+        folders: syncConfig.folders || [],
+      },
+      confirm_mode: confirmMode,
+      undo_window_seconds: undoWindow,
+    })
+
+    updateAccount.mutate({
+      id: account.id,
+      name,
+      imapHost,
+      imapPort,
+      smtpHost,
+      smtpPort,
+      smtpUseSsl,
+      username,
+      configJson,
+    }, {
+      onSuccess: () => onClose(),
+      onError: (err) => setError(err.message),
+    })
+  }
+
+  const inputClass = 'w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+
+      {/* Modal */}
+      <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto m-4">
+        <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 rounded-t-xl">
+          <h3 className="text-lg font-bold text-gray-900">Edit Account</h3>
+          <p className="text-sm text-gray-500 mt-0.5">{account.name}</p>
+        </div>
+
+        <div className="px-6 py-5 space-y-6">
+          {/* Section 1: Basic Settings */}
+          <div>
+            <h4 className="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wide">Basic Settings</h4>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                <input type="text" value={name} onChange={e => setName(e.target.value)} className={inputClass} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
+                <input type="text" value={username} onChange={e => setUsername(e.target.value)} className={inputClass} />
+              </div>
+            </div>
+          </div>
+
+          {/* Section 2: Server Settings */}
+          <div>
+            <h4 className="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wide">Server Settings</h4>
+            <div className="space-y-3">
+              <div className="grid grid-cols-3 gap-3">
+                <div className="col-span-2">
+                  <label className="block text-xs text-gray-500 mb-1">IMAP Host</label>
+                  <input type="text" value={imapHost} onChange={e => setImapHost(e.target.value)} className={inputClass} />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">IMAP Port</label>
+                  <input type="number" value={imapPort} onChange={e => setImapPort(Number(e.target.value))} className={inputClass} />
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="col-span-2">
+                  <label className="block text-xs text-gray-500 mb-1">SMTP Host</label>
+                  <input type="text" value={smtpHost} onChange={e => setSmtpHost(e.target.value)} className={inputClass} />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">SMTP Port</label>
+                  <input type="number" value={smtpPort} onChange={e => setSmtpPort(Number(e.target.value))} className={inputClass} />
+                </div>
+              </div>
+              <label className="inline-flex items-center cursor-pointer">
+                <input type="checkbox" checked={smtpUseSsl} onChange={e => setSmtpUseSsl(e.target.checked)} className="sr-only peer" />
+                <div className="w-9 h-5 bg-gray-300 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600 relative" />
+                <span className="ml-3 text-sm text-gray-700">SMTP SSL/TLS</span>
+              </label>
+            </div>
+          </div>
+
+          {/* Section 3: Sync Settings */}
+          <div>
+            <h4 className="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wide">Sync Settings</h4>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Max Connections</label>
+                  <input type="number" min={1} max={20} value={maxConnections} onChange={e => setMaxConnections(Number(e.target.value))} className={inputClass} />
+                  <p className="text-xs text-gray-400 mt-0.5">1-20, default 5</p>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Poll Interval (seconds)</label>
+                  <input type="number" min={30} value={pollInterval} onChange={e => setPollInterval(Number(e.target.value))} className={inputClass} />
+                  <p className="text-xs text-gray-400 mt-0.5">Default 300s (5 min)</p>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Max Messages Per Sync</label>
+                <input type="number" min={1} value={maxMessagesPerSync} onChange={e => setMaxMessagesPerSync(Number(e.target.value))} className={inputClass} />
+                <p className="text-xs text-gray-400 mt-0.5">Default 500</p>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">IDLE Folders</label>
+                <input type="text" value={idleFolders} onChange={e => setIdleFolders(e.target.value)} placeholder="INBOX, Drafts" className={inputClass} />
+                <p className="text-xs text-gray-400 mt-0.5">Comma-separated folder names for IMAP IDLE</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Section 4: Queue Settings */}
+          <div>
+            <h4 className="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wide">Queue Settings</h4>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Confirm Mode</label>
+                  <select value={confirmMode} onChange={e => setConfirmMode(e.target.value)} className={inputClass}>
+                    <option value="implicit">Implicit</option>
+                    <option value="explicit">Explicit</option>
+                  </select>
+                  <p className="text-xs text-gray-400 mt-0.5">Implicit: auto-confirm after undo window</p>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Undo Window (seconds)</label>
+                  <input type="number" min={0} value={undoWindow} onChange={e => setUndoWindow(Number(e.target.value))} className={inputClass} />
+                  <p className="text-xs text-gray-400 mt-0.5">Default 10s</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Error message */}
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
+              {error}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="sticky bottom-0 bg-white border-t border-gray-200 px-6 py-4 rounded-b-xl flex items-center justify-end gap-3">
+          <button
+            onClick={onClose}
+            className="px-5 py-2 text-gray-700 bg-gray-100 rounded-lg text-sm hover:bg-gray-200 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={updateAccount.isPending}
+            className="px-5 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {updateAccount.isPending ? 'Saving...' : 'Save Changes'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 // ---------------------------------------------------------------------------
 // Account Row (with inline test + delete)
 // ---------------------------------------------------------------------------
 
-function AccountRow({ account }: { account: Record<string, unknown> }) {
+function AccountRow({ account, onEdit }: { account: Record<string, unknown>; onEdit: () => void }) {
   const deleteAccount = useDeleteAccount()
   const testAccount = useTestAccount()
   const fetchRecent = useFetchRecent()
@@ -86,6 +293,13 @@ function AccountRow({ account }: { account: Record<string, unknown> }) {
             {toggleEnabled.isPending
               ? (isEnabled ? 'Disabling...' : 'Enabling...')
               : (isEnabled ? 'Disable' : 'Enable')}
+          </button>
+
+          <button
+            onClick={onEdit}
+            className="text-gray-600 hover:text-gray-800 text-sm"
+          >
+            Edit
           </button>
 
           <button
@@ -191,6 +405,7 @@ function AccountRow({ account }: { account: Record<string, unknown> }) {
 export default function Accounts() {
   const { data: accounts, isLoading, error } = useAccounts()
   const [showAddForm, setShowAddForm] = useState(false)
+  const [editingAccount, setEditingAccount] = useState<Account | null>(null)
 
   return (
     <div>
@@ -254,11 +469,23 @@ export default function Accounts() {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {accounts.map((account) => (
-                <AccountRow key={account.id as string} account={account} />
+                <AccountRow
+                  key={account.id as string}
+                  account={account}
+                  onEdit={() => setEditingAccount(account as unknown as Account)}
+                />
               ))}
             </tbody>
           </table>
         </div>
+      )}
+
+      {/* Edit Account Modal */}
+      {editingAccount && (
+        <EditAccountModal
+          account={editingAccount}
+          onClose={() => setEditingAccount(null)}
+        />
       )}
     </div>
   )
