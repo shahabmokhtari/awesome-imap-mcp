@@ -7,6 +7,7 @@ import {
   useSearchMessages,
   useFetchBody,
   useClearFolderCache,
+  useExecuteTool,
   type MessageSummary,
   type FolderInfo,
 } from '../hooks/useApi'
@@ -188,23 +189,87 @@ function MessageRow({
 function MessageView({
   accountId,
   folderId,
+  folderPath,
   uid,
   onClose,
 }: {
   accountId: string
   folderId: number
+  folderPath: string
   uid: number
   onClose: () => void
 }) {
   const { data: msg, isLoading, error } = useMessage(accountId, folderId, uid)
   const fetchBody = useFetchBody()
+  const executeTool = useExecuteTool()
   const [showHtml, setShowHtml] = useState(false)
   const [allowRemoteImages, setAllowRemoteImages] = useState(false)
+  const [showHeaders, setShowHeaders] = useState(false)
+  const [actionStatus, setActionStatus] = useState<string | null>(null)
 
   useEffect(() => {
     setAllowRemoteImages(false)
     setShowHtml(false)
+    setShowHeaders(false)
+    setActionStatus(null)
   }, [uid])
+
+  const handleMarkRead = () => {
+    setActionStatus('Queuing mark as read...')
+    executeTool.mutate(
+      { name: 'mark_read', args: { accountId, uids: String(uid), folder: folderPath } },
+      {
+        onSuccess: () => setActionStatus('Queued: mark as read'),
+        onError: (err) => setActionStatus(`Error: ${err.message}`),
+      }
+    )
+  }
+
+  const handleMarkUnread = () => {
+    setActionStatus('Queuing mark as unread...')
+    executeTool.mutate(
+      { name: 'mark_unread', args: { accountId, uids: String(uid), folder: folderPath } },
+      {
+        onSuccess: () => setActionStatus('Queued: mark as unread'),
+        onError: (err) => setActionStatus(`Error: ${err.message}`),
+      }
+    )
+  }
+
+  const handleDelete = () => {
+    if (!window.confirm('Delete this message? It will be moved to trash on most IMAP servers.')) return
+    setActionStatus('Queuing delete...')
+    executeTool.mutate(
+      { name: 'delete_messages', args: { accountId, uids: String(uid), folder: folderPath } },
+      {
+        onSuccess: () => setActionStatus('Queued: delete'),
+        onError: (err) => setActionStatus(`Error: ${err.message}`),
+      }
+    )
+  }
+
+  const handleOpenInNewWindow = () => {
+    if (!msg) return
+    const newWindow = window.open('', '_blank')
+    if (!newWindow) return
+    const escapedSubject = (msg.subject || '(no subject)').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    const escapedFrom = (msg.fromAddress || msg.fromEmail || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    const dateStr = msg.dateEpoch ? new Date(msg.dateEpoch * 1000).toLocaleString() : msg.date
+    const content = msg.bodyHtml
+      ? sanitizeEmailHtml(msg.bodyHtml, true)
+      : `<pre style="font-family: sans-serif; white-space: pre-wrap;">${(msg.bodyText || 'No content').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>`
+    newWindow.document.write(`<!DOCTYPE html>
+<html>
+<head><title>${escapedSubject}</title></head>
+<body style="margin: 20px; font-family: system-ui, -apple-system, sans-serif;">
+  <h2 style="margin-bottom: 4px;">${escapedSubject}</h2>
+  <p style="color: #666; margin-top: 0;">From: ${escapedFrom} | Date: ${dateStr}</p>
+  <hr style="border: none; border-top: 1px solid #ddd;"/>
+  ${content}
+</body>
+</html>`)
+    newWindow.document.close()
+  }
 
   if (isLoading) {
     return (
@@ -227,6 +292,7 @@ function MessageView({
 
   const hasHtml = !!msg.bodyHtml
   const hasText = !!msg.bodyText
+  const msgIsUnread = isUnread(msg.flags)
 
   return (
     <div className="flex flex-col h-full">
@@ -265,16 +331,87 @@ function MessageView({
               </div>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 p-1 flex-shrink-0"
-            title="Close"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+
+          {/* Action buttons */}
+          <div className="flex items-center gap-1 flex-shrink-0">
+            {/* Mark Read / Unread toggle */}
+            {msgIsUnread ? (
+              <button
+                onClick={handleMarkRead}
+                disabled={executeTool.isPending}
+                title="Mark as read"
+                className="p-1.5 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700 disabled:opacity-50"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 19V5a2 2 0 012-2h14a2 2 0 012 2v14M3 19l6.75-4.5M21 19l-6.75-4.5M3 5l9 6 9-6" />
+                </svg>
+              </button>
+            ) : (
+              <button
+                onClick={handleMarkUnread}
+                disabled={executeTool.isPending}
+                title="Mark as unread"
+                className="p-1.5 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700 disabled:opacity-50"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l9 6 9-6M3 8v10a2 2 0 002 2h14a2 2 0 002-2V8M3 8l9-4 9 4" />
+                </svg>
+              </button>
+            )}
+
+            {/* Delete */}
+            <button
+              onClick={handleDelete}
+              disabled={executeTool.isPending}
+              title="Delete"
+              className="p-1.5 rounded hover:bg-gray-100 text-gray-500 hover:text-red-600 disabled:opacity-50"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+            </button>
+
+            {/* Show Headers */}
+            <button
+              onClick={() => setShowHeaders(!showHeaders)}
+              title={showHeaders ? 'Hide headers' : 'Show headers'}
+              className={`p-1.5 rounded hover:bg-gray-100 disabled:opacity-50 ${showHeaders ? 'text-blue-600 bg-blue-50' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+              </svg>
+            </button>
+
+            {/* Open in New Window */}
+            <button
+              onClick={handleOpenInNewWindow}
+              title="Open in new window"
+              className="p-1.5 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+              </svg>
+            </button>
+
+            {/* Close */}
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-600 p-1.5"
+              title="Close"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
         </div>
+
+        {/* Action status feedback */}
+        {actionStatus && (
+          <div className={`mt-2 text-xs px-2 py-1 rounded ${actionStatus.startsWith('Error') ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-700'}`}>
+            {actionStatus}
+          </div>
+        )}
 
         {/* View toggle if both text and html are available */}
         {hasText && hasHtml && (
@@ -301,6 +438,21 @@ function MessageView({
 
       {/* Body */}
       <div className="flex-1 overflow-auto p-6">
+        {/* Raw headers section */}
+        {showHeaders && (
+          <div className="mb-4">
+            {msg.rawHeaders ? (
+              <pre className="text-xs font-mono bg-gray-50 p-4 rounded border border-gray-200 overflow-auto max-h-64 whitespace-pre-wrap break-all">
+                {msg.rawHeaders}
+              </pre>
+            ) : (
+              <div className="text-xs text-gray-400 bg-gray-50 p-4 rounded border border-gray-200">
+                Raw headers are not available for this message. They are stored when the message body is fetched.
+              </div>
+            )}
+          </div>
+        )}
+
         {!msg.bodyFetched && !hasText && !hasHtml ? (
           <div className="text-gray-400 text-sm text-center py-8">
             <p className="mb-3">Message body has not been fetched yet.</p>
@@ -412,7 +564,7 @@ export default function Messages() {
 
   const [selectedAccountId, setSelectedAccountId] = useState<string | undefined>(undefined)
   const [selectedFolderId, setSelectedFolderId] = useState<number | undefined>(undefined)
-  const [selectedMsg, setSelectedMsg] = useState<{ uid: number; folderId: number } | undefined>(undefined)
+  const [selectedMsg, setSelectedMsg] = useState<{ uid: number; folderId: number; folderPath: string } | undefined>(undefined)
   const [searchInput, setSearchInput] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [page, setPage] = useState(0)
@@ -461,9 +613,11 @@ export default function Messages() {
 
     const nextMsg = messages[nextIdx]
     if (nextMsg) {
-      setSelectedMsg({ uid: nextMsg.uid, folderId: nextMsg.folderId ?? effectiveFolderId! })
+      const fId = nextMsg.folderId ?? effectiveFolderId!
+      const fPath = nextMsg.folderPath || folders?.find(f => f.id === fId)?.path || ''
+      setSelectedMsg({ uid: nextMsg.uid, folderId: fId, folderPath: fPath })
     }
-  }, [messages, selectedMsg, effectiveFolderId, isSearching])
+  }, [messages, selectedMsg, effectiveFolderId, isSearching, folders])
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown)
@@ -500,7 +654,9 @@ export default function Messages() {
   }
 
   const handleSelectMessage = (msg: MessageSummary) => {
-    setSelectedMsg({ uid: msg.uid, folderId: msg.folderId ?? effectiveFolderId! })
+    const fId = msg.folderId ?? effectiveFolderId!
+    const fPath = msg.folderPath || folders?.find(f => f.id === fId)?.path || ''
+    setSelectedMsg({ uid: msg.uid, folderId: fId, folderPath: fPath })
   }
 
   if (accountsLoading) {
@@ -663,6 +819,7 @@ export default function Messages() {
             <MessageView
               accountId={accountId}
               folderId={selectedMsg.folderId}
+              folderPath={selectedMsg.folderPath}
               uid={selectedMsg.uid}
               onClose={() => setSelectedMsg(undefined)}
             />

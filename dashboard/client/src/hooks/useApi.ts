@@ -437,6 +437,7 @@ export interface MessageDetail extends MessageSummary {
   bodyHtml: string | null
   bodyFetched: boolean
   threadId: string | null
+  rawHeaders: string | null
 }
 
 export function useFolders(accountId: string | undefined) {

@@ -108,6 +108,7 @@ public static class MessagesApi
                 bodyHtml = message.BodyHtml,
                 bodyFetched = message.BodyFetched,
                 threadId = message.ThreadId,
+                rawHeaders = message.RawHeaders,
             });
         });
 
