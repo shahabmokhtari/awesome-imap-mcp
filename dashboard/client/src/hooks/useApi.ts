@@ -500,7 +500,7 @@ export function useSearchMessages(accountId: string | undefined, query: string, 
   return useQuery({
     queryKey: ['messages-search', accountId, query, limit],
     queryFn: () => apiFetch<MessageSummary[]>(`/api/messages/search?${qs}`),
-    enabled: !!accountId && query.length > 0,
+    enabled: query.length > 0,
   })
 }
 
