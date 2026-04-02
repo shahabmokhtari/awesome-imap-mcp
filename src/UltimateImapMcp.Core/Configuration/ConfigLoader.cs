@@ -106,6 +106,7 @@ public static partial class ConfigLoader
             Sync = config.Sync,
             Metrics = config.Metrics,
             OAuthProviders = config.OAuthProviders,
+            Labels = config.Labels,
         };
 
         var json = JsonSerializer.Serialize(sanitized, WriteOptions);
@@ -120,7 +121,8 @@ public static partial class ConfigLoader
             finally
             {
                 // Clean up temp file if the rename failed
-                try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { /* best effort */ }
+                try { if (File.Exists(tempPath)) File.Delete(tempPath); }
+                catch (Exception ex) { Console.Error.WriteLine($"[ConfigLoader] Failed to clean up temp file: {ex.Message}"); }
             }
         }
     }

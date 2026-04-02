@@ -11,6 +11,8 @@ using UltimateImapMcp.Core.Coordination;
 using UltimateImapMcp.Core.Encryption;
 using UltimateImapMcp.Core.OAuth;
 using UltimateImapMcp.Core.Providers;
+using UltimateImapMcp.Core.Database;
+using UltimateImapMcp.Core.Repositories;
 using UltimateImapMcp.ImapClient.Repositories;
 using ImapClientLib = MailKit.Net.Imap.ImapClient;
 
@@ -32,6 +34,8 @@ public class SyncManager(
     IOAuthAccessTokenProvider oauthProvider,
     IInstanceCoordinator coordinator,
     AppConfig appConfig,
+    LocalLabelRepository localLabelRepo,
+    AppDatabase appDatabase,
     ILogger<SyncManager> logger) : BackgroundService
 {
     private readonly ConcurrentDictionary<string, ImapConnectionManager> _connections = new();
@@ -39,6 +43,9 @@ public class SyncManager(
     private readonly ConcurrentDictionary<string, CancellationTokenSource> _idleCts = new();
     private readonly ConcurrentDictionary<string, bool> _hasPendingMessages = new();
     private Action<string, object>? _onSyncEvent;
+    private volatile bool _paused;
+    private volatile bool _isSyncing;
+    private CancellationTokenSource _pauseCts = new();
 
     /// <summary>
     /// Sets a callback to receive sync lifecycle events (sync:progress, sync:complete, sync:error).
@@ -65,6 +72,14 @@ public class SyncManager(
         foreach (var record in dbAccounts)
         {
             var accountId = record.Id;
+
+            // Skip disabled accounts — they should not sync
+            if (!record.Enabled)
+            {
+                logger.LogInformation("Skipping sync for disabled account {Account} ({Name})", accountId, record.Name);
+                continue;
+            }
+
             var account = AccountConfigMapper.ToAccountConfig(record, encryptor);
 
             // Skip REST-only accounts (e.g. Zoho OAuth) — they have no IMAP host
@@ -99,24 +114,32 @@ public class SyncManager(
 
     public override async Task StopAsync(CancellationToken ct)
     {
-        // Cancel all IDLE listeners
+        // Step 1: Cancel all IDLE listeners (signal them to stop)
         foreach (var (_, cts) in _idleCts)
         {
-            cts.Cancel();
-            cts.Dispose();
+            try { cts.Cancel(); }
+            catch (ObjectDisposedException) { }
+        }
+
+        // Step 2: Wait for ExecuteAsync to finish (base.StopAsync cancels stoppingToken)
+        await base.StopAsync(ct).ConfigureAwait(false);
+
+        // Step 3: Now safe to dispose resources
+        foreach (var (_, cts) in _idleCts)
+        {
+            try { cts.Dispose(); }
+            catch (ObjectDisposedException) { }
         }
         _idleCts.Clear();
 
-        // Disconnect all connections
         foreach (var (_, connMgr) in _connections)
         {
             try { await connMgr.DisconnectAsync(ct).ConfigureAwait(false); }
-            catch (Exception ex) { logger.LogDebug(ex, "Connection cleanup failed for account (non-fatal)"); }
-            connMgr.Dispose();
+            catch (Exception ex) { logger.LogDebug(ex, "Connection cleanup failed (non-fatal)"); }
+            try { connMgr.Dispose(); }
+            catch (ObjectDisposedException) { }
         }
         _connections.Clear();
-
-        await base.StopAsync(ct).ConfigureAwait(false);
     }
 
     // ------------------------------------------------------------------
@@ -133,13 +156,13 @@ public class SyncManager(
             accountId, folderPath);
 
         // IDLE requires its own dedicated connection (separate from the shared one)
-        while (!idleCts.Token.IsCancellationRequested)
+        while (!ct.IsCancellationRequested)
         {
             if (!coordinator.IsLeader || !appConfig.Sync.Enabled)
             {
                 try
                 {
-                    await Task.Delay(TimeSpan.FromSeconds(appConfig.Server.HeartbeatInterval), idleCts.Token)
+                    await Task.Delay(TimeSpan.FromSeconds(appConfig.Server.HeartbeatInterval), ct)
                         .ConfigureAwait(false);
                 }
                 catch (OperationCanceledException)
@@ -149,9 +172,21 @@ public class SyncManager(
                 continue;
             }
 
+            if (_paused)
+            {
+                try { await Task.Delay(TimeSpan.FromSeconds(2), ct).ConfigureAwait(false); }
+                catch (OperationCanceledException) { break; }
+                continue;
+            }
+
             ImapClientLib? idleClient = null;
+            IDisposable? throttleSlot = null;
             try
             {
+                throttleSlot = await ConnectionThrottle.AcquireAsync(
+                    accountId, account.Sync.MaxConnections, idleCts.Token)
+                    .ConfigureAwait(false);
+
                 idleClient = new ImapClientLib();
                 await idleClient.ConnectAsync(
                     account.ImapHost, account.ImapPort,
@@ -203,7 +238,7 @@ public class SyncManager(
 
                 // IDLE loop — MailKit recommends re-issuing IDLE every ~9 minutes
                 // (IMAP servers typically drop IDLE after 30 minutes)
-                while (!idleCts.Token.IsCancellationRequested)
+                while (!ct.IsCancellationRequested)
                 {
                     using var doneCts = new CancellationTokenSource(TimeSpan.FromMinutes(9));
                     using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
@@ -219,20 +254,22 @@ public class SyncManager(
                     }
                 }
             }
-            catch (OperationCanceledException) when (idleCts.Token.IsCancellationRequested)
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
                 // Shutting down
                 break;
             }
             catch (Exception ex)
             {
+                if (ct.IsCancellationRequested) break; // shutting down, don't reconnect
+
                 logger.LogWarning(ex,
                     "IDLE listener for {Account}/{Folder} disconnected — reconnecting in 5s",
                     accountId, folderPath);
 
                 try
                 {
-                    await Task.Delay(TimeSpan.FromSeconds(5), idleCts.Token).ConfigureAwait(false);
+                    await Task.Delay(TimeSpan.FromSeconds(5), ct).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException)
                 {
@@ -242,6 +279,7 @@ public class SyncManager(
             finally
             {
                 try { idleClient?.Dispose(); } catch (Exception ex) { logger.LogDebug(ex, "IDLE client cleanup failed (non-fatal)"); }
+                throttleSlot?.Dispose();
             }
         }
     }
@@ -259,20 +297,34 @@ public class SyncManager(
             accountId, interval.TotalSeconds);
 
         // Initial sync of all folders on startup — only the leader performs IMAP work.
-        if (coordinator.IsLeader)
+        if (coordinator.IsLeader && !_paused)
         {
             try
             {
-                var remaining = await SyncAllFoldersAsync(accountId, account, connMgr, "poll", ct).ConfigureAwait(false);
+                _isSyncing = true;
+                using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, _pauseCts.Token);
+                var remaining = await SyncAllFoldersAsync(accountId, account, connMgr, "poll", linked.Token).ConfigureAwait(false);
                 _hasPendingMessages[accountId] = remaining > 0;
+
+                // Reconcile local labels after sync
+                try { localLabelRepo.ReconcileLabels(accountId, appDatabase); }
+                catch (Exception ex) { logger.LogDebug(ex, "Label reconciliation skipped for {Account}", accountId); }
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
                 return;
             }
+            catch (OperationCanceledException) when (_paused)
+            {
+                logger.LogDebug("Initial sync cancelled by pause for {Account}", accountId);
+            }
             catch (Exception ex)
             {
                 logger.LogError(ex, "Initial sync failed for {Account}", accountId);
+            }
+            finally
+            {
+                _isSyncing = false;
             }
         }
 
@@ -288,6 +340,13 @@ public class SyncManager(
                 {
                     break;
                 }
+                continue;
+            }
+
+            if (_paused)
+            {
+                try { await Task.Delay(TimeSpan.FromSeconds(2), ct).ConfigureAwait(false); }
+                catch (OperationCanceledException) { break; }
                 continue;
             }
 
@@ -307,17 +366,32 @@ public class SyncManager(
 
             try
             {
-                var remaining = await SyncAllFoldersAsync(accountId, account, connMgr, "poll", ct).ConfigureAwait(false);
+                _isSyncing = true;
+                using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, _pauseCts.Token);
+                var remaining = await SyncAllFoldersAsync(accountId, account, connMgr, "poll", linked.Token).ConfigureAwait(false);
                 _hasPendingMessages[accountId] = remaining > 0;
+
+                // Reconcile local labels after sync
+                try { localLabelRepo.ReconcileLabels(accountId, appDatabase); }
+                catch (Exception ex) { logger.LogDebug(ex, "Label reconciliation skipped for {Account}", accountId); }
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
                 break;
             }
+            catch (OperationCanceledException) when (_paused)
+            {
+                // Sync was cancelled by pause — not an error, loop will wait
+                logger.LogDebug("Sync cancelled by pause for {Account}", accountId);
+            }
             catch (Exception ex)
             {
                 logger.LogWarning(ex, "Polling sync failed for {Account} — will retry next interval",
                     accountId);
+            }
+            finally
+            {
+                _isSyncing = false;
             }
         }
     }
@@ -396,17 +470,6 @@ public class SyncManager(
         }, ct).ConfigureAwait(false);
     }
 
-    /// <summary>Syncs a single folder using ExecuteAsync for thread safety.</summary>
-    private async Task SyncFolderInternalAsync(string accountId, ImapConnectionManager connMgr,
-        FolderRecord folder, string syncType, CancellationToken ct)
-    {
-        await connMgr.ExecuteAsync(async client =>
-        {
-            await SyncFolderInternalCoreAsync(client, accountId, folder, syncType, ct)
-                .ConfigureAwait(false);
-        }, ct).ConfigureAwait(false);
-    }
-
     /// <summary>Core folder sync logic. Returns remaining messages. Caller must ensure exclusive IMAP client access.</summary>
     private async Task<int> SyncFolderInternalCoreAsync(MailKit.Net.Imap.ImapClient client,
         string accountId, FolderRecord folder, string syncType, CancellationToken ct)
@@ -462,7 +525,8 @@ public class SyncManager(
             logger.LogError(ex, "Sync failed for {Account}/{Folder}", accountId, folder.Path);
 
             // Rethrow connection-level errors so the parent stops trying more folders on a dead connection
-            if (ex is IOException or SocketException or ImapProtocolException)
+            if (ex is IOException or SocketException or ImapProtocolException
+                or MailKit.ServiceNotConnectedException or MailKit.ServiceNotAuthenticatedException)
                 throw;
 
             return 0; // On error, don't signal remaining — let the next cycle retry
@@ -473,14 +537,40 @@ public class SyncManager(
     // Public API (for MCP tools)
     // ------------------------------------------------------------------
 
+    /// <summary>Whether sync is currently paused.</summary>
+    public bool IsPaused => _paused;
+
+    /// <summary>Whether any sync operation is currently running.</summary>
+    public bool IsSyncing => _isSyncing;
+
+    /// <summary>
+    /// Stop sync immediately — cancels any in-flight sync operation.
+    /// Call StartSync() to resume.
+    /// </summary>
+    public void StopSync()
+    {
+        _paused = true;
+        _pauseCts.Cancel();
+        logger.LogInformation("Sync stopped");
+    }
+
+    /// <summary>Start/resume sync with a fresh cancellation token.</summary>
+    public void StartSync()
+    {
+        _pauseCts.Dispose();
+        _pauseCts = new CancellationTokenSource();
+        _paused = false;
+        logger.LogInformation("Sync started");
+    }
+
     /// <summary>
     /// Trigger an on-demand sync for a specific folder or all folders of an account.
     /// </summary>
     public async Task TriggerSyncAsync(string accountId, string? folderPath = null,
         CancellationToken ct = default)
     {
-        // Resolve account from DB
-        var record = accountRepo.ResolveAccount(accountId)
+        // Resolve account from DB — also checks enabled state
+        var record = accountRepo.ResolveEnabledAccount(accountId)
             ?? throw new InvalidOperationException($"Account '{accountId}' not found in database.");
 
         // Use the canonical DB id
@@ -504,15 +594,24 @@ public class SyncManager(
                 oauthProvider, accountId);
         });
 
-        if (folderPath is not null)
+        try
         {
-            await SyncFolderAsync(accountId, account, connMgr, folderPath, "manual", ct)
-                .ConfigureAwait(false);
+            _isSyncing = true;
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, _pauseCts.Token);
+            if (folderPath is not null)
+            {
+                await SyncFolderAsync(accountId, account, connMgr, folderPath, "manual", linked.Token)
+                    .ConfigureAwait(false);
+            }
+            else
+            {
+                await SyncAllFoldersAsync(accountId, account, connMgr, "manual", linked.Token)
+                    .ConfigureAwait(false);
+            }
         }
-        else
+        finally
         {
-            await SyncAllFoldersAsync(accountId, account, connMgr, "manual", ct)
-                .ConfigureAwait(false);
+            _isSyncing = false;
         }
     }
 
@@ -522,8 +621,8 @@ public class SyncManager(
         string? to, string? subject, long? fromEpoch, long? toEpoch,
         int maxResults, CancellationToken ct = default)
     {
-        // Resolve account from DB (same pattern as TriggerSyncAsync)
-        var record = accountRepo.ResolveAccount(accountId)
+        // Resolve account from DB — also checks enabled state
+        var record = accountRepo.ResolveEnabledAccount(accountId)
             ?? throw new InvalidOperationException($"Account '{accountId}' not found in database.");
 
         accountId = record.Id;

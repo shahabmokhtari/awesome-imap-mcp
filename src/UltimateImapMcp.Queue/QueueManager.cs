@@ -13,7 +13,7 @@ public class QueueManager(QueueRepository repo, AccountRepository accountRepo,
 {
     public SendEnqueueResult EnqueueSend(string accountId, string payload)
     {
-        var dbAccount = accountRepo.ResolveAccount(accountId)
+        var dbAccount = accountRepo.ResolveEnabledAccount(accountId)
             ?? throw new InvalidOperationException($"Account '{accountId}' not found.");
 
         var accountConfig = AccountConfigMapper.ToAccountConfig(dbAccount, encryptor);
@@ -55,13 +55,17 @@ public class QueueManager(QueueRepository repo, AccountRepository accountRepo,
 
     public string EnqueueOperation(string accountId, OperationType operation, string payload)
     {
-        // Resolve to canonical DB ID
-        var dbAccount = accountRepo.ResolveAccount(accountId);
-        var resolvedId = dbAccount?.Id ?? accountId;
+        // Send/Reply/Forward must go through EnqueueSend for proper undo window handling
+        if (operation is OperationType.Send or OperationType.Reply or OperationType.Forward)
+            throw new ArgumentException($"Use {nameof(EnqueueSend)} for {operation} operations.", nameof(operation));
+
+        // Resolve to canonical DB ID — also checks enabled state
+        var dbAccount = accountRepo.ResolveEnabledAccount(accountId)
+            ?? throw new InvalidOperationException($"Account '{accountId}' not found.");
+        var resolvedId = dbAccount.Id;
 
         var priority = operation switch
         {
-            OperationType.Send or OperationType.Reply or OperationType.Forward => OperationPriority.P0,
             OperationType.BulkDelete or OperationType.BulkMove => OperationPriority.P2,
             _ => OperationPriority.P1
         };

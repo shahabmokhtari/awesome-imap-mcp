@@ -121,7 +121,11 @@ public class QueueWorker(
                 logger.LogError(ex, "Operation {Id} ({Type}) failed on attempt {Attempt}/{Max}",
                     op.Id, op.Operation, op.RetryCount + 1, op.MaxRetries);
 
-                if (op.RetryCount + 1 >= op.MaxRetries)
+                // Permanent failures — server explicitly rejected the command, no point retrying
+                var isPermanent = ex is MailKit.Net.Imap.ImapCommandException ice
+                    && ice.Response == MailKit.Net.Imap.ImapCommandResponse.Bad;
+
+                if (isPermanent || op.RetryCount + 1 >= op.MaxRetries)
                 {
                     repo.MarkFailed(op.Id, ex.Message, incrementRetry: true);
                 }

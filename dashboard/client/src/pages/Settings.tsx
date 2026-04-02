@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useSettings, useUpdateSettings, useAuthStatus, useChangePin, useSetupPin, useLlmModels, useTestLlm, useServerInfo, useShutdownServer, useInstances, useShutdownInstance, useAccounts, useClearCache, useClearAccountCache, type InstanceHeartbeat } from '../hooks/useApi'
+import { useSettings, useUpdateSettings, useAuthStatus, useChangePin, useSetupPin, useLlmModels, useTestLlm, useServerInfo, useShutdownServer, useInstances, useShutdownInstance, useAccounts, useClearCache, useClearAccountCache, useCacheStats, type InstanceHeartbeat } from '../hooks/useApi'
 
 /** Fields that require a server restart when changed. */
 const RESTART_FIELDS = new Set([
@@ -798,6 +798,72 @@ function AnalysisPromptsCard({ settings, onSave, saving }: {
 }
 
 // ---------------------------------------------------------------------------
+// Cache Statistics card
+// ---------------------------------------------------------------------------
+
+function CacheStatsCard() {
+  const { data: stats, isLoading, error } = useCacheStats()
+
+  if (isLoading) return <div className="bg-white rounded-xl shadow p-6"><p className="text-gray-400">Loading cache stats...</p></div>
+  if (error || !stats) return null
+
+  const fmt = (n: number) => n.toLocaleString()
+  const fmtDate = (d: string | null) => {
+    if (!d) return '\u2014'
+    try { return new Date(d).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) }
+    catch { return d }
+  }
+
+  return (
+    <div className="bg-white rounded-xl shadow p-6">
+      <h2 className="text-lg font-semibold mb-4">Cache Statistics</h2>
+      <div className="grid grid-cols-4 gap-4 mb-4">
+        <div className="text-center">
+          <div className="text-2xl font-bold text-blue-600">{fmt(stats.totalMessages)}</div>
+          <div className="text-xs text-gray-500">Total Messages</div>
+        </div>
+        <div className="text-center">
+          <div className="text-2xl font-bold text-green-600">{fmt(stats.bodiesFetched)}</div>
+          <div className="text-xs text-gray-500">Bodies Cached</div>
+        </div>
+        <div className="text-center">
+          <div className="text-2xl font-bold text-purple-600">{stats.dbSizeMb} MB</div>
+          <div className="text-xs text-gray-500">Database Size</div>
+        </div>
+        <div className="text-center">
+          <div className="text-2xl font-bold text-orange-500">{stats.dbFreeSpaceMb} MB</div>
+          <div className="text-xs text-gray-500">Reclaimable</div>
+        </div>
+      </div>
+      {stats.accounts.length > 0 && (
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-left text-gray-500 border-b">
+              <th className="py-1">Account</th>
+              <th className="py-1 text-right">Messages</th>
+              <th className="py-1 text-right">Bodies</th>
+              <th className="py-1 text-right">Oldest</th>
+              <th className="py-1 text-right">Newest</th>
+            </tr>
+          </thead>
+          <tbody>
+            {stats.accounts.map(a => (
+              <tr key={a.accountId} className="border-b border-gray-100">
+                <td className="py-1 truncate max-w-[160px]" title={a.accountId}>{a.accountName}</td>
+                <td className="py-1 text-right">{fmt(a.messageCount)}</td>
+                <td className="py-1 text-right">{fmt(a.bodiesFetched)}</td>
+                <td className="py-1 text-right text-xs">{fmtDate(a.oldestCachedAt)}</td>
+                <td className="py-1 text-right text-xs">{fmtDate(a.newestCachedAt)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Cache Management card
 // ---------------------------------------------------------------------------
 
@@ -883,6 +949,207 @@ function CacheManagementCard() {
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Labels Vocabulary card
+// ---------------------------------------------------------------------------
+
+function LabelsCard({ settings, onSave, saving }: {
+  settings: Record<string, unknown>
+  onSave: (section: string, data: Record<string, unknown>) => void
+  saving: boolean
+}) {
+  const labelsData = settings.labels as { allowCliEdits?: boolean; items?: Array<{ name: string; description: string; category: string }> } | undefined
+  const [allowCliEdits, setAllowCliEdits] = useState(labelsData?.allowCliEdits ?? true)
+  const [items, setItems] = useState<Array<{ name: string; description: string; category: string }>>(labelsData?.items ?? [])
+  const [dirty, setDirty] = useState(false)
+  const [editIdx, setEditIdx] = useState<number | null>(null)
+  const [form, setForm] = useState({ name: '', description: '', category: '' })
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    setAllowCliEdits(labelsData?.allowCliEdits ?? true)
+    setItems(labelsData?.items ?? [])
+    setDirty(false)
+  }, [labelsData?.allowCliEdits, labelsData?.items])
+
+  const validateName = (name: string, excludeIdx?: number): string | null => {
+    if (!name.trim()) return 'Name is required'
+    if (!/^[A-Za-z0-9_$-]+$/.test(name)) return 'Name must contain only letters, digits, hyphens, underscores, or $'
+    const dup = items.findIndex((l, i) => i !== excludeIdx && l.name.toLowerCase() === name.toLowerCase())
+    if (dup >= 0) return `Label '${name}' already exists`
+    return null
+  }
+
+  const handleAdd = () => {
+    const err = validateName(form.name)
+    if (err) { setError(err); return }
+    setItems([...items, { name: form.name.trim(), description: form.description.trim(), category: form.category.trim() }])
+    setForm({ name: '', description: '', category: '' })
+    setError(null)
+    setDirty(true)
+  }
+
+  const handleUpdate = () => {
+    if (editIdx === null) return
+    const err = validateName(form.name, editIdx)
+    if (err) { setError(err); return }
+    const updated = [...items]
+    updated[editIdx] = { name: form.name.trim(), description: form.description.trim(), category: form.category.trim() }
+    setItems(updated)
+    setEditIdx(null)
+    setForm({ name: '', description: '', category: '' })
+    setError(null)
+    setDirty(true)
+  }
+
+  const handleRemove = (idx: number) => {
+    setItems(items.filter((_, i) => i !== idx))
+    if (editIdx === idx) { setEditIdx(null); setForm({ name: '', description: '', category: '' }) }
+    setDirty(true)
+  }
+
+  const handleEdit = (idx: number) => {
+    setEditIdx(idx)
+    setForm({ ...items[idx] })
+    setError(null)
+  }
+
+  const handleCancelEdit = () => {
+    setEditIdx(null)
+    setForm({ name: '', description: '', category: '' })
+    setError(null)
+  }
+
+  const handleToggleCliEdits = () => {
+    setAllowCliEdits(!allowCliEdits)
+    setDirty(true)
+  }
+
+  const handleSave = () => {
+    onSave('labels', { allowCliEdits, items })
+    setDirty(false)
+  }
+
+  // Group items by category for display
+  const categories = [...new Set(items.map(l => l.category || 'Uncategorized'))]
+
+  return (
+    <div className="bg-white rounded-lg shadow p-5">
+      <h3 className="text-lg font-medium text-gray-800 mb-2">Label Vocabulary</h3>
+      <p className="text-sm text-gray-500 mb-4">
+        Define a shared set of labels for consistent use across CLI sessions. Labels are advisory — CLIs can still use any label.
+      </p>
+
+      {/* Allow CLI edits toggle */}
+      <label className="flex items-center gap-2 mb-4 cursor-pointer">
+        <input type="checkbox" checked={allowCliEdits} onChange={handleToggleCliEdits} className="rounded" />
+        <span className="text-sm text-gray-700">Allow CLI tools to add/update/remove labels</span>
+      </label>
+
+      {/* Label list grouped by category */}
+      {items.length > 0 ? (
+        <div className="space-y-4 mb-4">
+          {categories.map(cat => (
+            <div key={cat}>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">{cat}</p>
+              <div className="space-y-1">
+                {items.map((label, idx) => {
+                  if ((label.category || 'Uncategorized') !== cat) return null
+                  return (
+                    <div key={idx} className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-md">
+                      <div className="flex-1 min-w-0">
+                        <span className="text-sm font-mono font-medium text-gray-900">{label.name}</span>
+                        {label.description && (
+                          <span className="text-sm text-gray-500 ml-2">— {label.description}</span>
+                        )}
+                      </div>
+                      <div className="flex gap-1 ml-2">
+                        <button
+                          onClick={() => handleEdit(idx)}
+                          className="px-2 py-1 text-xs text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleRemove(idx)}
+                          className="px-2 py-1 text-xs text-red-600 hover:bg-red-50 rounded transition-colors"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="text-sm text-gray-400 mb-4">No labels configured.</p>
+      )}
+
+      {/* Add / Edit form */}
+      <div className="border border-gray-200 rounded-lg p-3 mb-4">
+        <p className="text-sm font-medium text-gray-700 mb-2">
+          {editIdx !== null ? `Edit label: ${items[editIdx]?.name}` : 'Add a new label'}
+        </p>
+        <div className="grid grid-cols-3 gap-2 mb-2">
+          <input
+            type="text"
+            placeholder="Name"
+            value={form.name}
+            onChange={e => { setForm({ ...form, name: e.target.value }); setError(null) }}
+            disabled={editIdx !== null}
+            className="border border-gray-300 rounded-md px-3 py-1.5 text-sm disabled:bg-gray-100"
+          />
+          <input
+            type="text"
+            placeholder="Description"
+            value={form.description}
+            onChange={e => setForm({ ...form, description: e.target.value })}
+            className="border border-gray-300 rounded-md px-3 py-1.5 text-sm"
+          />
+          <input
+            type="text"
+            placeholder="Category"
+            value={form.category}
+            onChange={e => setForm({ ...form, category: e.target.value })}
+            className="border border-gray-300 rounded-md px-3 py-1.5 text-sm"
+          />
+        </div>
+        {error && <p className="text-xs text-red-600 mb-2">{error}</p>}
+        <div className="flex gap-2">
+          {editIdx !== null ? (
+            <>
+              <button onClick={handleUpdate} className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors">
+                Update
+              </button>
+              <button onClick={handleCancelEdit} className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-md transition-colors">
+                Cancel
+              </button>
+            </>
+          ) : (
+            <button onClick={handleAdd} className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors">
+              Add Label
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Save button */}
+      {dirty && (
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors disabled:opacity-50"
+        >
+          {saving ? 'Saving...' : 'Save Labels'}
+        </button>
+      )}
     </div>
   )
 }
@@ -978,8 +1245,16 @@ export default function Settings() {
         {/* Dashboard PIN card - always shown */}
         <DashboardPinCard />
 
+        {/* Cache statistics card */}
+        <CacheStatsCard />
+
         {/* Cache management card */}
         <CacheManagementCard />
+
+        {/* Labels vocabulary card */}
+        {settings && (
+          <LabelsCard settings={settings as Record<string, unknown>} onSave={handleSave} saving={updateSettings.isPending} />
+        )}
 
         {/* Settings section cards */}
         {settings && (
@@ -993,6 +1268,7 @@ export default function Settings() {
                   </div>
                 )
               }
+              if (section === 'labels') return null
               if (section === 'llm') {
                 return (
                   <div key={section} className="space-y-6">

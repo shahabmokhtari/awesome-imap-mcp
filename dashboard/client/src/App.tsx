@@ -11,6 +11,7 @@ import SetupWizard from './pages/SetupWizard'
 import OAuthCallback from './pages/OAuthCallback'
 import PinLogin from './pages/PinLogin'
 import Messages from './pages/Messages'
+import Duplicates from './pages/Duplicates'
 import Logs from './pages/Logs'
 import Tools from './pages/Tools'
 
@@ -18,6 +19,7 @@ const navItems = [
   { to: '/', label: 'Overview' },
   { to: '/accounts', label: 'Accounts' },
   { to: '/messages', label: 'Messages' },
+  { to: '/duplicates', label: 'Duplicates' },
   { to: '/sync', label: 'Sync' },
   { to: '/queue', label: 'Queue' },
   { to: '/logs', label: 'Logs' },
@@ -83,6 +85,7 @@ function MainLayout({ onLogout }: { onLogout?: () => void }) {
           <Route path="/" element={<Overview />} />
           <Route path="/accounts" element={<Accounts />} />
           <Route path="/messages" element={<Messages />} />
+          <Route path="/duplicates" element={<Duplicates />} />
           <Route path="/sync" element={<Sync />} />
           <Route path="/queue" element={<Queue />} />
           <Route path="/logs" element={<Logs />} />
@@ -118,9 +121,9 @@ function SetupGuard() {
 
   const pinIsSet = authStatus?.hasPinSet === true
 
-  // If accounts request failed (likely 401 from stale token), clear token and reset auth state
+  // If accounts request failed with 401 (stale token), clear token and reset auth state
   useEffect(() => {
-    if (pinIsSet && accountsError && authed) {
+    if (pinIsSet && accountsError && authed && 'status' in accountsError && (accountsError as { status: number }).status === 401) {
       localStorage.removeItem('dashboard_token')
       setAuthed(false)
     }

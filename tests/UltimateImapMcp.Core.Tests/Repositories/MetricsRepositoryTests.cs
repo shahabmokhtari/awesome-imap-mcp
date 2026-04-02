@@ -6,14 +6,13 @@ namespace UltimateImapMcp.Core.Tests.Repositories;
 public class MetricsRepositoryTests : IDisposable
 {
     private readonly string _dbPath;
-    private readonly AppDatabase _db;
+    private readonly MetricsDatabase _db;
     private readonly MetricsRepository _repo;
 
     public MetricsRepositoryTests()
     {
         _dbPath = Path.Combine(Path.GetTempPath(), $"test_metrics_{Guid.NewGuid()}.db");
-        _db = new AppDatabase(_dbPath);
-        MigrationRunner.Migrate(_db);
+        _db = new MetricsDatabase(_dbPath);
         _repo = new MetricsRepository(_db);
     }
 
@@ -77,10 +76,12 @@ public class MetricsRepositoryTests : IDisposable
     public void Prune_DeletesOldEntries()
     {
         // Insert an entry manually with an old timestamp
-        var conn = _db.GetWriteConnection();
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = "INSERT INTO metrics (name, value, recorded_at) VALUES ('old', 1.0, datetime('now', '-30 days'));";
-        cmd.ExecuteNonQuery();
+        _db.ExecuteWrite(conn =>
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "INSERT INTO metrics (name, value, recorded_at) VALUES ('old', 1.0, datetime('now', '-30 days'));";
+            cmd.ExecuteNonQuery();
+        });
 
         _repo.Record("new", 2.0);
 

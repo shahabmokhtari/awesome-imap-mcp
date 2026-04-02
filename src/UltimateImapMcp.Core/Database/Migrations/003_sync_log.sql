@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS sync_log (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    account_id      TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    account_id      TEXT NOT NULL,
     folder_id       INTEGER REFERENCES folders(id) ON DELETE CASCADE,
     sync_type       TEXT NOT NULL,
     status          TEXT NOT NULL,

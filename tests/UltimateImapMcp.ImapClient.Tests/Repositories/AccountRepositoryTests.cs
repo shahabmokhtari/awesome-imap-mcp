@@ -1,20 +1,19 @@
-using UltimateImapMcp.Core.Database;
+using UltimateImapMcp.Core.Configuration;
 using UltimateImapMcp.ImapClient.Repositories;
 
 namespace UltimateImapMcp.ImapClient.Tests.Repositories;
 
 public class AccountRepositoryTests : IDisposable
 {
-    private readonly string _dbPath;
-    private readonly AppDatabase _db;
+    private readonly string _accountsPath;
+    private readonly AccountsStore _store;
     private readonly AccountRepository _repo;
 
     public AccountRepositoryTests()
     {
-        _dbPath = Path.Combine(Path.GetTempPath(), $"test_{Guid.NewGuid()}.db");
-        _db = new AppDatabase(_dbPath);
-        MigrationRunner.Migrate(_db);
-        _repo = new AccountRepository(_db);
+        _accountsPath = Path.Combine(Path.GetTempPath(), $"test_accounts_{Guid.NewGuid()}.json");
+        _store = new AccountsStore(_accountsPath);
+        _repo = new AccountRepository(_store);
     }
 
     [Fact]
@@ -52,9 +51,6 @@ public class AccountRepositoryTests : IDisposable
 
     public void Dispose()
     {
-        _db.Dispose();
-        if (File.Exists(_dbPath)) File.Delete(_dbPath);
-        if (File.Exists(_dbPath + "-wal")) File.Delete(_dbPath + "-wal");
-        if (File.Exists(_dbPath + "-shm")) File.Delete(_dbPath + "-shm");
+        if (File.Exists(_accountsPath)) File.Delete(_accountsPath);
     }
 }

@@ -9,7 +9,7 @@ public record LogRecord(int Id, string Level, string Category, string Message,
 /// <summary>
 /// Reads and writes the logs table for structured application logs.
 /// </summary>
-public class LogsRepository(AppDatabase db)
+public class LogsRepository(LogsDatabase db)
 {
     /// <summary>
     /// Writes a single log entry.

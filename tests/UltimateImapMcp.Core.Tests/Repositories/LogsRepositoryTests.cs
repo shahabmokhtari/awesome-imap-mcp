@@ -6,14 +6,13 @@ namespace UltimateImapMcp.Core.Tests.Repositories;
 public class LogsRepositoryTests : IDisposable
 {
     private readonly string _dbPath;
-    private readonly AppDatabase _db;
+    private readonly LogsDatabase _db;
     private readonly LogsRepository _repo;
 
     public LogsRepositoryTests()
     {
         _dbPath = Path.Combine(Path.GetTempPath(), $"test_logs_{Guid.NewGuid()}.db");
-        _db = new AppDatabase(_dbPath);
-        MigrationRunner.Migrate(_db);
+        _db = new LogsDatabase(_dbPath);
         _repo = new LogsRepository(_db);
     }
 
@@ -195,10 +194,12 @@ public class LogsRepositoryTests : IDisposable
     public void Prune_DeletesOldDebugLogs()
     {
         // Insert an old debug log
-        var conn = _db.GetWriteConnection();
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = "INSERT INTO logs (level, category, message, created_at) VALUES ('Debug', 'Test', 'Old debug', datetime('now', '-10 days'));";
-        cmd.ExecuteNonQuery();
+        _db.ExecuteWrite(conn =>
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "INSERT INTO logs (level, category, message, created_at) VALUES ('Debug', 'Test', 'Old debug', datetime('now', '-10 days'));";
+            cmd.ExecuteNonQuery();
+        });
 
         // Insert a recent debug log
         _repo.Write("Debug", "Test", "New debug");
@@ -218,10 +219,12 @@ public class LogsRepositoryTests : IDisposable
         _repo.Write("Error", "Test", "Recent error");
 
         // Insert an old error
-        var conn = _db.GetWriteConnection();
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = "INSERT INTO logs (level, category, message, created_at) VALUES ('Error', 'Test', 'Old error', datetime('now', '-100 days'));";
-        cmd.ExecuteNonQuery();
+        _db.ExecuteWrite(conn =>
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "INSERT INTO logs (level, category, message, created_at) VALUES ('Error', 'Test', 'Old error', datetime('now', '-100 days'));";
+            cmd.ExecuteNonQuery();
+        });
 
         var deleted = _repo.Prune(debugDays: 7, infoDays: 30, errorDays: 90);
         Assert.Equal(1, deleted);

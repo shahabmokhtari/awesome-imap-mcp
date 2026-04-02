@@ -22,6 +22,8 @@ using UltimateImapMcp.Queue.Executors;
 using UltimateImapMcp.Core.Email;
 using UltimateImapMcp.RestBackend;
 using UltimateImapMcp.RestBackend.Zoho;
+using UltimateImapMcp.McpServer;
+using UltimateImapMcp.McpServer.Tools;
 
 var builder = Host.CreateApplicationBuilder(args);
 builder.Logging.AddConsole(options =>
@@ -75,30 +77,42 @@ if (args.Contains("--dashboard-auto-open"))
 }
 
 var dbPath = ConfigLoader.ResolveDbPath(config.Cache.DbPath);
+var dbDir = Path.GetDirectoryName(dbPath)!;
 var database = new AppDatabase(dbPath);
 MigrationRunner.Migrate(database);
 
-var healthDbPath = Path.Combine(Path.GetDirectoryName(dbPath)!, "health.db");
+var healthDbPath = Path.Combine(dbDir, "health.db");
 var healthDatabase = new HealthDatabase(healthDbPath);
+
+var labelsDb = new LabelsDatabase(Path.Combine(dbDir, "labels.db"));
+
+var metricsDb = new MetricsDatabase(Path.Combine(dbDir, "metrics.db"));
+var logsDb = new LogsDatabase(Path.Combine(dbDir, "logs.db"));
 builder.Services.AddSingleton(healthDatabase);
+builder.Services.AddSingleton(labelsDb);
+builder.Services.AddSingleton<LocalLabelRepository>();
 
 builder.Services.AddSingleton<Func<int>>(sp =>
 {
     var repo = sp.GetRequiredService<AccountRepository>();
-    return () => { try { return repo.GetAll().Count; } catch { return 0; } };
+    return () => { try { return repo.GetAll().Count; } catch (Exception ex) { Console.Error.WriteLine($"[Heartbeat] Account count failed: {ex.Message}"); return 0; } };
 });
 builder.Services.AddSingleton<IInstanceCoordinator, InstanceCoordinator>();
 builder.Services.AddHostedService(sp => (InstanceCoordinator)sp.GetRequiredService<IInstanceCoordinator>());
 
+// Create the shared accounts store (accounts.json, same directory as config.json)
+var accountsPath = AccountsStore.ResolveAccountsPath(config.SourcePath);
+var accountsStore = new AccountsStore(accountsPath);
+
 // Clean up orphaned OAuth tokens from previously deleted accounts
-new OAuthTokenRepository(database).CleanOrphans();
+new OAuthTokenRepository(accountsStore).CleanOrphans();
 
 var passphrase = Environment.GetEnvironmentVariable("UIMAP_PASSPHRASE");
 var encryptor = passphrase != null ? new CredentialEncryptor(passphrase) : CredentialEncryptor.FromMachineId();
 
-// --- Import config-file accounts into the DB (seed data) ---
+// --- Import config-file accounts into accounts.json (seed data) ---
 {
-    var accountRepo = new AccountRepository(database);
+    var accountRepo = new AccountRepository(accountsStore);
     var imported = 0;
     foreach (var acct in config.Accounts)
     {
@@ -130,20 +144,25 @@ var encryptor = passphrase != null ? new CredentialEncryptor(passphrase) : Crede
             acct.SmtpHost, acct.SmtpPort, acct.SmtpUseSsl,
             acct.Username, acct.AuthType, credEnc, acct.Provider, configJson);
 
+        // Respect the enabled field from config (defaults to true)
+        if (!acct.Enabled)
+            accountRepo.SetEnabled(id, false);
+
         if (string.IsNullOrEmpty(acct.Password) && !acct.AuthType.Equals("oauth2", StringComparison.OrdinalIgnoreCase))
         {
             Console.Error.WriteLine($"  WARNING: Account '{acct.Name}' has no password. Set the env var or update via dashboard.");
         }
 
         imported++;
-        Console.Error.WriteLine($"  Imported config account '{acct.Name}' into DB (id: {id})");
+        Console.Error.WriteLine($"  Imported config account '{acct.Name}' into accounts.json (id: {id})");
     }
     if (imported > 0)
-        Console.Error.WriteLine($"  Imported {imported} config account(s) into database.");
+        Console.Error.WriteLine($"  Imported {imported} config account(s) into accounts.json.");
 }
 
 builder.Services.AddSingleton(config);
 builder.Services.AddSingleton(database);
+builder.Services.AddSingleton(accountsStore);
 builder.Services.AddSingleton(encryptor);
 builder.Services.AddSingleton<ProviderProfileRegistry>();
 builder.Services.AddSingleton<AccountRepository>();
@@ -180,6 +199,7 @@ builder.Services.AddSingleton<IOperationExecutor, SendExecutor>();
 builder.Services.AddSingleton<IOperationExecutor, DeleteExecutor>();
 builder.Services.AddSingleton<IOperationExecutor, MoveExecutor>();
 builder.Services.AddSingleton<IOperationExecutor, FlagExecutor>();
+builder.Services.AddSingleton<IOperationExecutor, LabelExecutor>();
 builder.Services.AddHostedService<QueueWorker>();
 
 // LLM Analysis
@@ -225,9 +245,11 @@ builder.Services.AddSingleton<IEmailAnalyzer>(sp =>
     };
 });
 
-// Observability
-builder.Services.AddSingleton<MetricsRepository>();
-var logsRepository = new LogsRepository(database);
+// Observability — separate databases for metrics and logs
+builder.Services.AddSingleton(metricsDb);
+builder.Services.AddSingleton(new MetricsRepository(metricsDb));
+var logsRepository = new LogsRepository(logsDb);
+builder.Services.AddSingleton(logsDb);
 builder.Services.AddSingleton(logsRepository);
 builder.Services.AddSingleton(config.Metrics);
 builder.Services.AddHostedService<MetricsCollector>();
@@ -240,10 +262,28 @@ builder.Logging.AddProvider(new SqliteLoggerProvider(logsRepository, instanceId)
     var logDir = config.Server.LogDir
         ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
             ".ultimate-imap-mcp", "logs");
-    builder.Logging.AddProvider(new FileLoggerProvider(logDir, instanceId));
+    builder.Logging.AddProvider(new FileLoggerProvider(logDir, instanceId, config.Server.LogDirMaxSizeMb));
 }
 
 var transport = config.Server.Transport;
+
+// Wrap stdio streams with protocol logger when verbose logging is enabled
+if (config.Server.LogProtocol && transport is "stdio" or "both")
+{
+    var protocolLogDir = config.Server.LogDir
+        ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            ".ultimate-imap-mcp", "logs");
+    var protocolLogger = LoggerFactory.Create(lb =>
+    {
+        lb.SetMinimumLevel(LogLevel.Debug);
+        lb.AddProvider(new FileLoggerProvider(protocolLogDir, instanceId, config.Server.LogDirMaxSizeMb));
+    }).CreateLogger("MCP.Protocol");
+
+    var wrappedIn = new McpProtocolLogger(Console.OpenStandardInput(), protocolLogger, "IN");
+    var wrappedOut = new McpProtocolLogger(Console.OpenStandardOutput(), protocolLogger, "OUT");
+    Console.SetIn(new StreamReader(wrappedIn));
+    Console.SetOut(new StreamWriter(wrappedOut) { AutoFlush = true });
+}
 
 // Dashboard (conditional) — DashboardHost handles port standby internally
 if (config.Server.DashboardEnabled)
@@ -261,11 +301,10 @@ if (transport is "stdio" or "both")
     .WithToolsFromAssembly();
 }
 
-if (transport is "http" or "both")
-{
-    builder.Services.AddSingleton<UltimateImapMcp.McpServer.HttpMcpTransportHost>();
-    builder.Services.AddHostedService(sp => sp.GetRequiredService<UltimateImapMcp.McpServer.HttpMcpTransportHost>());
-}
+// Always register HTTP host — serves tool API for multi-instance proxy.
+// MCP HTTP transport is only added when configured (handled inside HttpMcpTransportHost).
+builder.Services.AddSingleton<UltimateImapMcp.McpServer.HttpMcpTransportHost>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<UltimateImapMcp.McpServer.HttpMcpTransportHost>());
 
 var host = builder.Build();
 
@@ -276,6 +315,26 @@ var host = builder.Build();
         .OfType<UltimateImapMcp.Dashboard.DashboardHost>().FirstOrDefault();
     if (coordinator is not null && dashboardHost is not null)
         coordinator.SetDashboardActiveProvider(() => dashboardHost.IsActivelyServing);
+}
+
+// Multi-instance mode detection
+{
+    var httpPort = config.Server.HttpPort;
+    var isSecondary = PortUtils.IsPortInUse(httpPort);
+
+    if (isSecondary)
+    {
+        var proxyUrl = $"http://localhost:{httpPort}";
+        Console.Error.WriteLine($"  [Multi-Instance] Port {httpPort} in use — running as secondary. Proxying tools to {proxyUrl}");
+        McpJsonDefaults.ToolProxy = new UltimateImapMcp.Core.Coordination.ProxyToolExecutor(proxyUrl);
+
+        var httpHost = host.Services.GetRequiredService<UltimateImapMcp.McpServer.HttpMcpTransportHost>();
+        httpHost.SetProxyBaseUrl(proxyUrl);
+    }
+    else
+    {
+        Console.Error.WriteLine($"  [Multi-Instance] Port {httpPort} available — running as primary");
+    }
 }
 
 // Wire sync events to the dashboard event bus (if dashboard is enabled)
@@ -319,9 +378,29 @@ static T GetProp<T>(object obj, string name)
     return prop is not null ? (T)prop.GetValue(obj)! : default!;
 }
 
+// Repair orphaned messages missing junction table entries (one-time fix on startup)
+{
+    var repairRepo = new MessageRepository(database);
+    var repaired = repairRepo.RepairMissingFolderLinks();
+    if (repaired > 0)
+        Console.Error.WriteLine($"  [Startup] Repaired {repaired} messages with missing folder links.");
+}
+
+// Reconcile local labels — ensures labels persist across cache rebuilds
+{
+    var reconcileRepo = new LocalLabelRepository(labelsDb);
+    var reconcileAccounts = new AccountRepository(accountsStore);
+    foreach (var account in reconcileAccounts.GetAll())
+    {
+        var count = reconcileRepo.ReconcileLabels(account.Id, database);
+        if (count > 0)
+            Console.Error.WriteLine($"  [Startup] Reconciled {count} local labels for account '{account.Name}'.");
+    }
+}
+
 // Print startup banner to stderr (stdout is reserved for MCP stdio protocol)
 {
-    var bannerRepo = new AccountRepository(database);
+    var bannerRepo = new AccountRepository(accountsStore);
     var dbAccounts = bannerRepo.GetAll();
     PrintStartupBanner(config, configPath, dbAccounts);
 }

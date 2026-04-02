@@ -11,12 +11,6 @@ namespace UltimateImapMcp.Dashboard;
 
 public static class ToolsApi
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        WriteIndented = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-    };
-
     /// <summary>
     /// Cached tool metadata, built once on first request via assembly scanning.
     /// </summary>
@@ -49,8 +43,9 @@ public static class ToolsApi
                 label = $"{a.Name} ({a.Provider})"
             }).ToList();
 
-            // Folder paths per account
+            // Folder paths and IDs per account (single query per account)
             var folderPaths = new List<object>();
+            var folderIdSuggestions = new List<object>();
             foreach (var account in accounts)
             {
                 var folders = folderRepo.GetByAccount(account.Id);
@@ -62,17 +57,6 @@ public static class ToolsApi
                         label = $"{f.DisplayName ?? f.Path} — {account.Name}",
                         accountId = account.Id
                     });
-                }
-            }
-            suggestions["folderPath"] = folderPaths;
-
-            // Folder IDs per account
-            var folderIdSuggestions = new List<object>();
-            foreach (var account in accounts)
-            {
-                var folders = folderRepo.GetByAccount(account.Id);
-                foreach (var f in folders)
-                {
                     folderIdSuggestions.Add(new
                     {
                         value = f.Id,
@@ -81,6 +65,7 @@ public static class ToolsApi
                     });
                 }
             }
+            suggestions["folderPath"] = folderPaths;
             suggestions["folderId"] = folderIdSuggestions;
 
             // Recent message UIDs per account (last 20 per account)

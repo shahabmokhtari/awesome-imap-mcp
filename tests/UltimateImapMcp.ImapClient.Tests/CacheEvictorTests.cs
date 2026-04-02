@@ -18,6 +18,7 @@ file sealed class AlwaysLeaderCoordinator : IInstanceCoordinator
 public class CacheEvictorTests : IDisposable
 {
     private readonly string _dbPath;
+    private readonly string _accountsPath;
     private readonly AppDatabase _db;
     private readonly AccountRepository _accountRepo;
     private readonly FolderRepository _folderRepo;
@@ -26,9 +27,11 @@ public class CacheEvictorTests : IDisposable
     public CacheEvictorTests()
     {
         _dbPath = Path.Combine(Path.GetTempPath(), $"test_evictor_{Guid.NewGuid()}.db");
+        _accountsPath = Path.Combine(Path.GetTempPath(), $"test_accounts_{Guid.NewGuid()}.json");
         _db = new AppDatabase(_dbPath);
         MigrationRunner.Migrate(_db);
-        _accountRepo = new AccountRepository(_db);
+        var store = new AccountsStore(_accountsPath);
+        _accountRepo = new AccountRepository(store);
         _folderRepo = new FolderRepository(_db);
         _messageRepo = new MessageRepository(_db);
 
@@ -283,5 +286,6 @@ public class CacheEvictorTests : IDisposable
         if (File.Exists(_dbPath)) File.Delete(_dbPath);
         if (File.Exists(_dbPath + "-wal")) File.Delete(_dbPath + "-wal");
         if (File.Exists(_dbPath + "-shm")) File.Delete(_dbPath + "-shm");
+        if (File.Exists(_accountsPath)) File.Delete(_accountsPath);
     }
 }

@@ -9,13 +9,16 @@ namespace UltimateImapMcp.ImapClient;
 
 /// <summary>
 /// Synchronises IMAP folder metadata and messages into the local SQLite cache.
-/// Phase 1: full UID-range sync. Incremental delta sync deferred to Phase 3.
+/// Uses contiguous UID-range sync: compares all server UIDs against the local
+/// cache and fetches missing messages newest-first in batches.
 /// </summary>
 public sealed class ImapSyncService
 {
     private readonly FolderRepository _folderRepo;
     private readonly MessageRepository _messageRepo;
     private readonly AttachmentRepository _attachmentRepo;
+    // Tracks accounts where BodyStructure fetch causes ImapProtocolException
+    private readonly HashSet<string> _skipBodyStructureAccounts = new();
 
     public ImapSyncService(
         FolderRepository folderRepo,
@@ -144,8 +147,18 @@ public sealed class ImapSyncService
             {
                 const int batchSize = 200;
                 var batch = missingUids.Take(batchSize).ToList();
-                await FetchAndStoreMessagesAsync(imapFolder, accountId, folder.Id, batch, ct)
-                    .ConfigureAwait(false);
+                try
+                {
+                    await FetchAndStoreMessagesAsync(imapFolder, accountId, folder.Id, batch, ct)
+                        .ConfigureAwait(false);
+                }
+                catch (MailKit.Net.Imap.ImapProtocolException) when (!_skipBodyStructureAccounts.Contains(accountId))
+                {
+                    // BodyStructure parsing failed — mark account and rethrow so connection
+                    // gets rebuilt. Next sync cycle will skip BodyStructure for this account.
+                    _skipBodyStructureAccounts.Add(accountId);
+                    throw;
+                }
             }
 
             // Soft-delete messages that were removed from the server
@@ -175,7 +188,10 @@ public sealed class ImapSyncService
         }
         finally
         {
-            await imapFolder.CloseAsync(false, ct).ConfigureAwait(false);
+            try { await imapFolder.CloseAsync(false, ct).ConfigureAwait(false); }
+            catch (Exception ex) when (ex is MailKit.ServiceNotConnectedException
+                or MailKit.ServiceNotAuthenticatedException
+                or IOException or OperationCanceledException) { /* connection already dead */ }
         }
     }
 
@@ -257,7 +273,10 @@ public sealed class ImapSyncService
         }
         finally
         {
-            await imapFolder.CloseAsync(false, ct).ConfigureAwait(false);
+            try { await imapFolder.CloseAsync(false, ct).ConfigureAwait(false); }
+            catch (Exception ex) when (ex is MailKit.ServiceNotConnectedException
+                or MailKit.ServiceNotAuthenticatedException
+                or IOException or OperationCanceledException) { /* connection already dead */ }
         }
     }
 
@@ -273,13 +292,17 @@ public sealed class ImapSyncService
         IMailFolder imapFolder, string accountId, int folderId,
         IList<UniqueId> uids, CancellationToken ct, bool synced = true)
     {
-        var fetchRequest = new FetchRequest(
-            MessageSummaryItems.UniqueId |
+        // Some servers (e.g., Zoho) return malformed BODYSTRUCTURE that kills the connection.
+        // Once detected for an account, skip BodyStructure on all subsequent fetches.
+        var useBodyStructure = !_skipBodyStructureAccounts.Contains(accountId);
+
+        var items = MessageSummaryItems.UniqueId |
             MessageSummaryItems.Envelope |
             MessageSummaryItems.Flags |
-            MessageSummaryItems.Size |
-            MessageSummaryItems.BodyStructure,
-            new[] { "References" });
+            MessageSummaryItems.Size;
+        if (useBodyStructure) items |= MessageSummaryItems.BodyStructure;
+
+        var fetchRequest = new FetchRequest(items, new[] { "References" });
 
         IList<IMessageSummary> summaries = await imapFolder
             .FetchAsync(uids, fetchRequest, ct)
@@ -340,9 +363,11 @@ public sealed class ImapSyncService
                 }
             }
             catch (Exception ex) when (ex is MailKit.Net.Imap.ImapProtocolException
-                or IOException or OperationCanceledException or InvalidOperationException)
+                or IOException or OperationCanceledException or InvalidOperationException
+                or FormatException)
             {
-                // Non-critical -- fall back to subject.
+                // Non-critical -- fall back to subject. FormatException occurs when
+                // MimeKit encounters malformed MIME headers in broken emails.
                 snippet = subject is not null
                     ? MessageParser.GenerateSnippet(subject)
                     : null;

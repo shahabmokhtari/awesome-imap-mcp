@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS operation_queue (
     id              TEXT PRIMARY KEY,
-    account_id      TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    account_id      TEXT NOT NULL,
     operation       TEXT NOT NULL,
     priority        INTEGER NOT NULL DEFAULT 1,
     status          TEXT NOT NULL DEFAULT 'pending',

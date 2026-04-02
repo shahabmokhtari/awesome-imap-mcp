@@ -24,10 +24,13 @@ public class SendExecutor(AccountRepository accountRepo, CredentialEncryptor enc
 
         var message = new MimeMessage();
         message.From.Add(MailboxAddress.Parse(accountConfig.Username));
-        message.To.Add(MailboxAddress.Parse(payload.GetProperty("to").GetString()!));
+        message.To.AddRange(InternetAddressList.Parse(payload.GetProperty("to").GetString()!));
 
         if (payload.TryGetProperty("cc", out var cc) && cc.ValueKind == JsonValueKind.String)
-            message.Cc.Add(MailboxAddress.Parse(cc.GetString()!));
+            message.Cc.AddRange(InternetAddressList.Parse(cc.GetString()!));
+
+        if (payload.TryGetProperty("bcc", out var bcc) && bcc.ValueKind == JsonValueKind.String)
+            message.Bcc.AddRange(InternetAddressList.Parse(bcc.GetString()!));
 
         message.Subject = payload.GetProperty("subject").GetString() ?? "";
 

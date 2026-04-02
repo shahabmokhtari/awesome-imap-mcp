@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS llm_rules (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     name            TEXT NOT NULL,
     description     TEXT,
-    account_id      TEXT REFERENCES accounts(id) ON DELETE CASCADE, -- null = all accounts
+    account_id      TEXT, -- null = all accounts
     folder_filter   TEXT,                       -- JSON array of folder roles/paths, null = all
     trigger         TEXT NOT NULL,              -- 'on_new' | 'manual' | 'scheduled'
     schedule_cron   TEXT,                       -- cron expression (if trigger = 'scheduled')

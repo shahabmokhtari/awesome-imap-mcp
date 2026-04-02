@@ -37,8 +37,9 @@ config.json
 .DS_Store
 Thumbs.db
 
-# Claude Code local settings
+# Claude Code local settings & personal memory
 .claude/settings.local.json
+.claude/projects/
 
 # IDE
 .idea/

@@ -8,7 +8,7 @@ namespace UltimateImapMcp.Llm.Acp;
 
 /// <summary>
 /// Lightweight Agent Client Protocol client that spawns an agent process
-/// (e.g., "claude --acp" or "gh copilot --acp") via stdio and communicates
+/// (e.g., "npx claude-code-acp" or "gh copilot --acp") via stdio and communicates
 /// using JSON-RPC 2.0.
 ///
 /// This is a minimal implementation covering only the subset of ACP needed for

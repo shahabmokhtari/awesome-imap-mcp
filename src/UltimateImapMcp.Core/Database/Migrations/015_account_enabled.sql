@@ -1,0 +1,2 @@
+-- Accounts moved to accounts.json.
+-- This migration is now a no-op for the cache database.

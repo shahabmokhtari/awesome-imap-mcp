@@ -2,7 +2,7 @@
 
 A batteries-included MCP server for email. Works with any IMAP provider (Gmail, Outlook, Fastmail, ProtonMail, Yahoo, Zoho, self-hosted, etc.).
 
-Unlike every other email MCP server out there, this one has a **local cache**, an **operation queue with undo**, a **web dashboard with setup wizard**, **OAuth2 sign-in**, and **LLM-powered email analysis**.
+Unlike every other email MCP server out there, this one has a **local cache**, an **operation queue with undo**, a **web dashboard with setup wizard**, **OAuth2 sign-in**, **LLM-powered email analysis**, and **44 MCP tools** covering search, compose, organize, attachments, labels, duplicates, reports, and more.
 
 Built with **.NET 10** and **MailKit** for maximum performance and cross-platform support.
 
@@ -12,8 +12,8 @@ Every existing IMAP MCP server hits the IMAP server on every single tool call. N
 
 ## Key Features
 
-- **OAuth2 sign-in** - one-click sign-in for Gmail, Outlook, and Zoho via PKCE (no client secrets needed). App passwords also supported for all providers
-- **Web dashboard with setup wizard** - guided first-run setup, account management, editable settings, sync monitoring, queue viewer
+- **OAuth2 sign-in** - one-click sign-in for Gmail, Outlook, Yahoo, and Zoho via PKCE (no client secrets needed). App passwords also supported for all providers
+- **Web dashboard with setup wizard** - guided first-run setup, account management, message browsing, editable settings, sync monitoring, queue viewer, duplicate detection, and direct tool execution
 - **Local SQLite cache with full-text search** - instant search, no IMAP round-trips
 - **IMAP IDLE + polling** - real-time inbox sync, configurable per folder
 - **Operation queue** - all writes are queued with priority tiers, retry logic, and undo
@@ -23,12 +23,19 @@ Every existing IMAP MCP server hits the IMAP server on every single tool call. N
 - **Mailbox reports** - volume trends, top senders, category breakdown, spam analysis
 - **Multi-account** - first-class support for multiple email accounts
 - **Thread reconstruction** - groups messages into conversations from headers
+- **Attachments** - list, search, inspect, and download attachments across all accounts
+- **Labels & keywords** - configurable label vocabulary, local storage fallback for servers without keyword support (Yahoo, etc.)
+- **Duplicate detection** - cross-account duplicate detection with selective bulk deletion via queue
 - **Provider quirk profiles** - auto-adapts folder names, auth methods, and search capabilities per provider
+- **Per-account connection throttling** - configurable max IMAP connections per account (default 5)
 - **Token budget awareness** - configurable response sizes so you don't blow context windows
+- **Email security** - DOMPurify HTML sanitization, script stripping, remote resource blocking, default plain text view
 - **Full observability** - metrics, logs, and tracing (OpenTelemetry export optional)
 - **HTTP+SSE transport** - run as stdio (default) or HTTP server for remote MCP clients, or both
+- **Multi-instance support** - leader election via heartbeat coordination; primary/secondary proxy architecture
 - **Port standby** - multiple instances share a port gracefully; standby processes auto-take over when the primary exits
 - **Single-file binaries** - download one file per platform, no runtime dependencies
+- **Multiple SQLite databases** - cache.db, health.db, labels.db, metrics.db, logs.db with WAL mode
 
 ---
 
@@ -112,7 +119,7 @@ Edit `~/.ultimate-imap-mcp/config.json` with your email account details.
 
 #### 2. Set up authentication
 
-**OAuth2 (Gmail, Outlook, Zoho)** — Use the dashboard wizard or the OAuth flow in the Accounts page. No manual token management needed.
+**OAuth2 (Gmail, Outlook, Yahoo, Zoho)** — Use the dashboard wizard or the OAuth flow in the Accounts page. No manual token management needed.
 
 **App Password (all providers)** — Reference environment variables in config using `${ENV_VAR}` syntax:
 
@@ -242,71 +249,141 @@ CLI arguments take precedence over values in the config file. You can also set t
 
 ---
 
-## MCP Tools
-
-### Accounts
-| Tool | Description |
-|------|-------------|
-| `list_accounts` | List all configured email accounts and their status |
-| `get_account_status` | Get detailed status for a specific email account |
-
-### Folders
-| Tool | Description |
-|------|-------------|
-| `list_folders` | List folders for an email account with message and unread counts |
-| `get_folder_stats` | Get detailed stats for a specific folder |
+## MCP Tools (44)
 
 ### Search & Read
 | Tool | Description |
 |------|-------------|
-| `search_emails` | Cache-first full-text search with IMAP fallback. Use `summary_only: true` first |
-| `get_message` | Get a single message by UID with full body content |
-| `get_thread` | Get a full conversation thread by thread ID |
+| `search_emails` | Full-text search with advanced filters (from, to, subject, date range, folder). Searches local cache by default; set `server_search=true` for IMAP server search. Supports `fetchBodies` to auto-fetch bodies inline |
+| `list_emails` | Browse a folder sorted by date with pagination. For keyword search, use `search_emails` |
+| `get_message` | Get a single message with full body, headers, and attachment list. Auto-fetches body from server if not cached |
+| `get_thread` | Get all messages in a conversation thread, ordered by date |
 
 ### Compose (all queued with undo)
 | Tool | Description |
 |------|-------------|
-| `send_email` | Compose and send a new email. Returns `pending_id` and `confirm_mode` |
-| `reply_to` | Reply to an existing email message |
-| `forward` | Forward an email message to one or more recipients |
+| `send_email` | Compose and send a new email. Queued with configurable undo window. Returns `pending_id` |
+| `reply_to` | Reply to an existing email. Supports `reply_all`. Original message automatically quoted |
+| `forward` | Forward an email to new recipients with optional preamble text |
 
 ### Organize (all queued with undo)
 | Tool | Description |
 |------|-------------|
-| `delete_messages` | Delete one or more messages by UID from a folder |
-| `move_messages` | Move messages from one folder to another |
+| `delete_messages` | Delete one or more messages by UID (moved to trash on most servers) |
+| `move_messages` | Move messages between folders (e.g., INBOX to Archive) |
 | `mark_read` | Mark messages as read |
 | `mark_unread` | Mark messages as unread |
-| `flag_messages` | Flag or unflag messages |
-| `label_messages` | Add or remove a label from messages |
+| `flag_messages` | Flag or unflag messages (starred/important marker) |
+| `label_messages` | Add or remove a label (IMAP keyword) from messages |
+
+### Attachments
+| Tool | Description |
+|------|-------------|
+| `list_attachments` | List all attachments for a specific message |
+| `search_attachments` | Search attachments across all messages with filters (filename, content type, date, size) |
+| `get_attachment_info` | Get detailed information about a specific attachment |
+| `download_attachment` | Download an attachment from the IMAP server and save to disk |
+
+### Folders
+| Tool | Description |
+|------|-------------|
+| `list_folders` | List all folders with message counts, unread counts, and sync status |
+| `get_folder_stats` | Get detailed statistics for a specific folder |
+| `create_folder` | Create a new IMAP folder on the server (supports nested paths) |
+
+### Labels (vocabulary management)
+| Tool | Description |
+|------|-------------|
+| `list_labels` | List the configured label vocabulary with descriptions and categories |
+| `add_label` | Add a new label to the vocabulary (must be a valid IMAP keyword) |
+| `update_label` | Update a label's description or category |
+| `remove_label` | Remove a label from the vocabulary (does not remove from messages) |
+
+### LLM Analysis
+| Tool | Description |
+|------|-------------|
+| `analyze_email` | Analyze a single email: summary, spam_score, category, priority, or custom prompt |
+| `analyze_folder` | Batch-analyze emails in a folder (respects daily token budget) |
+| `get_analysis` | Retrieve stored LLM analysis results, filtered by account or type |
+| `get_analysis_budget` | Check daily token usage and monthly cost against configured limits |
+
+### Reports
+| Tool | Description |
+|------|-------------|
+| `mailbox_report` | Per-folder volume stats, attachment counts, and total storage used |
+| `top_senders` | Top email senders ranked by message count |
+| `category_breakdown` | Email category distribution from LLM analysis results |
+
+### Batch Operations
+| Tool | Description |
+|------|-------------|
+| `fetch_bodies` | Batch-fetch message bodies for given UIDs (skips already-cached) |
+| `detect_duplicates` | Find emails that exist in multiple IMAP accounts (cross-account deduplication) |
+| `delete_duplicates` | Delete duplicate emails from a specific account, keeping copies in other accounts. Dry run by default |
+
+### Account Management
+| Tool | Description |
+|------|-------------|
+| `list_accounts` | List all configured email accounts with connection status |
+| `get_account_status` | Get detailed status for an account (config, sync progress, folder counts) |
+| `add_account_imap` | Add a new IMAP email account (password encrypted before storage) |
+| `add_account_oauth` | Start the OAuth2 flow for Gmail, Outlook, Yahoo, or Zoho (requires dashboard) |
+| `start_dashboard` | Get the dashboard URL or status message |
+
+### Sync
+| Tool | Description |
+|------|-------------|
+| `sync_now` | Trigger immediate IMAP sync for one folder or all folders |
+| `get_sync_status` | Get real-time sync status for all folders (last sync time, message counts, state) |
 
 ### Queue Management
 | Tool | Description |
 |------|-------------|
 | `confirm_send` | Confirm a pending send operation for immediate execution |
-| `cancel_operation` | Cancel a pending or confirmed operation before execution |
-| `list_pending` | List all pending and confirmed operations |
+| `cancel_operation` | Cancel a pending or confirmed operation before it executes |
+| `list_pending` | List all pending and confirmed operations, optionally filtered by account |
 
-### Sync
-| Tool | Description |
-|------|-------------|
-| `sync_now` | Trigger immediate sync for a folder or all folders |
-| `get_sync_status` | Get sync status for all folders of an account |
+---
 
-### LLM Analysis
-| Tool | Description |
-|------|-------------|
-| `analyze_email` | Analyze a single email for spam, category, priority, and summary |
-| `analyze_folder` | Batch-analyze emails in a folder (respects token budget) |
-| `get_analysis` | Get stored analysis for a specific email |
-| `get_analysis_budget` | Check remaining daily token budget and monthly cost limit |
+## Web Dashboard
 
-### Reports
-| Tool | Description |
-|------|-------------|
-| `mailbox_report` | Generate volume trends, category breakdown, and top senders report |
-| `top_senders` | Get top email senders ranked by volume |
-| `category_breakdown` | Get email category distribution with counts |
+Enable with `--dashboard` flag or `"dashboard_enabled": true` in config. The dashboard runs on `dashboard_port` (default: 3847).
+
+### Setup Wizard
+
+On first launch (no accounts configured), the dashboard shows a guided setup wizard:
+
+1. **PIN Setup** (optional) — protect the dashboard with a 4-6 digit PIN
+2. **Add Account** — select your provider, sign in with OAuth or enter an app password
+3. **Done** — server starts syncing immediately
+
+### Dashboard Pages
+
+- **Overview** — account count, sync status, queue summary, system stats
+- **Messages** — browse and search emails across all accounts and folders. Features include:
+  - Advanced search operators: `from:`, `to:`, `subject:`, `label:`, `has:attachments`, `before:`, `after:`
+  - Read/unread/delete actions on messages
+  - View full message headers
+  - Open messages in a new window
+  - HTML email rendering with DOMPurify sanitization, script stripping, and remote image blocking
+  - Default plain text view with HTML as an opt-in toggle
+  - Label display with color coding
+  - Body-cached indicator
+  - Keyboard navigation
+- **Accounts** — add (IMAP/OAuth), edit settings (connection limits, sync config, queue settings), test connection, enable/disable, delete accounts
+- **Duplicates** — cross-account duplicate detection, selectable copies per duplicate group, bulk delete via queue
+- **Queue** — view pending operations with account names, confirm or cancel sends
+- **Sync** — per-folder real-time sync status, trigger manual syncs
+- **Settings** — edit all configuration in-browser. Changes saved to `config.json` automatically
+- **Tools** — direct MCP tool execution from the dashboard UI
+- **Logs** — live log viewer with level filtering
+
+### Dashboard Authentication
+
+| `dashboard_auth` value | Behavior |
+|------------------------|----------|
+| `null` (default) | Open access — no authentication required |
+| `"pin"` | PIN protected — set a PIN on first access, required for all API calls |
 
 ---
 
@@ -352,21 +429,23 @@ See [`config.example.json`](config.example.json) for a full example.
 {
   "accounts": [
     {
-      "name": "personal",
+      "name": "my-gmail",
       "imap_host": "imap.gmail.com",
       "imap_port": 993,
       "smtp_host": "smtp.gmail.com",
       "smtp_port": 465,
       "smtp_use_ssl": true,
-      "username": "you@gmail.com",
+      "username": "user@example.com",
       "auth_type": "app_password",
       "password": "${ACCOUNT_PERSONAL_PASSWORD}",
       "provider": "gmail",
       "confirm_mode": "implicit",
       "undo_window_seconds": 10,
       "sync": {
+        "max_connections": 5,
         "idle_folders": ["INBOX"],
         "poll_interval": 300,
+        "max_messages_per_sync": 500,
         "folders": [
           { "path": "INBOX", "cache_window_days": 60 },
           { "path": "[Gmail]/Sent Mail", "cache_window_days": 14 }
@@ -388,15 +467,32 @@ See [`config.example.json`](config.example.json) for a full example.
 | `username` | - | Email account username |
 | `auth_type` | `"app_password"` | Auth method: `"app_password"` or `"oauth2"` |
 | `password` | - | Password or `${ENV_VAR}` reference (for app_password auth) |
-| `provider` | `"generic"` | Provider profile: `"gmail"`, `"outlook"`, `"fastmail"`, `"protonmail"`, `"yahoo"`, `"zoho"`, `"generic"` |
+| `provider` | `"generic"` | Provider profile: `"gmail"`, `"outlook"`, `"fastmail"`, `"protonmail"`, `"yahoo"`, `"zoho"`, `"icloud"`, `"generic"` |
 | `confirm_mode` | `"implicit"` | Send confirmation: `"implicit"` (auto-send after delay) or `"explicit"` (wait for confirm) |
 | `undo_window_seconds` | `10` | Seconds before implicit sends execute |
 
+#### Per-Account Sync Settings
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `sync.max_connections` | `5` | Maximum concurrent IMAP connections for this account |
+| `sync.idle_folders` | `["INBOX"]` | Folders to monitor with IMAP IDLE for real-time updates |
+| `sync.poll_interval` | `300` | Seconds between poll-based syncs for non-IDLE folders |
+| `sync.max_messages_per_sync` | `500` | Maximum messages to sync per cycle |
+| `sync.folders` | - | Per-folder sync configuration with `path` and `cache_window_days` |
+
+#### Per-Account Queue Settings
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `confirm_mode` | `"implicit"` | `"implicit"` auto-sends after undo window; `"explicit"` waits for `confirm_send` |
+| `undo_window_seconds` | `10` | Seconds to wait before executing implicit sends |
+
 #### Authentication Methods
 
-**OAuth2 (recommended for Gmail, Outlook, Zoho)**: Use the dashboard to sign in with your email provider. The server handles token exchange and automatic refresh via PKCE — no client secrets or manual token management needed. Built-in OAuth client IDs are provided for Gmail, Outlook, and Zoho.
+**OAuth2 (recommended for Gmail, Outlook, Yahoo, Zoho)**: Use the dashboard to sign in with your email provider. The server handles token exchange and automatic refresh via PKCE — no client secrets or manual token management needed. Built-in OAuth client IDs are provided for Gmail, Outlook, and Zoho.
 
-**App Password (all providers)**: Generate an app-specific password from your email provider and set it in the config. Required for providers that don't support OAuth (iCloud, ProtonMail via Bridge, Yahoo).
+**App Password (all providers)**: Generate an app-specific password from your email provider and set it in the config. Required for providers that don't support OAuth (iCloud, ProtonMail via Bridge, Fastmail).
 
 #### Provider-Specific Setup
 
@@ -406,11 +502,11 @@ See [`config.example.json`](config.example.json) for a full example.
 
 **Zoho**: OAuth sign-in via dashboard. Set `provider: "zoho"`.
 
+**Yahoo**: OAuth sign-in via dashboard, or use an [App Password](https://help.yahoo.com/kb/generate-manage-third-party-passwords-sln15241.html). Set `provider: "yahoo"`.
+
 **Fastmail**: Use an [App Password](https://www.fastmail.help/hc/en-us/articles/360058752854). Set `provider: "fastmail"`.
 
 **ProtonMail**: Requires [ProtonMail Bridge](https://proton.me/mail/bridge) + app password. Set `provider: "protonmail"`.
-
-**Yahoo**: Use an [App Password](https://help.yahoo.com/kb/generate-manage-third-party-passwords-sln15241.html). Set `provider: "yahoo"`.
 
 **iCloud**: Use an [App-Specific Password](https://support.apple.com/en-us/102654). Set `provider: "icloud"`.
 
@@ -516,6 +612,27 @@ Override or add OAuth client IDs for providers. Built-in client IDs are provided
 | `monthly_cost_limit` | `0` | Maximum monthly cost in USD (0 = unlimited) |
 | `auto_analyze_new` | `false` | Automatically analyze newly synced emails |
 
+### Labels
+
+```json
+{
+  "labels": {
+    "allow_cli_edits": true,
+    "items": [
+      { "name": "Important", "description": "High-priority messages", "category": "Priority" },
+      { "name": "Follow-Up", "description": "Needs a response", "category": "Status" }
+    ]
+  }
+}
+```
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `allow_cli_edits` | `true` | Allow MCP tools to add/update/remove labels |
+| `items` | `[]` | List of label definitions with `name`, `description`, and `category` |
+
+Labels are stored as IMAP keywords where supported. For providers without keyword support (e.g., Yahoo), labels are stored locally in `labels.db`.
+
 ### Metrics
 
 ```json
@@ -544,37 +661,6 @@ Override or add OAuth client IDs for providers. Built-in client IDs are provided
 
 ---
 
-## Web Dashboard
-
-Enable with `--dashboard` flag or `"dashboard_enabled": true` in config. The dashboard runs on `dashboard_port` (default: 3847).
-
-### Setup Wizard
-
-On first launch (no accounts configured), the dashboard shows a guided setup wizard:
-
-1. **PIN Setup** (optional) — protect the dashboard with a 4-6 digit PIN
-2. **Add Account** — select your provider, sign in with OAuth or enter an app password
-3. **Done** — server starts syncing immediately
-
-### Dashboard Pages
-
-- **Overview** — account count, sync status, queue summary
-- **Accounts** — add, test, and delete email accounts. OAuth sign-in for Gmail/Outlook/Zoho, app passwords for all providers
-- **Sync** — per-folder sync status, trigger manual syncs
-- **Queue** — view pending operations, confirm or cancel sends
-- **Settings** — edit all configuration in-browser. Changes saved to `config.json` automatically
-- **Metrics** — system performance graphs
-- **Logs** — live log viewer with level filtering
-
-### Dashboard Authentication
-
-| `dashboard_auth` value | Behavior |
-|------------------------|----------|
-| `null` (default) | Open access — no authentication required |
-| `"pin"` | PIN protected — set a PIN on first access, required for all API calls |
-
----
-
 ## Architecture
 
 ```
@@ -583,32 +669,42 @@ Claude / MCP Client
     v
 [MCP Server] -- stdio or HTTP+SSE
     |
-    +-- AccountTools, SearchTools, ComposeTools, ...
+    +-- SearchTools, ComposeTools, OrganizeTools, AttachmentTools, ...  (44 tools)
     |
     +-- [Core]
-    |     +-- SQLite (cache.db) + FTS5
+    |     +-- SQLite (cache.db, health.db, labels.db, metrics.db, logs.db) + FTS5
     |     +-- CredentialEncryptor
     |     +-- ProviderProfileRegistry
     |     +-- OAuth (PKCE token service, auto-refresh)
+    |     +-- Leader election + heartbeat coordination
     |
     +-- [ImapClient]
     |     +-- MailKit IMAP/SMTP (password + OAuth2 SASL)
     |     +-- SyncManager (IDLE + polling)
+    |     +-- Per-account connection throttling (configurable max_connections)
     |
     +-- [Queue]
     |     +-- QueueManager (P0/P1/P2 priorities)
-    |     +-- Send/Delete/Move/Flag executors
+    |     +-- Send/Delete/Move/Flag/Label executors
     |
     +-- [LLM]
-    |     +-- API (OpenAI/Anthropic) / ACP / InContext
-    |     +-- BudgetTracker
+    |     +-- API (OpenAI/Anthropic) / ACP (Claude, Copilot) / InContext
+    |     +-- BudgetTracker (daily tokens + monthly cost)
     |
     +-- [Dashboard]
-          +-- Kestrel + React SPA
+          +-- Kestrel + React SPA (Vite + TailwindCSS)
           +-- SignalR real-time updates
           +-- OAuth callback handler
           +-- Setup wizard
+          +-- Email security (DOMPurify, script stripping, remote resource blocking)
 ```
+
+### Key Design Decisions
+
+- **Cache is just a cache** — all write operations go through the IMAP server via the operation queue. The SQLite database is a local cache only.
+- **Messages are deduplicated** across folders via the `message_folders` junction table. A message with copies in INBOX and Archive has one `messages` row and two `message_folders` rows.
+- **Sync boundaries** are derived from actual DB data (`GetMaxUid`/`GetMinUid`), not stored columns, ensuring consistency.
+- **Queue-based writes** — all CRUD operations (send, delete, move, flag, label) are enqueued with priority tiers (P0 critical, P1 normal, P2 bulk) and support undo/cancel before execution.
 
 ## Documentation
 
