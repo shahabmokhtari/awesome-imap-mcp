@@ -40,14 +40,6 @@ public static class PinAuthMiddleware
             var hash = BCrypt.Net.BCrypt.HashPassword(body.Pin);
             authRepo.UpsertPin(hash);
 
-            // Enable PIN auth in config and persist
-            config.Server.DashboardAuth = "pin";
-            if (config.SourcePath is not null)
-            {
-                try { ConfigLoader.SaveToFile(config, config.SourcePath); }
-                catch (Exception ex) { logger.LogWarning(ex, "Failed to persist config after PIN setup"); }
-            }
-
             var token = authRepo.CreateSession(TimeSpan.FromMinutes(30));
             return Results.Ok(new { token, message = "PIN set successfully" });
         });
@@ -58,11 +50,11 @@ public static class PinAuthMiddleware
             if (body is null || string.IsNullOrWhiteSpace(body.Pin))
                 return Results.BadRequest(new { error = "PIN is required" });
 
-            var auth = authRepo.GetPinAuth();
-            if (auth is null)
+            var pinHash = authRepo.GetPinHash();
+            if (pinHash is null)
                 return Results.BadRequest(new { error = "No PIN set. Use /api/auth/setup first." });
 
-            if (!BCrypt.Net.BCrypt.Verify(body.Pin, auth.Hash))
+            if (!BCrypt.Net.BCrypt.Verify(body.Pin, pinHash))
                 return Results.Json(new { error = "Invalid PIN" }, statusCode: 401);
 
             var token = authRepo.CreateSession(TimeSpan.FromMinutes(30));
@@ -95,8 +87,8 @@ public static class PinAuthMiddleware
                 if (string.IsNullOrWhiteSpace(body.OldPin))
                     return Results.BadRequest(new { error = "old_pin is required when changing an existing PIN" });
 
-                var auth = authRepo.GetPinAuth();
-                if (auth is null || !BCrypt.Net.BCrypt.Verify(body.OldPin, auth.Hash))
+                var pinHash = authRepo.GetPinHash();
+                if (pinHash is null || !BCrypt.Net.BCrypt.Verify(body.OldPin, pinHash))
                     return Results.Json(new { error = "Invalid current PIN" }, statusCode: 401);
             }
 
@@ -127,28 +119,28 @@ public static class PinAuthMiddleware
         {
             var path = ctx.Request.Path.Value ?? "";
 
-            // Allow auth endpoints, static files, and SignalR without auth
-            if (!path.StartsWith("/api/", StringComparison.OrdinalIgnoreCase)
+            // Allow auth endpoints and static files without auth; SignalR hub requires auth
+            if ((!path.StartsWith("/api/", StringComparison.OrdinalIgnoreCase)
+                    && !path.StartsWith("/hub", StringComparison.OrdinalIgnoreCase))
                 || path.StartsWith("/api/auth/", StringComparison.OrdinalIgnoreCase))
             {
                 await next().ConfigureAwait(false);
                 return;
             }
 
-            // Skip auth when dashboard_auth is not "pin" AND no PIN has been set in DB
+            // Skip auth when no PIN exists in DB (even if config says "pin" — DB may have been reset)
             var config = ctx.RequestServices.GetRequiredService<AppConfig>();
             var authRepo = ctx.RequestServices.GetRequiredService<DashboardAuthRepository>();
-            var pinIsConfigured = string.Equals(config.Server.DashboardAuth, "pin", StringComparison.OrdinalIgnoreCase);
             var pinExistsInDb = authRepo.HasPinSet();
 
-            if (!pinIsConfigured && !pinExistsInDb)
+            if (!pinExistsInDb)
             {
                 await next().ConfigureAwait(false);
                 return;
             }
 
             // If PIN exists in DB but config doesn't say "pin", auto-fix the config
-            if (pinExistsInDb && !pinIsConfigured)
+            if (!string.Equals(config.Server.DashboardAuth, "pin", StringComparison.OrdinalIgnoreCase))
             {
                 config.Server.DashboardAuth = "pin";
             }

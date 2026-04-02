@@ -56,7 +56,8 @@ public sealed class DashboardHost : BackgroundService
         // Placed here rather than in StartDashboard, which is re-entered on crash recovery
         // and standby takeover — sessions should not be wiped on each retry.
         var authRepo = new DashboardAuthRepository(
-            _rootServices.GetRequiredService<UltimateImapMcp.Core.Database.AppDatabase>());
+            _rootServices.GetRequiredService<UltimateImapMcp.Core.Database.AppDatabase>(),
+            _rootServices.GetRequiredService<UltimateImapMcp.Core.Configuration.AppConfig>());
         authRepo.CleanExpiredSessions();
         authRepo.ClearAllSessions();
 

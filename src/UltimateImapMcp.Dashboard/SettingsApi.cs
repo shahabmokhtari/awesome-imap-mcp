@@ -24,7 +24,10 @@ public static class SettingsApi
                     config.Server.DashboardEnabled,
                     config.Server.DashboardAuth,
                     config.Server.DashboardAutoOpen,
-                    config.Server.LogLevel
+                    config.Server.LogLevel,
+                    config.Server.LogToolCalls,
+                    config.Server.LogProtocol,
+                    config.Server.LogDirMaxSizeMb
                 },
                 cache = new
                 {
@@ -68,6 +71,11 @@ public static class SettingsApi
                     config.Metrics.Path,
                     config.Metrics.InternalRetentionDays
                 },
+                labels = new
+                {
+                    config.Labels.AllowCliEdits,
+                    config.Labels.Items,
+                },
                 accountCount = accountRepo.GetAll().Count
             });
         });
@@ -90,6 +98,13 @@ public static class SettingsApi
                 if (s.DashboardAuth is not null) { config.Server.DashboardAuth = s.DashboardAuth; changed.Add("dashboard_auth"); }
                 if (s.DashboardAutoOpen is { } dao) { config.Server.DashboardAutoOpen = dao; changed.Add("dashboard_auto_open"); }
                 if (s.LogLevel is not null) { config.Server.LogLevel = s.LogLevel; changed.Add("log_level"); }
+                if (s.LogToolCalls is { } ltc) { config.Server.LogToolCalls = ltc; changed.Add("log_tool_calls"); }
+                if (s.LogProtocol is { } lp) { config.Server.LogProtocol = lp; changed.Add("log_protocol"); }
+                if (s.LogDirMaxSizeMb is { } ldm)
+                {
+                    if (ldm <= 0) return Results.BadRequest(new { error = "log_dir_max_size_mb must be > 0" });
+                    config.Server.LogDirMaxSizeMb = ldm; changed.Add("log_dir_max_size_mb");
+                }
             }
 
             // Cache settings
@@ -172,6 +187,28 @@ public static class SettingsApi
                 }
             }
 
+            // Labels settings
+            if (updates.Labels is { } lb)
+            {
+                if (lb.AllowCliEdits is { } ace) { config.Labels.AllowCliEdits = ace; changed.Add("labels.allow_cli_edits"); }
+                if (lb.Items is { } items)
+                {
+                    // Validate: unique names, valid IMAP keywords
+                    var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    foreach (var item in items)
+                    {
+                        if (string.IsNullOrWhiteSpace(item.Name))
+                            return Results.BadRequest(new { error = "Label name cannot be empty" });
+                        if (!System.Text.RegularExpressions.Regex.IsMatch(item.Name, @"^[A-Za-z0-9_$-]+$"))
+                            return Results.BadRequest(new { error = $"Invalid label name '{item.Name}'. Must contain only letters, digits, hyphens, underscores, or $." });
+                        if (!names.Add(item.Name))
+                            return Results.BadRequest(new { error = $"Duplicate label name '{item.Name}'" });
+                    }
+                    config.Labels.Items = items;
+                    changed.Add("labels.items");
+                }
+            }
+
             // Persist to disk if we know the source file
             var persisted = false;
             if (config.SourcePath is not null && changed.Count > 0)
@@ -215,6 +252,7 @@ file record SettingsUpdateRequest
     public SyncSettingsUpdate? Sync { get; init; }
     public LlmSettingsUpdate? Llm { get; init; }
     public MetricsSettingsUpdate? Metrics { get; init; }
+    public LabelsSettingsUpdate? Labels { get; init; }
 }
 
 file record ServerSettingsUpdate
@@ -226,6 +264,9 @@ file record ServerSettingsUpdate
     public string? DashboardAuth { get; init; }
     public bool? DashboardAutoOpen { get; init; }
     public string? LogLevel { get; init; }
+    public bool? LogToolCalls { get; init; }
+    public bool? LogProtocol { get; init; }
+    public int? LogDirMaxSizeMb { get; init; }
 }
 
 file record CacheSettingsUpdate
@@ -268,4 +309,10 @@ file record MetricsSettingsUpdate
 {
     public bool? Enabled { get; init; }
     public int? InternalRetentionDays { get; init; }
+}
+
+file record LabelsSettingsUpdate
+{
+    public bool? AllowCliEdits { get; init; }
+    public List<LabelDefinition>? Items { get; init; }
 }

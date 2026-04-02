@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using UltimateImapMcp.Core.Configuration;
@@ -53,7 +54,7 @@ public sealed class InstanceCoordinator : BackgroundService, IInstanceCoordinato
     public static string? ComputeLeaderId(IReadOnlyList<HeartbeatRecord> all, TimeSpan staleThreshold)
     {
         var cutoff = DateTime.UtcNow.Subtract(staleThreshold);
-        var fresh = all.Where(h => DateTime.Parse(h.LastHeartbeat).ToUniversalTime() > cutoff).ToList();
+        var fresh = all.Where(h => DateTime.Parse(h.LastHeartbeat, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind).ToUniversalTime() > cutoff).ToList();
 
         if (fresh.Count == 0)
             return null;
@@ -132,7 +133,7 @@ public sealed class InstanceCoordinator : BackgroundService, IInstanceCoordinato
         var leaderId = ComputeLeaderId(all, staleThreshold);
 
         return all
-            .Where(h => DateTime.Parse(h.LastHeartbeat).ToUniversalTime() > cutoff)
+            .Where(h => DateTime.Parse(h.LastHeartbeat, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind).ToUniversalTime() > cutoff)
             .Select(h => new InstanceHeartbeat(
                 h.InstanceId, h.ProcessId, h.Cwd, h.Transport,
                 h.IsDashboardHost, h.InstanceId == leaderId, h.StartedAt,
@@ -152,7 +153,7 @@ public sealed class InstanceCoordinator : BackgroundService, IInstanceCoordinato
         var memMb = (int)(process.WorkingSet64 / (1024 * 1024));
         var accountCount = 0;
         try { accountCount = _accountCountProvider(); }
-        catch { /* best effort */ }
+        catch (Exception ex) { _logger.LogDebug(ex, "Failed to get account count for heartbeat"); }
 
         // IsDashboardHost = actually serving (not just enabled in config)
         var isDashboardActive = _config.Server.DashboardEnabled

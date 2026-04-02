@@ -1,15 +1,15 @@
 using System.ComponentModel;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
+using UltimateImapMcp.Core.Configuration;
 using UltimateImapMcp.ImapClient.Repositories;
 
 namespace UltimateImapMcp.McpServer.Tools;
 
 [McpServerToolType]
-public class ListEmailsTool(MessageRepository messageRepo, FolderRepository folderRepo)
+public class ListEmailsTool(MessageRepository messageRepo, FolderRepository folderRepo, AppConfig config, ILogger<ListEmailsTool> logger)
 {
-    private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
-
     [McpServerTool, Description(
         "List emails in a folder sorted by date (newest first by default). " +
         "Use this to browse a mailbox without searching. " +
@@ -21,57 +21,68 @@ public class ListEmailsTool(MessageRepository messageRepo, FolderRepository fold
         [Description("Offset for pagination (default: 0)")] int offset = 0,
         [Description("Sort order: date_desc (default), date_asc, from, subject")] string orderBy = "date_desc")
     {
-        if (limit < 1) limit = 1;
-        if (limit > 100) limit = 100;
-        if (offset < 0) offset = 0;
-
-        var folder = folderRepo.GetByPath(accountId, folderPath);
-        if (folder is null)
-            return JsonSerializer.Serialize(
-                new { error = $"Folder '{folderPath}' not found for account '{accountId}'." },
-                JsonOptions);
-
-        var messages = messageRepo.SearchAdvanced(new SearchFilter
-        {
-            AccountId = accountId,
-            FolderId = folder.Id,
-            OrderBy = orderBy,
-            MaxResults = limit,
-            Offset = offset,
-        });
-
-        var mapped = messages.Select(m => new
-        {
-            id = m.Id,
-            uid = m.Uid,
-            subject = m.Subject,
-            from = m.FromAddress,
-            date = m.Date,
-            flags = m.Flags,
-            snippet = m.Snippet,
-            has_attachments = m.HasAttachments,
-            thread_id = m.ThreadId
-        }).ToList();
-
-        var backfillDone = folder.OldestSyncedUid <= 1;
-
-        return JsonSerializer.Serialize(new
-        {
-            folder = folderPath,
-            count = mapped.Count,
-            offset,
-            order_by = orderBy,
-            results = mapped,
-            cache_info = new
+        return McpJsonDefaults.LogToolCall(logger, "list_emails",
+            new Dictionary<string, object?> { ["accountId"] = accountId, ["folderPath"] = folderPath, ["limit"] = limit, ["offset"] = offset },
+            () =>
             {
-                source = "cache",
-                backfill_complete = backfillDone,
-                total_on_server = folder.MessageCount,
-                cached_in_results = mapped.Count,
-                hint = backfillDone
-                    ? (string?)null
-                    : "Only recently synced messages shown. Older messages are being backfilled. Use search_emails with server_search=true for complete results."
-            }
-        }, JsonOptions);
+                try
+                {
+                    if (limit < 1) limit = 1;
+                    if (limit > 100) limit = 100;
+                    if (offset < 0) offset = 0;
+
+                    var folder = folderRepo.GetByPath(accountId, folderPath);
+                    if (folder is null)
+                        return McpJsonDefaults.Error($"Folder '{folderPath}' not found for account '{accountId}'.");
+
+                    var messages = messageRepo.SearchAdvanced(new SearchFilter
+                    {
+                        AccountId = accountId,
+                        FolderId = folder.Id,
+                        OrderBy = orderBy,
+                        MaxResults = limit,
+                        Offset = offset,
+                    });
+
+                    var mapped = messages.Select(m => new
+                    {
+                        id = m.Id,
+                        uid = m.Uid,
+                        subject = m.Subject,
+                        from = m.FromAddress,
+                        date = m.Date,
+                        flags = m.Flags,
+                        snippet = m.Snippet,
+                        has_attachments = m.HasAttachments,
+                        thread_id = m.ThreadId
+                    }).ToList();
+
+                    var backfillDone = folder.OldestSyncedUid <= 1;
+
+                    return JsonSerializer.Serialize(new
+                    {
+                        folder = folderPath,
+                        count = mapped.Count,
+                        offset,
+                        order_by = orderBy,
+                        results = mapped,
+                        cache_info = new
+                        {
+                            source = "cache",
+                            backfill_complete = backfillDone,
+                            total_on_server = folder.MessageCount,
+                            cached_in_results = mapped.Count,
+                            hint = backfillDone
+                                ? (string?)null
+                                : "Only recently synced messages shown. Older messages are being backfilled. Use search_emails with server_search=true for complete results."
+                        }
+                    }, McpJsonDefaults.Options);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    logger.LogError(ex, "ListEmails failed");
+                    return McpJsonDefaults.Error(ex.Message);
+                }
+            }, config);
     }
 }

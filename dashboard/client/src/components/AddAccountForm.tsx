@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   useCreateAccount,
   useOAuthProviders,
@@ -147,6 +147,7 @@ export default function AddAccountForm({ onComplete, onCancel }: AddAccountFormP
   const [saving, setSaving] = useState(false)
   const [oauthPending, setOauthPending] = useState(false)
   const [oauthTempId, setOauthTempId] = useState<string | null>(null)
+  const oauthTempIdRef = useRef<string | null>(null)
   const [oauthEmail, setOauthEmail] = useState<string | null>(null)
   const [oauthName, setOauthName] = useState<string | null>(null)
 
@@ -166,6 +167,7 @@ export default function AddAccountForm({ onComplete, onCancel }: AddAccountFormP
     setForm({ ...emptyForm(), provider, ...preset })
     setTestResult(null)
     setOauthTempId(null)
+    oauthTempIdRef.current = null
     setOauthEmail(null)
   }
 
@@ -173,6 +175,7 @@ export default function AddAccountForm({ onComplete, onCancel }: AddAccountFormP
   const handleOAuthMessage = useCallback((event: MessageEvent) => {
     if (event.data?.type === 'oauth-complete' && event.data.tempId) {
       setOauthTempId(event.data.tempId)
+      oauthTempIdRef.current = event.data.tempId
       setOauthEmail(event.data.email || null)
       setOauthName(event.data.name || null)
       setOauthPending(false)
@@ -210,8 +213,9 @@ export default function AddAccountForm({ onComplete, onCancel }: AddAccountFormP
         const timer = setInterval(() => {
           if (popup.closed) {
             clearInterval(timer)
+            // Use ref to avoid stale closure over oauthTempId state
             setOauthPending(prev => {
-              if (prev && !oauthTempId) return false
+              if (prev && !oauthTempIdRef.current) return false
               return prev
             })
           }

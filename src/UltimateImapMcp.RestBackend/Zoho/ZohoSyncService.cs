@@ -98,7 +98,7 @@ public sealed class ZohoSyncService : BackgroundService
     {
         var allAccounts = _accountRepo.GetAll();
         var zohoAccounts = allAccounts
-            .Where(a => a.BackendType.Equals("zoho_rest", StringComparison.OrdinalIgnoreCase))
+            .Where(a => a.Enabled && a.BackendType.Equals("zoho_rest", StringComparison.OrdinalIgnoreCase))
             .ToList();
 
         if (zohoAccounts.Count == 0)

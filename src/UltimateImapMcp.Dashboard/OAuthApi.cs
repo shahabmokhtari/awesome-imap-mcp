@@ -34,19 +34,33 @@ public static class OAuthApi
             return Results.Ok(result);
         });
 
-        // GET /api/oauth/start — generates PKCE, stores state, returns auth_url
-        app.MapGet("/api/oauth/start", (HttpContext ctx, AppConfig config, OAuthStateStore stateStore,
+        // POST /api/oauth/start — generates PKCE, stores state, returns auth_url
+        app.MapPost("/api/oauth/start", async (HttpContext ctx, AppConfig config, OAuthStateStore stateStore,
             ILogger<OAuthTokenService> logger) =>
         {
-            var provider = ctx.Request.Query["provider"].FirstOrDefault();
+            // Accept parameters from POST body (preferred) or query string (backward compat)
+            string? provider = null, clientIdOverride = null, clientSecretOverride = null;
+            try
+            {
+                var body = await ctx.Request.ReadFromJsonAsync<Dictionary<string, string?>>().ConfigureAwait(false);
+                if (body is not null)
+                {
+                    body.TryGetValue("provider", out provider);
+                    body.TryGetValue("client_id", out clientIdOverride);
+                    body.TryGetValue("client_secret", out clientSecretOverride);
+                }
+            }
+            catch { /* fall through to query params */ }
+
+            // Fallback to query params for backward compatibility
+            provider ??= ctx.Request.Query["provider"].FirstOrDefault();
+            clientIdOverride ??= ctx.Request.Query["client_id"].FirstOrDefault();
+            clientSecretOverride ??= ctx.Request.Query["client_secret"].FirstOrDefault();
+
             if (string.IsNullOrEmpty(provider))
-                return Results.BadRequest(new { error = "provider query parameter is required" });
+                return Results.BadRequest(new { error = "provider is required" });
 
             logger.LogInformation("Starting OAuth flow for provider {Provider}", provider);
-
-            // Allow optional client_id/secret overrides from query params
-            var clientIdOverride = ctx.Request.Query["client_id"].FirstOrDefault();
-            var clientSecretOverride = ctx.Request.Query["client_secret"].FirstOrDefault();
 
             var effectiveConfig = OAuthProviderDefaults.GetEffective(provider, config);
 
@@ -327,11 +341,8 @@ public static class OAuthApi
     }
 
     /// <summary>
-    /// Extracts the email claim from a JWT ID token without full validation.
-    /// This is safe here because we received the token directly from the provider.
-    /// </summary>
-    /// <summary>
     /// Extracts email and name claims from a JWT (ID token or MS access token).
+    /// Safe without full validation because we receive the token directly from the provider.
     /// </summary>
     private static (string? Email, string? Name) ExtractClaimsFromJwt(string jwt, ILogger? logger = null)
     {

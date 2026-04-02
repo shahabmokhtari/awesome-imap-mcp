@@ -29,6 +29,8 @@ public static class AccountsApi
                 username = a.Username,
                 authType = a.AuthType,
                 provider = a.Provider,
+                enabled = a.Enabled,
+                configJson = a.ConfigJson,
                 createdAt = a.CreatedAt,
                 updatedAt = a.UpdatedAt
             }));
@@ -70,9 +72,23 @@ public static class AccountsApi
                 return Results.BadRequest(new { error = "Invalid request body" });
 
             repo.Update(id, body.Name, body.ImapHost, body.ImapPort,
-                body.SmtpHost, body.SmtpPort, body.SmtpUseSsl, body.Username);
+                body.SmtpHost, body.SmtpPort, body.SmtpUseSsl, body.Username, body.ConfigJson);
 
             return Results.Ok(new { id, updated = true });
+        });
+
+        app.MapPost("/api/accounts/{id}/toggle-enabled", async (string id, HttpContext ctx,
+            AccountRepository repo) =>
+        {
+            var existing = repo.GetById(id);
+            if (existing is null)
+                return Results.NotFound();
+
+            var body = await ctx.Request.ReadFromJsonAsync<ToggleEnabledRequest>().ConfigureAwait(false);
+            var newEnabled = body?.Enabled ?? !existing.Enabled;
+
+            repo.SetEnabled(id, newEnabled);
+            return Results.Ok(new { id, enabled = newEnabled });
         });
 
         app.MapDelete("/api/accounts/{id}", (string id, AccountRepository repo,
@@ -260,4 +276,10 @@ public record UpdateAccountRequest
     public int? SmtpPort { get; init; }
     public bool? SmtpUseSsl { get; init; }
     public string? Username { get; init; }
+    public string? ConfigJson { get; init; }
+}
+
+public record ToggleEnabledRequest
+{
+    public bool? Enabled { get; init; }
 }

@@ -18,12 +18,8 @@ public class LlmRepositoryTests : IDisposable
         _usageRepo = new LlmUsageRepository(_db);
         _analysisRepo = new LlmAnalysisRepository(_db);
 
-        // Seed test data: account, folder, message
+        // Seed test data: folder, message (accounts are in accounts.json, not SQLite)
         var conn = _db.GetWriteConnection();
-        using var cmd1 = conn.CreateCommand();
-        cmd1.CommandText = "INSERT INTO accounts (id, name, imap_host, username, auth_type, credentials_enc) VALUES ('test', 'Test', 'imap.test.com', 'u@test.com', 'password', 'enc');";
-        cmd1.ExecuteNonQuery();
-
         using var cmd2 = conn.CreateCommand();
         cmd2.CommandText = "INSERT INTO folders (account_id, path, delimiter) VALUES ('test', 'INBOX', '/');";
         cmd2.ExecuteNonQuery();

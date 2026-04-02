@@ -35,6 +35,9 @@ public class AppConfig
 
     [JsonPropertyName("oauth_providers")]
     public Dictionary<string, OAuthProviderConfig> OAuthProviders { get; set; } = new();
+
+    [JsonPropertyName("labels")]
+    public LabelsConfig Labels { get; set; } = new();
 }
 
 /// <summary>MCP server transport and dashboard settings.</summary>
@@ -55,6 +58,9 @@ public class ServerConfig
     [JsonPropertyName("dashboard_auth")]
     public string? DashboardAuth { get; set; }
 
+    [JsonPropertyName("dashboard_pin_hash")]
+    public string? DashboardPinHash { get; set; }
+
     [JsonPropertyName("dashboard_auto_open")]
     public bool DashboardAutoOpen { get; set; } = false;
 
@@ -72,6 +78,15 @@ public class ServerConfig
 
     [JsonPropertyName("heartbeat_stale_after")]
     public int HeartbeatStaleAfter { get; set; } = 5;
+
+    [JsonPropertyName("log_tool_calls")]
+    public bool LogToolCalls { get; set; } = true;
+
+    [JsonPropertyName("log_protocol")]
+    public bool LogProtocol { get; set; } = false;
+
+    [JsonPropertyName("log_dir_max_size_mb")]
+    public int LogDirMaxSizeMb { get; set; } = 100;
 }
 
 /// <summary>IMAP/SMTP account configuration.</summary>
@@ -122,6 +137,9 @@ public class AccountConfig
     [JsonPropertyName("undo_window_seconds")]
     public int UndoWindowSeconds { get; set; } = 10;
 
+    [JsonPropertyName("enabled")]
+    public bool Enabled { get; set; } = true;
+
     [JsonPropertyName("sync")]
     public SyncConfig Sync { get; set; } = new();
 }
@@ -135,11 +153,11 @@ public class SyncConfig
     [JsonPropertyName("poll_interval")]
     public int PollInterval { get; set; } = 300;
 
-    [JsonPropertyName("interval_minutes")]
-    public int IntervalMinutes { get; set; } = 5;
-
     [JsonPropertyName("max_messages_per_sync")]
     public int MaxMessagesPerSync { get; set; } = 500;
+
+    [JsonPropertyName("max_connections")]
+    public int MaxConnections { get; set; } = 5;
 
     [JsonPropertyName("folders")]
     public List<FolderSyncConfig> Folders { get; set; } = [];
@@ -222,12 +240,6 @@ public class QueueConfig
 
     [JsonPropertyName("max_concurrent_operations")]
     public int MaxConcurrentOperations { get; set; } = 3;
-
-    [JsonPropertyName("retry_attempts")]
-    public int RetryAttempts { get; set; } = 3;
-
-    [JsonPropertyName("retry_delay_seconds")]
-    public int RetryDelaySeconds { get; set; } = 5;
 }
 
 /// <summary>Optional LLM integration settings.</summary>
@@ -314,7 +326,7 @@ public class AcpConfig
     public AcpProviderConfig Copilot { get; set; } = new()
     {
         Command = "gh",
-        Args = ["copilot", "--acp"],
+        Args = ["copilot", "--acp", "--verbose"],
     };
 
     /// <summary>Legacy command field — if set, overrides claude provider command.</summary>
@@ -377,4 +389,27 @@ public class OAuthProviderConfig
 
     [JsonPropertyName("scopes")]
     public List<string>? Scopes { get; set; }
+}
+
+/// <summary>Label vocabulary configuration.</summary>
+public class LabelsConfig
+{
+    [JsonPropertyName("allow_cli_edits")]
+    public bool AllowCliEdits { get; set; } = true;
+
+    [JsonPropertyName("items")]
+    public List<LabelDefinition> Items { get; set; } = [];
+}
+
+/// <summary>A single label definition in the vocabulary.</summary>
+public class LabelDefinition
+{
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = string.Empty;
+
+    [JsonPropertyName("description")]
+    public string Description { get; set; } = string.Empty;
+
+    [JsonPropertyName("category")]
+    public string Category { get; set; } = string.Empty;
 }

@@ -1,5 +1,13 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 
+class ApiError extends Error {
+  status: number
+  constructor(message: string, status: number) {
+    super(message)
+    this.status = status
+  }
+}
+
 async function apiFetch<T>(url: string, options?: RequestInit): Promise<T> {
   const token = localStorage.getItem('dashboard_token')
   const headers: HeadersInit = { 'Content-Type': 'application/json' }
@@ -9,8 +17,9 @@ async function apiFetch<T>(url: string, options?: RequestInit): Promise<T> {
   const res = await fetch(url, { ...options, headers: { ...headers, ...options?.headers } })
   if (!res.ok) {
     const body = await res.json().catch(() => null)
-    throw new Error(body?.error || body?.message || `API error: ${res.status}`)
+    throw new ApiError(body?.error || body?.message || `API error: ${res.status}`, res.status)
   }
+  if (res.status === 204) return undefined as T
   return res.json()
 }
 
@@ -58,6 +67,35 @@ export function useTriggerSyncAll() {
   })
 }
 
+export interface SyncState {
+  stopped: boolean
+  syncing: boolean
+}
+
+export function useSyncState() {
+  return useQuery({
+    queryKey: ['sync-state'],
+    queryFn: () => apiFetch<SyncState>('/api/sync/state'),
+    refetchInterval: 3000,
+  })
+}
+
+export function useStopSync() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => apiFetch<{ stopped: boolean }>('/api/sync/stop', { method: 'POST' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['sync-state'] }),
+  })
+}
+
+export function useStartSync() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => apiFetch<{ stopped: boolean }>('/api/sync/start', { method: 'POST' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['sync-state'] }),
+  })
+}
+
 export interface SyncLogEntry {
   id: number
   accountId: string
@@ -90,6 +128,24 @@ export function useQueue(status?: string) {
     queryKey: ['queue', status],
     queryFn: () => apiFetch<Array<Record<string, unknown>>>(url),
     refetchInterval: 5000,
+  })
+}
+
+export function useCancelOperation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiFetch<{ id: string; cancelled: boolean }>(`/api/queue/${id}/cancel`, { method: 'POST' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['queue'] }),
+  })
+}
+
+export function useConfirmOperation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiFetch<{ id: string; confirmed: boolean }>(`/api/queue/${id}/confirm`, { method: 'POST' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['queue'] }),
   })
 }
 
@@ -232,11 +288,36 @@ export function useCreateAccount() {
   })
 }
 
+export function useUpdateAccount() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id, ...data }: { id: string } & Record<string, unknown>) => {
+      const res = await apiFetch<{ id: string; updated: boolean }>(
+        `/api/accounts/${encodeURIComponent(id)}`,
+        { method: 'PUT', body: JSON.stringify(data) },
+      )
+      return res
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['accounts'] }),
+  })
+}
+
 export function useDeleteAccount() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (id: string) =>
-      apiFetch<unknown>(`/api/accounts/${id}`, { method: 'DELETE' }),
+      apiFetch<unknown>(`/api/accounts/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['accounts'] }),
+  })
+}
+
+export function useToggleAccountEnabled() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (params: { id: string; enabled: boolean }) =>
+      apiFetch<{ id: string; enabled: boolean }>(
+        `/api/accounts/${encodeURIComponent(params.id)}/toggle-enabled`,
+        { method: 'POST', body: JSON.stringify({ enabled: params.enabled }) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['accounts'] }),
   })
 }
@@ -244,7 +325,7 @@ export function useDeleteAccount() {
 export function useTestAccount() {
   return useMutation({
     mutationFn: (id: string) =>
-      apiFetch<{ success: boolean; message: string }>(`/api/accounts/${id}/test`, { method: 'POST' }),
+      apiFetch<{ success: boolean; message: string }>(`/api/accounts/${encodeURIComponent(id)}/test`, { method: 'POST' }),
   })
 }
 
@@ -258,7 +339,7 @@ export function useFetchRecent() {
   return useMutation({
     mutationFn: (id: string) =>
       apiFetch<{ success: boolean; total: number; emails: RecentEmail[]; message?: string }>(
-        `/api/accounts/${id}/fetch-recent`, { method: 'POST' }),
+        `/api/accounts/${encodeURIComponent(id)}/fetch-recent`, { method: 'POST' }),
   })
 }
 
@@ -310,12 +391,15 @@ export function useOAuthProviders() {
 
 export function useStartOAuth() {
   return useMutation({
-    mutationFn: (params: { provider: string; clientId?: string; clientSecret?: string }) => {
-      const qs = new URLSearchParams({ provider: params.provider })
-      if (params.clientId) qs.set('client_id', params.clientId)
-      if (params.clientSecret) qs.set('client_secret', params.clientSecret)
-      return apiFetch<{ auth_url: string; state: string }>(`/api/oauth/start?${qs}`)
-    },
+    mutationFn: (params: { provider: string; clientId?: string; clientSecret?: string }) =>
+      apiFetch<{ auth_url: string; state: string }>('/api/oauth/start', {
+        method: 'POST',
+        body: JSON.stringify({
+          provider: params.provider,
+          client_id: params.clientId,
+          client_secret: params.clientSecret,
+        }),
+      }),
   })
 }
 
@@ -356,6 +440,7 @@ export interface MessageSummary {
   flags: string
   snippet: string
   hasAttachments: boolean
+  bodyFetched: boolean
   folderPath: string
 }
 
@@ -366,6 +451,11 @@ export interface MessageDetail extends MessageSummary {
   bodyHtml: string | null
   bodyFetched: boolean
   threadId: string | null
+  messageId: string | null
+  inReplyTo: string | null
+  referencesHdr: string | null
+  sizeBytes: number | null
+  rawHeaders: string | null
 }
 
 export function useFolders(accountId: string | undefined) {
@@ -376,6 +466,11 @@ export function useFolders(accountId: string | undefined) {
   })
 }
 
+export interface MessagesResponse {
+  totalCount: number
+  messages: MessageSummary[]
+}
+
 export function useMessages(accountId: string | undefined, folderId?: number, limit?: number, offset?: number) {
   const qs = new URLSearchParams()
   if (accountId) qs.set('account_id', accountId)
@@ -384,7 +479,7 @@ export function useMessages(accountId: string | undefined, folderId?: number, li
   if (offset != null && offset > 0) qs.set('offset', String(offset))
   return useQuery({
     queryKey: ['messages', accountId, folderId, limit, offset],
-    queryFn: () => apiFetch<MessageSummary[]>(`/api/messages?${qs}`),
+    queryFn: () => apiFetch<MessagesResponse>(`/api/messages?${qs}`),
     enabled: !!accountId && folderId != null,
   })
 }
@@ -392,16 +487,16 @@ export function useMessages(accountId: string | undefined, folderId?: number, li
 export function useMessage(accountId: string | undefined, folderId: number | undefined, uid: number | undefined) {
   return useQuery({
     queryKey: ['message', accountId, folderId, uid],
-    queryFn: () => apiFetch<MessageDetail>(`/api/messages/${accountId}/${folderId}/${uid}`),
+    queryFn: () => apiFetch<MessageDetail>(`/api/messages/${encodeURIComponent(accountId!)}/${folderId}/${uid}`),
     enabled: !!accountId && folderId != null && uid != null,
   })
 }
 
-export function useSearchMessages(accountId: string | undefined, query: string, limit?: number) {
+export function useSearchMessages(accountId: string | undefined, query: string, limit: number = 50) {
   const qs = new URLSearchParams()
   if (accountId) qs.set('account_id', accountId)
   if (query) qs.set('query', query)
-  if (limit != null) qs.set('limit', String(limit))
+  qs.set('limit', String(limit))
   return useQuery({
     queryKey: ['messages-search', accountId, query, limit],
     queryFn: () => apiFetch<MessageSummary[]>(`/api/messages/search?${qs}`),
@@ -471,6 +566,33 @@ export function useClearFolderCache() {
     onError: (error) => {
       console.error('[useClearFolderCache] failed:', error)
     },
+  })
+}
+
+// ---------- Cache stats ----------
+
+export interface CacheStats {
+  totalMessages: number
+  bodiesFetched: number
+  dbSizeBytes: number
+  dbSizeMb: number
+  dbFreeSpaceBytes: number
+  dbFreeSpaceMb: number
+  accounts: Array<{
+    accountId: string
+    accountName: string
+    messageCount: number
+    bodiesFetched: number
+    oldestCachedAt: string | null
+    newestCachedAt: string | null
+  }>
+}
+
+export function useCacheStats() {
+  return useQuery({
+    queryKey: ['cache-stats'],
+    queryFn: () => apiFetch<CacheStats>('/api/cache/stats'),
+    refetchInterval: 30000,
   })
 }
 
@@ -549,16 +671,39 @@ export function useToolSuggestions() {
 }
 
 export function useExecuteTool() {
+  const qc = useQueryClient()
   return useMutation({
     mutationFn: (params: { name: string; args: Record<string, unknown> }) =>
       apiFetch<unknown>(`/api/tools/${encodeURIComponent(params.name)}/execute`, {
         method: 'POST',
         body: JSON.stringify(params.args),
       }),
+    onSuccess: () => {
+      // Invalidate queue + messages so dashboard reflects tool side-effects
+      qc.invalidateQueries({ queryKey: ['queue'] })
+      qc.invalidateQueries({ queryKey: ['messages'] })
+    },
   })
 }
 
 // ---------- Types ----------
+
+export interface Account {
+  id: string
+  name: string
+  imapHost: string
+  imapPort: number
+  smtpHost: string | null
+  smtpPort: number
+  smtpUseSsl: boolean
+  username: string
+  authType: string
+  provider: string
+  enabled: boolean
+  configJson?: string | null
+  createdAt: string
+  updatedAt: string
+}
 
 export interface CreateAccountRequest {
   name: string

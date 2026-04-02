@@ -10,11 +10,6 @@ public enum OperationType
     BulkDelete, BulkMove
 }
 
-public enum OperationStatus
-{
-    Pending, Confirmed, Processing, Completed, Failed, Cancelled
-}
-
 public enum OperationPriority
 {
     P0 = 0,  // near-immediate: send, reply, forward

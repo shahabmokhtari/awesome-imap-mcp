@@ -29,14 +29,14 @@ public sealed class AppDatabase : IDisposable
         {
             DataSource = dbPath,
             Mode = SqliteOpenMode.ReadWriteCreate,
-            ForeignKeys = true
+            ForeignKeys = false
         };
         _writeConnection = new SqliteConnection(writeBuilder.ToString());
         _writeConnection.Open();
 
-        // Enable WAL mode
+        // Enable WAL mode and busy timeout
         using var walCmd = _writeConnection.CreateCommand();
-        walCmd.CommandText = "PRAGMA journal_mode=WAL;";
+        walCmd.CommandText = "PRAGMA journal_mode=WAL; PRAGMA busy_timeout = 5000;";
         walCmd.ExecuteNonQuery();
     }
 
@@ -106,10 +106,13 @@ public sealed class AppDatabase : IDisposable
         {
             DataSource = _dbPath,
             Mode = SqliteOpenMode.ReadOnly,
-            ForeignKeys = true
+            ForeignKeys = false
         };
         var conn = new SqliteConnection(readBuilder.ToString());
         conn.Open();
+        using var pragma = conn.CreateCommand();
+        pragma.CommandText = "PRAGMA busy_timeout = 5000;";
+        pragma.ExecuteNonQuery();
         return conn;
     }
 
@@ -121,6 +124,29 @@ public sealed class AppDatabase : IDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
         await _writeLock.WaitAsync().ConfigureAwait(false);
         return new WriteLockHandle(_writeLock);
+    }
+
+    /// <summary>
+    /// Deletes the database file and WAL/SHM files.
+    /// Call this before shutting down the application for a clean cache reset.
+    /// The DB will be recreated with migrations on next startup.
+    /// </summary>
+    public void DeleteDatabaseFiles()
+    {
+        _writeLock.Wait();
+        try
+        {
+            _writeConnection.Close();
+            SqliteConnection.ClearAllPools();
+
+            if (File.Exists(_dbPath)) File.Delete(_dbPath);
+            if (File.Exists(_dbPath + "-wal")) File.Delete(_dbPath + "-wal");
+            if (File.Exists(_dbPath + "-shm")) File.Delete(_dbPath + "-shm");
+        }
+        finally
+        {
+            _writeLock.Release();
+        }
     }
 
     public void Dispose()

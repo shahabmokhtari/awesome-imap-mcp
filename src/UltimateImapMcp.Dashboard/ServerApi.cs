@@ -28,7 +28,7 @@ public static class ServerApi
             using var process = Process.GetCurrentProcess();
             DateTime startTime;
             try { startTime = process.StartTime.ToUniversalTime(); }
-            catch { startTime = DateTime.UtcNow; }
+            catch (Exception ex) { _ = ex; startTime = DateTime.UtcNow; }
             var uptime = DateTime.UtcNow - startTime;
 
             return Results.Ok(new

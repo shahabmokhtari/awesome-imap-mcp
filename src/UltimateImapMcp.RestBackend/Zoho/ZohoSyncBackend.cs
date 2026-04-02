@@ -215,16 +215,24 @@ internal sealed class ZohoSyncBackend : IEmailSyncBackend
     public async Task FetchMessageBodyAsync(string accountId, string folderPath, long uid,
         CancellationToken ct = default)
     {
-        var zohoAcctId = await ResolveZohoAccountIdAsync(accountId, ct).ConfigureAwait(false);
         var dbFolder = _folderRepo.GetByPath(accountId, folderPath);
         if (dbFolder is null) return;
 
-        var zohoFolderId = dbFolder.Delimiter;
-        if (string.IsNullOrEmpty(zohoFolderId)) return;
-
-        // Find the message in DB to get the Zoho messageId
+        // Check if body is already cached in the database — skip API call if so
         var dbMsg = _messageRepo.GetByUid(accountId, dbFolder.Id, uid);
         if (dbMsg is null || dbMsg.MessageId is null) return;
+
+        if (dbMsg.BodyFetched)
+        {
+            _logger.LogDebug("Zoho: body already cached for message {Uid} in {AccountId}/{FolderPath}, skipping API call",
+                uid, accountId, folderPath);
+            return;
+        }
+
+        var zohoAcctId = await ResolveZohoAccountIdAsync(accountId, ct).ConfigureAwait(false);
+
+        var zohoFolderId = dbFolder.Delimiter;
+        if (string.IsNullOrEmpty(zohoFolderId)) return;
 
         var detail = await _api.GetMessageDetailAsync(
             accountId, zohoAcctId, zohoFolderId, dbMsg.MessageId, ct).ConfigureAwait(false);
@@ -316,6 +324,6 @@ internal sealed class ZohoSyncBackend : IEmailSyncBackend
     {
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(messageId));
         var value = BitConverter.ToInt64(hash, 0);
-        return Math.Abs(value);
+        return value & long.MaxValue; // Mask sign bit to avoid OverflowException on long.MinValue
     }
 }

@@ -39,15 +39,6 @@ public sealed class OAuthTokenRefreshService(
 
             try
             {
-                await Task.Delay(Interval, stoppingToken).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException)
-            {
-                break;
-            }
-
-            try
-            {
                 await RefreshExpiringTokensAsync(stoppingToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -57,6 +48,15 @@ public sealed class OAuthTokenRefreshService(
             catch (Exception ex)
             {
                 logger.LogWarning(ex, "Error during scheduled OAuth token refresh");
+            }
+
+            try
+            {
+                await Task.Delay(Interval, stoppingToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
             }
         }
     }

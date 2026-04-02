@@ -1,5 +1,6 @@
 using System.Text.Json;
 using MailKit;
+using Microsoft.Extensions.Logging;
 using UltimateImapMcp.Core.Encryption;
 using UltimateImapMcp.Core.OAuth;
 using UltimateImapMcp.ImapClient;
@@ -9,7 +10,9 @@ using UltimateImapMcp.Queue.Models;
 namespace UltimateImapMcp.Queue.Executors;
 
 public class DeleteExecutor(AccountRepository accountRepo, CredentialEncryptor encryptor,
-    IOAuthAccessTokenProvider oauthProvider) : IOperationExecutor
+    IOAuthAccessTokenProvider oauthProvider,
+    MessageRepository messageRepo, FolderRepository folderRepo,
+    ILogger<DeleteExecutor> logger) : IOperationExecutor
 {
     public IReadOnlyList<string> SupportedOperations { get; } = ["delete", "bulkdelete"];
 
@@ -33,5 +36,19 @@ public class DeleteExecutor(AccountRepository accountRepo, CredentialEncryptor e
             await folder.ExpungeAsync(ct);
             await folder.CloseAsync(false, ct);
         }, ct);
+
+        // Best-effort cache update: soft-delete the messages in the local DB
+        try
+        {
+            var folderRecord = folderRepo.GetByPath(operation.AccountId, folderPath);
+            if (folderRecord is null) return;
+
+            var uidLongs = uids.Select(u => (long)u.Id);
+            messageRepo.SoftDeleteByUids(operation.AccountId, folderRecord.Id, uidLongs);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Cache update failed after delete operation");
+        }
     }
 }

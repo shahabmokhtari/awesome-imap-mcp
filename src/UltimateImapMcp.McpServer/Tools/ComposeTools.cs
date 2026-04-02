@@ -1,17 +1,16 @@
 using System.ComponentModel;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
+using UltimateImapMcp.Core.Configuration;
 using UltimateImapMcp.Queue;
 using UltimateImapMcp.Queue.Models;
 
 namespace UltimateImapMcp.McpServer.Tools;
 
 [McpServerToolType]
-public class ComposeTools(QueueManager queueManager)
+public class ComposeTools(QueueManager queueManager, AppConfig config, ILogger<ComposeTools> logger)
 {
-    private readonly QueueManager _queueManager = queueManager;
-    private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
-
     [McpServerTool, Description(
         "Compose and send a new email. The message is queued and may require confirmation depending on account settings. " +
         "Returns a pending_id for tracking.")]
@@ -23,17 +22,21 @@ public class ComposeTools(QueueManager queueManager)
         [Description("CC recipient(s), comma-separated (optional)")] string? cc = null,
         [Description("BCC recipient(s), comma-separated")] string? bcc = null)
     {
-        var payload = JsonSerializer.Serialize(new { to, subject, body, cc, bcc });
-        var result = _queueManager.EnqueueSend(accountId, payload);
-
-        return JsonSerializer.Serialize(new
-        {
-            pending_id = result.PendingId,
-            confirm_mode = result.ConfirmMode,
-            status = result.Status,
-            sends_at = result.SendsAt,
-            undo_window_seconds = result.UndoWindowSeconds
-        }, JsonOptions);
+        return McpJsonDefaults.LogToolCall(logger, "send_email",
+            new Dictionary<string, object?> { ["accountId"] = accountId, ["to"] = to, ["subject"] = subject },
+            () =>
+            {
+                try
+                {
+                    var payload = JsonSerializer.Serialize(new { to, subject, body, cc, bcc });
+                    var result = queueManager.EnqueueSend(accountId, payload);
+                    return FormatResult(result);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    return McpJsonDefaults.Error($"Send failed: {ex.Message}");
+                }
+            }, config);
     }
 
     [McpServerTool, Description(
@@ -46,17 +49,21 @@ public class ComposeTools(QueueManager queueManager)
         [Description("Reply body (plain text)")] string body,
         [Description("Reply to all recipients (default: false)")] bool replyAll = false)
     {
-        var payload = JsonSerializer.Serialize(new { uid, folder, body, reply_all = replyAll });
-        var result = _queueManager.EnqueueSend(accountId, payload);
-
-        return JsonSerializer.Serialize(new
-        {
-            pending_id = result.PendingId,
-            confirm_mode = result.ConfirmMode,
-            status = result.Status,
-            sends_at = result.SendsAt,
-            undo_window_seconds = result.UndoWindowSeconds
-        }, JsonOptions);
+        return McpJsonDefaults.LogToolCall(logger, "reply_to",
+            new Dictionary<string, object?> { ["accountId"] = accountId, ["uid"] = uid, ["folder"] = folder },
+            () =>
+            {
+                try
+                {
+                    var payload = JsonSerializer.Serialize(new { uid, folder, body, reply_all = replyAll });
+                    var result = queueManager.EnqueueSend(accountId, payload);
+                    return FormatResult(result);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    return McpJsonDefaults.Error($"Reply failed: {ex.Message}");
+                }
+            }, config);
     }
 
     [McpServerTool, Description(
@@ -69,16 +76,30 @@ public class ComposeTools(QueueManager queueManager)
         [Description("Recipient email address(es), comma-separated")] string to,
         [Description("Additional body text to prepend (optional)")] string? body = null)
     {
-        var payload = JsonSerializer.Serialize(new { uid, folder, to, body });
-        var result = _queueManager.EnqueueSend(accountId, payload);
+        return McpJsonDefaults.LogToolCall(logger, "forward",
+            new Dictionary<string, object?> { ["accountId"] = accountId, ["uid"] = uid, ["folder"] = folder, ["to"] = to },
+            () =>
+            {
+                try
+                {
+                    var payload = JsonSerializer.Serialize(new { uid, folder, to, body });
+                    var result = queueManager.EnqueueSend(accountId, payload);
+                    return FormatResult(result);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    return McpJsonDefaults.Error($"Forward failed: {ex.Message}");
+                }
+            }, config);
+    }
 
-        return JsonSerializer.Serialize(new
+    private static string FormatResult(SendEnqueueResult result) =>
+        JsonSerializer.Serialize(new
         {
             pending_id = result.PendingId,
             confirm_mode = result.ConfirmMode,
             status = result.Status,
             sends_at = result.SendsAt,
             undo_window_seconds = result.UndoWindowSeconds
-        }, JsonOptions);
-    }
+        }, McpJsonDefaults.Options);
 }

@@ -97,7 +97,7 @@ public sealed class SmtpConnectionManager : IDisposable
                 ex is IOException or SocketException or SmtpProtocolException
                 && attempt < maxRetries)
             {
-                try { client?.Dispose(); } catch (Exception disposeEx) { Console.Error.WriteLine($"[SmtpConnectionManager] Cleanup failed: {disposeEx.Message}"); }
+                try { client?.Dispose(); } catch (Exception disposeEx) { _logger.LogDebug(disposeEx, "SMTP client cleanup failed"); }
 
                 _logger.LogWarning(
                     "SMTP connection attempt {Attempt}/{MaxRetries} to {Host}:{Port} failed ({Error}). Retrying...",
@@ -108,7 +108,7 @@ public sealed class SmtpConnectionManager : IDisposable
             }
             catch
             {
-                try { client?.Dispose(); } catch (Exception disposeEx) { Console.Error.WriteLine($"[SmtpConnectionManager] Cleanup failed: {disposeEx.Message}"); }
+                try { client?.Dispose(); } catch (Exception disposeEx) { _logger.LogDebug(disposeEx, "SMTP client cleanup failed"); }
                 throw;
             }
         }

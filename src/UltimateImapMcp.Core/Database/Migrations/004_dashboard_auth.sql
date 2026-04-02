@@ -1,13 +1,5 @@
--- Dashboard authentication and sessions tables
-
-CREATE TABLE IF NOT EXISTS dashboard_auth (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    auth_type   TEXT NOT NULL,           -- 'pin' | 'password'
-    username    TEXT,                    -- NULL for PIN mode
-    hash        TEXT NOT NULL,           -- bcrypt hash of PIN or password
-    created_at  TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
-);
+-- Dashboard sessions table (ephemeral — survives in cache DB, lost on cache clear)
+-- PIN auth is stored in config file, not DB.
 
 CREATE TABLE IF NOT EXISTS dashboard_sessions (
     token           TEXT PRIMARY KEY,

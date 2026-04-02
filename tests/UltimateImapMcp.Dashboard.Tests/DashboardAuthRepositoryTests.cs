@@ -1,3 +1,4 @@
+using UltimateImapMcp.Core.Configuration;
 using UltimateImapMcp.Core.Database;
 using UltimateImapMcp.Dashboard;
 
@@ -7,6 +8,7 @@ public class DashboardAuthRepositoryTests : IDisposable
 {
     private readonly string _dbPath;
     private readonly AppDatabase _db;
+    private readonly AppConfig _config;
     private readonly DashboardAuthRepository _repo;
 
     public DashboardAuthRepositoryTests()
@@ -14,7 +16,8 @@ public class DashboardAuthRepositoryTests : IDisposable
         _dbPath = Path.Combine(Path.GetTempPath(), $"test_{Guid.NewGuid():N}.db");
         _db = new AppDatabase(_dbPath);
         MigrationRunner.Migrate(_db);
-        _repo = new DashboardAuthRepository(_db);
+        _config = new AppConfig();
+        _repo = new DashboardAuthRepository(_db, _config);
     }
 
     [Fact]
@@ -36,9 +39,9 @@ public class DashboardAuthRepositoryTests : IDisposable
         var pin = "5678";
         _repo.UpsertPin(BCrypt.Net.BCrypt.HashPassword(pin));
 
-        var auth = _repo.GetPinAuth();
-        Assert.NotNull(auth);
-        Assert.True(BCrypt.Net.BCrypt.Verify(pin, auth.Hash));
+        var pinHash = _repo.GetPinHash();
+        Assert.NotNull(pinHash);
+        Assert.True(BCrypt.Net.BCrypt.Verify(pin, pinHash));
     }
 
     [Fact]
@@ -46,9 +49,9 @@ public class DashboardAuthRepositoryTests : IDisposable
     {
         _repo.UpsertPin(BCrypt.Net.BCrypt.HashPassword("correct-pin"));
 
-        var auth = _repo.GetPinAuth();
-        Assert.NotNull(auth);
-        Assert.False(BCrypt.Net.BCrypt.Verify("wrong-pin", auth.Hash));
+        var pinHash = _repo.GetPinHash();
+        Assert.NotNull(pinHash);
+        Assert.False(BCrypt.Net.BCrypt.Verify("wrong-pin", pinHash));
     }
 
     [Fact]
@@ -56,7 +59,7 @@ public class DashboardAuthRepositoryTests : IDisposable
     {
         var token = _repo.CreateSession(TimeSpan.FromHours(1));
         Assert.False(string.IsNullOrWhiteSpace(token));
-        Assert.True(token.Length > 20); // base64 of two GUIDs
+        Assert.True(token.Length > 20);
     }
 
     [Fact]
@@ -69,11 +72,19 @@ public class DashboardAuthRepositoryTests : IDisposable
     [Fact]
     public void ValidateSession_ExpiredToken_ReturnsFalse()
     {
-        // Insert a session directly with an expires_at firmly in the past,
-        // using SQLite's datetime format to avoid format mismatch issues.
         var token = "expired-test-token-" + Guid.NewGuid();
         _db.ExecuteWrite(conn =>
         {
+            using var createCmd = conn.CreateCommand();
+            createCmd.CommandText = """
+                CREATE TABLE IF NOT EXISTS dashboard_sessions (
+                    token TEXT PRIMARY KEY,
+                    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                    expires_at TEXT NOT NULL
+                );
+                """;
+            createCmd.ExecuteNonQuery();
+
             using var cmd = conn.CreateCommand();
             cmd.CommandText = """
                 INSERT INTO dashboard_sessions (token, expires_at)
@@ -90,6 +101,17 @@ public class DashboardAuthRepositoryTests : IDisposable
     public void ValidateSession_InvalidToken_ReturnsFalse()
     {
         Assert.False(_repo.ValidateSession("nonexistent-token"));
+    }
+
+    [Fact]
+    public void PinHash_StoredInConfig_NotDb()
+    {
+        var hash = BCrypt.Net.BCrypt.HashPassword("9999");
+        _repo.UpsertPin(hash);
+
+        // Verify it's in config
+        Assert.Equal(hash, _config.Server.DashboardPinHash);
+        Assert.Equal("pin", _config.Server.DashboardAuth);
     }
 
     public void Dispose()
