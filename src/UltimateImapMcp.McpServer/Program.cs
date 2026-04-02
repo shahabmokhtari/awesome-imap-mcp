@@ -84,9 +84,13 @@ MigrationRunner.Migrate(database);
 var healthDbPath = Path.Combine(dbDir, "health.db");
 var healthDatabase = new HealthDatabase(healthDbPath);
 
+var labelsDb = new LabelsDatabase(Path.Combine(dbDir, "labels.db"));
+
 var metricsDb = new MetricsDatabase(Path.Combine(dbDir, "metrics.db"));
 var logsDb = new LogsDatabase(Path.Combine(dbDir, "logs.db"));
 builder.Services.AddSingleton(healthDatabase);
+builder.Services.AddSingleton(labelsDb);
+builder.Services.AddSingleton<LocalLabelRepository>();
 
 builder.Services.AddSingleton<Func<int>>(sp =>
 {
@@ -380,6 +384,18 @@ static T GetProp<T>(object obj, string name)
     var repaired = repairRepo.RepairMissingFolderLinks();
     if (repaired > 0)
         Console.Error.WriteLine($"  [Startup] Repaired {repaired} messages with missing folder links.");
+}
+
+// Reconcile local labels — ensures labels persist across cache rebuilds
+{
+    var reconcileRepo = new LocalLabelRepository(labelsDb);
+    var reconcileAccounts = new AccountRepository(accountsStore);
+    foreach (var account in reconcileAccounts.GetAll())
+    {
+        var count = reconcileRepo.ReconcileLabels(account.Id, database);
+        if (count > 0)
+            Console.Error.WriteLine($"  [Startup] Reconciled {count} local labels for account '{account.Name}'.");
+    }
 }
 
 // Print startup banner to stderr (stdout is reserved for MCP stdio protocol)

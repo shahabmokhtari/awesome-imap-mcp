@@ -11,6 +11,8 @@ using UltimateImapMcp.Core.Coordination;
 using UltimateImapMcp.Core.Encryption;
 using UltimateImapMcp.Core.OAuth;
 using UltimateImapMcp.Core.Providers;
+using UltimateImapMcp.Core.Database;
+using UltimateImapMcp.Core.Repositories;
 using UltimateImapMcp.ImapClient.Repositories;
 using ImapClientLib = MailKit.Net.Imap.ImapClient;
 
@@ -32,6 +34,8 @@ public class SyncManager(
     IOAuthAccessTokenProvider oauthProvider,
     IInstanceCoordinator coordinator,
     AppConfig appConfig,
+    LocalLabelRepository localLabelRepo,
+    AppDatabase appDatabase,
     ILogger<SyncManager> logger) : BackgroundService
 {
     private readonly ConcurrentDictionary<string, ImapConnectionManager> _connections = new();
@@ -295,6 +299,10 @@ public class SyncManager(
                 using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, _pauseCts.Token);
                 var remaining = await SyncAllFoldersAsync(accountId, account, connMgr, "poll", linked.Token).ConfigureAwait(false);
                 _hasPendingMessages[accountId] = remaining > 0;
+
+                // Reconcile local labels after sync
+                try { localLabelRepo.ReconcileLabels(accountId, appDatabase); }
+                catch (Exception ex) { logger.LogDebug(ex, "Label reconciliation skipped for {Account}", accountId); }
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
@@ -356,6 +364,10 @@ public class SyncManager(
                 using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, _pauseCts.Token);
                 var remaining = await SyncAllFoldersAsync(accountId, account, connMgr, "poll", linked.Token).ConfigureAwait(false);
                 _hasPendingMessages[accountId] = remaining > 0;
+
+                // Reconcile local labels after sync
+                try { localLabelRepo.ReconcileLabels(accountId, appDatabase); }
+                catch (Exception ex) { logger.LogDebug(ex, "Label reconciliation skipped for {Account}", accountId); }
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {

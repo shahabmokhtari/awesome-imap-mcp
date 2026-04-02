@@ -3,6 +3,7 @@ using MailKit;
 using Microsoft.Extensions.Logging;
 using UltimateImapMcp.Core.Encryption;
 using UltimateImapMcp.Core.OAuth;
+using UltimateImapMcp.Core.Repositories;
 using UltimateImapMcp.ImapClient;
 using UltimateImapMcp.ImapClient.Repositories;
 using UltimateImapMcp.Queue.Models;
@@ -12,6 +13,7 @@ namespace UltimateImapMcp.Queue.Executors;
 public class LabelExecutor(AccountRepository accountRepo, CredentialEncryptor encryptor,
     IOAuthAccessTokenProvider oauthProvider,
     MessageRepository messageRepo, FolderRepository folderRepo,
+    LocalLabelRepository localLabelRepo,
     ILogger<LabelExecutor> logger) : IOperationExecutor
 {
     public IReadOnlyList<string> SupportedOperations { get; } = ["label", "unlabel"];
@@ -30,23 +32,30 @@ public class LabelExecutor(AccountRepository accountRepo, CredentialEncryptor en
         var accountConfig = AccountConfigMapper.ToAccountConfig(record, encryptor);
         using var connMgr = new ImapConnectionManager(accountConfig, encryptor,
             oauthProvider: oauthProvider, accountId: record.Id);
+
+        var usedImap = false;
         await connMgr.ExecuteAsync(async client =>
         {
             var folder = await client.GetFolderAsync(folderPath, ct);
             await folder.OpenAsync(FolderAccess.ReadWrite, ct);
             try
             {
-                // Check if server supports custom keywords (\* in PERMANENTFLAGS)
-                if (!folder.PermanentFlags.HasFlag(MessageFlags.UserDefined))
-                    throw new NotSupportedException(
-                        $"IMAP server for account '{operation.AccountId}' does not support custom keywords/labels. " +
-                        "Labels require the server to advertise \\* in PERMANENTFLAGS.");
-
-                var keywords = new HashSet<string> { label };
-                if (add)
-                    await folder.AddFlagsAsync(uids, MessageFlags.None, keywords, true, ct);
+                if (folder.PermanentFlags.HasFlag(MessageFlags.UserDefined))
+                {
+                    // Server supports custom keywords — use IMAP STORE
+                    var keywords = new HashSet<string> { label };
+                    if (add)
+                        await folder.AddFlagsAsync(uids, MessageFlags.None, keywords, true, ct);
+                    else
+                        await folder.RemoveFlagsAsync(uids, MessageFlags.None, keywords, true, ct);
+                    usedImap = true;
+                }
                 else
-                    await folder.RemoveFlagsAsync(uids, MessageFlags.None, keywords, true, ct);
+                {
+                    logger.LogInformation(
+                        "IMAP server for {AccountId} doesn't support keywords — using local label storage for '{Label}'",
+                        operation.AccountId, label);
+                }
             }
             finally
             {
@@ -57,7 +66,25 @@ public class LabelExecutor(AccountRepository accountRepo, CredentialEncryptor en
             }
         }, ct);
 
-        // Best-effort cache update: reflect the keyword change in the local DB
+        // For accounts without IMAP keyword support: persist in local labels DB
+        if (!usedImap)
+        {
+            var folderRecord = folderRepo.GetByPath(operation.AccountId, folderPath);
+            if (folderRecord is not null)
+            {
+                foreach (var uid in uids)
+                {
+                    var msg = messageRepo.GetByUid(operation.AccountId, folderRecord.Id, uid.Id);
+                    if (msg?.MessageId is null) continue;
+                    if (add)
+                        localLabelRepo.AddLabel(operation.AccountId, msg.MessageId, label);
+                    else
+                        localLabelRepo.RemoveLabel(operation.AccountId, msg.MessageId, label);
+                }
+            }
+        }
+
+        // Best-effort cache update: reflect the label change in the local message cache
         try
         {
             var folderRecord = folderRepo.GetByPath(operation.AccountId, folderPath);

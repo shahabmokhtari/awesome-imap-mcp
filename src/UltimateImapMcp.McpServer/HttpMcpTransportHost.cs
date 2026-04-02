@@ -115,6 +115,10 @@ public sealed class HttpMcpTransportHost : BackgroundService
         builder.Services.AddSingleton(_rootServices.GetRequiredService<LogsRepository>());
         builder.Services.AddSingleton(_rootServices.GetRequiredService<IOAuthAccessTokenProvider>());
 
+        // Local labels fallback
+        builder.Services.AddSingleton(_rootServices.GetRequiredService<LabelsDatabase>());
+        builder.Services.AddSingleton(_rootServices.GetRequiredService<LocalLabelRepository>());
+
         // Additional services needed for tool API execution
         builder.Services.AddSingleton(_rootServices.GetRequiredService<IEmailBackendFactory>());
         builder.Services.AddSingleton(_rootServices.GetRequiredService<ProviderProfileRegistry>());
