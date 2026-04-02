@@ -254,7 +254,7 @@ function MessageView({
     if (!newWindow) return
     const escapedSubject = (msg.subject || '(no subject)').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     const escapedFrom = (msg.fromAddress || msg.fromEmail || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    const dateStr = msg.dateEpoch ? new Date(msg.dateEpoch * 1000).toLocaleString() : msg.date
+    const dateStr = (msg.dateEpoch ? new Date(msg.dateEpoch * 1000).toLocaleString() : (msg.date || '')).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     const content = msg.bodyHtml
       ? sanitizeEmailHtml(msg.bodyHtml, true)
       : `<pre style="font-family: sans-serif; white-space: pre-wrap;">${(msg.bodyText || 'No content').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>`

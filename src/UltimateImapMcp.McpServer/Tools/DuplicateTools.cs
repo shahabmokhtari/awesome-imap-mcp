@@ -57,8 +57,6 @@ public class DuplicateTools(AppDatabase db, QueueManager queueManager, AppConfig
                     if (accountId is not null)
                         cmd.Parameters.AddWithValue("$acct", accountId);
 
-                    cmd.Parameters.AddWithValue("$limit", limit);
-
                     var groups = new Dictionary<string, (string? Subject, string? From, string? Date, List<object> Copies)>();
 
                     using var reader = cmd.ExecuteReader();
