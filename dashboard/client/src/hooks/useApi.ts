@@ -481,6 +481,7 @@ export function useMessages(accountId: string | undefined, folderId?: number, li
     queryKey: ['messages', accountId, folderId, limit, offset],
     queryFn: () => apiFetch<MessagesResponse>(`/api/messages?${qs}`),
     enabled: !!accountId && folderId != null,
+    refetchInterval: 15000, // Auto-refresh to reflect server-side changes (MCP deletes, sync, etc.)
   })
 }
 
@@ -679,9 +680,12 @@ export function useExecuteTool() {
         body: JSON.stringify(params.args),
       }),
     onSuccess: () => {
-      // Invalidate queue + messages so dashboard reflects tool side-effects
+      // Invalidate all data caches so dashboard reflects tool side-effects
       qc.invalidateQueries({ queryKey: ['queue'] })
       qc.invalidateQueries({ queryKey: ['messages'] })
+      qc.invalidateQueries({ queryKey: ['messages-search'] })
+      qc.invalidateQueries({ queryKey: ['message'] })
+      qc.invalidateQueries({ queryKey: ['folders'] })
     },
   })
 }
