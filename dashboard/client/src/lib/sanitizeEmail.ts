@@ -26,6 +26,13 @@ export function sanitizeEmailHtml(html: string, allowRemoteImages: boolean = fal
 
   doc.querySelectorAll('link').forEach(el => el.remove())
 
+  // Scrub remote URLs from <style> blocks (@import and url() for CSS exfiltration)
+  doc.querySelectorAll('style').forEach(el => {
+    el.textContent = (el.textContent || '')
+      .replace(/@import\s+[^;]+;?/gi, '/* @import blocked */')
+      .replace(/url\s*\([^)]*\)/gi, 'none')
+  })
+
   doc.querySelectorAll('img').forEach(img => {
     const src = img.getAttribute('src') || ''
     if (src.startsWith('http:') || src.startsWith('https:') || src.startsWith('//')) {

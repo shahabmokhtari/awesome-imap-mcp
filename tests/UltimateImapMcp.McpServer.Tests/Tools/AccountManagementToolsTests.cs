@@ -29,7 +29,7 @@ public class AccountManagementToolsTests
         var (store, path) = MakeTempStore();
         try
         {
-            var tools = new AccountManagementTools(store, null, config,
+            var tools = new AccountManagementTools(store, MakeEncryptor(), config,
                 NullLogger<AccountManagementTools>.Instance);
 
             var result = Parse(tools.StartDashboard());
@@ -50,7 +50,7 @@ public class AccountManagementToolsTests
         var (store, path) = MakeTempStore();
         try
         {
-            var tools = new AccountManagementTools(store, null, config,
+            var tools = new AccountManagementTools(store, MakeEncryptor(), config,
                 NullLogger<AccountManagementTools>.Instance);
 
             var result = Parse(tools.StartDashboard());
@@ -236,7 +236,7 @@ public class AccountManagementToolsTests
         var (store, path) = MakeTempStore();
         try
         {
-            var tools = new AccountManagementTools(store, null, config,
+            var tools = new AccountManagementTools(store, MakeEncryptor(), config,
                 NullLogger<AccountManagementTools>.Instance);
 
             var result = Parse(tools.AddAccountOauth("invalid_provider"));
@@ -257,7 +257,7 @@ public class AccountManagementToolsTests
         var (store, path) = MakeTempStore();
         try
         {
-            var tools = new AccountManagementTools(store, null, config,
+            var tools = new AccountManagementTools(store, MakeEncryptor(), config,
                 NullLogger<AccountManagementTools>.Instance);
 
             var result = Parse(tools.AddAccountOauth("gmail"));
@@ -278,7 +278,7 @@ public class AccountManagementToolsTests
         var (store, path) = MakeTempStore();
         try
         {
-            var tools = new AccountManagementTools(store, null, config,
+            var tools = new AccountManagementTools(store, MakeEncryptor(), config,
                 NullLogger<AccountManagementTools>.Instance);
 
             var result = Parse(tools.AddAccountOauth("Gmail"));

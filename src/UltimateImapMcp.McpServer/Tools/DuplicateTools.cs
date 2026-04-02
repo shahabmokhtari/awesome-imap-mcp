@@ -57,11 +57,16 @@ public class DuplicateTools(AppDatabase db, QueueManager queueManager, AppConfig
                     if (accountId is not null)
                         cmd.Parameters.AddWithValue("$acct", accountId);
 
+                    cmd.Parameters.AddWithValue("$limit", limit);
+
                     var groups = new Dictionary<string, (string? Subject, string? From, string? Date, List<object> Copies)>();
 
                     using var reader = cmd.ExecuteReader();
                     while (reader.Read())
                     {
+                        // Stop once we've collected enough groups
+                        if (groups.Count >= limit && !groups.ContainsKey(reader.GetString(0)))
+                            break;
                         var msgId = reader.GetString(0);
                         var acct = reader.GetString(1);
                         var dbId = reader.GetInt32(2);

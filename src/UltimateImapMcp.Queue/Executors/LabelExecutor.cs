@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.Json;
 using MailKit;
 using Microsoft.Extensions.Logging;
@@ -17,7 +18,7 @@ public class LabelExecutor(AccountRepository accountRepo, CredentialEncryptor en
     ILogger<LabelExecutor> logger) : IOperationExecutor
 {
     /// <summary>Accounts known to not support custom IMAP keywords. Avoids wasting connections.</summary>
-    private static readonly HashSet<string> _localOnlyAccounts = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly ConcurrentDictionary<string, bool> _localOnlyAccounts = new(StringComparer.OrdinalIgnoreCase);
 
     public IReadOnlyList<string> SupportedOperations { get; } = ["label", "unlabel"];
 
@@ -33,7 +34,7 @@ public class LabelExecutor(AccountRepository accountRepo, CredentialEncryptor en
         var usedImap = false;
 
         // Skip IMAP entirely for accounts we already know don't support keywords
-        if (!_localOnlyAccounts.Contains(operation.AccountId))
+        if (!_localOnlyAccounts.ContainsKey(operation.AccountId))
         {
             var record = accountRepo.ResolveAccount(operation.AccountId)
                 ?? throw new InvalidOperationException($"Account '{operation.AccountId}' not found in database.");
@@ -58,7 +59,7 @@ public class LabelExecutor(AccountRepository accountRepo, CredentialEncryptor en
                     }
                     else
                     {
-                        _localOnlyAccounts.Add(operation.AccountId);
+                        _localOnlyAccounts.TryAdd(operation.AccountId, true);
                         logger.LogInformation(
                             "IMAP server for {AccountId} doesn't support keywords — using local label storage (cached for session)",
                             operation.AccountId);

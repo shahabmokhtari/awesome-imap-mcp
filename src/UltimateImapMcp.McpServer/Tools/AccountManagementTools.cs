@@ -11,7 +11,7 @@ namespace UltimateImapMcp.McpServer.Tools;
 [McpServerToolType]
 public class AccountManagementTools(
     AccountsStore accountsStore,
-    CredentialEncryptor? encryptor,
+    CredentialEncryptor encryptor,
     AppConfig config,
     ILogger<AccountManagementTools> logger)
 {
@@ -103,10 +103,7 @@ public class AccountManagementTools(
                         return McpJsonDefaults.Error($"An account with name '{name}' already exists.");
                     }
 
-                    // Encrypt password
-                    var credentialsEnc = encryptor is not null
-                        ? encryptor.Encrypt(password)
-                        : password; // fallback if no encryptor available
+                    var credentialsEnc = encryptor.Encrypt(password);
 
                     var now = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss");
                     var entry = new AccountEntry

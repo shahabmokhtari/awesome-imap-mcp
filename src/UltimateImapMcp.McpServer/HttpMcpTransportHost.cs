@@ -76,9 +76,12 @@ public sealed class HttpMcpTransportHost : BackgroundService
                     _logger.LogDebug(ex, "MCP HTTP transport retry #{Count} for port {Port}", _consecutiveFailures, port);
                 _webApp = null;
 
-                // Lost primary status — re-enable proxy
+                // Lost primary status — re-enable proxy (dispose old one first)
                 if (_proxyBaseUrl is not null)
+                {
+                    (McpJsonDefaults.ToolProxy as IDisposable)?.Dispose();
                     McpJsonDefaults.ToolProxy = new UltimateImapMcp.Core.Coordination.ProxyToolExecutor(_proxyBaseUrl);
+                }
 
                 // Wait for port to become available again before retrying
                 await PortUtils.WaitForPortWithBackoffAsync(port, _logger, "MCP HTTP", stoppingToken).ConfigureAwait(false);
@@ -161,6 +164,7 @@ public sealed class HttpMcpTransportHost : BackgroundService
         }
 
         // We're now serving — clear proxy (we are primary)
+        (McpJsonDefaults.ToolProxy as IDisposable)?.Dispose();
         McpJsonDefaults.ToolProxy = null;
 
         await app.RunAsync(stoppingToken).ConfigureAwait(false);
