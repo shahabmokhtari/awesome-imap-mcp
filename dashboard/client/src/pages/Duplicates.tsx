@@ -126,18 +126,33 @@ export default function Duplicates() {
         grouped[key].push(copy)
       }
 
+      let totalQueued = 0
+      const errors: string[] = []
       for (const [key, groupCopies] of Object.entries(grouped)) {
         const separatorIdx = key.indexOf(':')
         const accountId = key.slice(0, separatorIdx)
         const folder = key.slice(separatorIdx + 1)
         const uids = groupCopies.map(c => c.uid).join(',')
-        await executeTool.mutateAsync({
-          name: 'delete_messages',
-          args: { accountId, uids, folder },
-        })
+        try {
+          const res = await executeTool.mutateAsync({
+            name: 'delete_messages',
+            args: { accountId, uids, folder },
+          }) as Record<string, unknown> | null
+          if (res && typeof res === 'object' && 'error' in res) {
+            errors.push(`${folder}: ${res.error}`)
+          } else {
+            totalQueued += groupCopies.length
+          }
+        } catch (err) {
+          errors.push(`${folder}: ${(err as Error).message}`)
+        }
       }
 
-      setActionStatus({ type: 'success', message: `Queued deletion of ${copies.length} message(s).` })
+      if (errors.length > 0) {
+        setActionStatus({ type: 'error', message: `Errors: ${errors.join('; ')}` })
+      } else {
+        setActionStatus({ type: 'success', message: `Queued deletion of ${totalQueued} message(s).` })
+      }
       setSelectedCopies(new Set())
     } catch (err) {
       setActionStatus({ type: 'error', message: (err as Error).message })
@@ -181,18 +196,33 @@ export default function Duplicates() {
         grouped[key].push(copy)
       }
 
+      let totalQueued = 0
+      const errors: string[] = []
       for (const [key, groupCopies] of Object.entries(grouped)) {
         const separatorIdx = key.indexOf(':')
         const accountId = key.slice(0, separatorIdx)
         const folder = key.slice(separatorIdx + 1)
         const uids = groupCopies.map(c => c.uid).join(',')
-        await executeTool.mutateAsync({
-          name: 'delete_messages',
-          args: { accountId, uids, folder },
-        })
+        try {
+          const res = await executeTool.mutateAsync({
+            name: 'delete_messages',
+            args: { accountId, uids, folder },
+          }) as Record<string, unknown> | null
+          if (res && typeof res === 'object' && 'error' in res) {
+            errors.push(`${folder}: ${res.error}`)
+          } else {
+            totalQueued += groupCopies.length
+          }
+        } catch (err) {
+          errors.push(`${folder}: ${(err as Error).message}`)
+        }
       }
 
-      setActionStatus({ type: 'success', message: `Queued deletion of ${copies.length} duplicate(s) from "${accountName}".` })
+      if (errors.length > 0) {
+        setActionStatus({ type: 'error', message: `Errors: ${errors.join('; ')}` })
+      } else {
+        setActionStatus({ type: 'success', message: `Queued deletion of ${totalQueued} duplicate(s) from "${accountName}".` })
+      }
       setSelectedCopies(new Set())
     } catch (err) {
       setActionStatus({ type: 'error', message: (err as Error).message })
