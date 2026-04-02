@@ -16,6 +16,9 @@ public class LabelExecutor(AccountRepository accountRepo, CredentialEncryptor en
     LocalLabelRepository localLabelRepo,
     ILogger<LabelExecutor> logger) : IOperationExecutor
 {
+    /// <summary>Accounts known to not support custom IMAP keywords. Avoids wasting connections.</summary>
+    private static readonly HashSet<string> _localOnlyAccounts = new(StringComparer.OrdinalIgnoreCase);
+
     public IReadOnlyList<string> SupportedOperations { get; } = ["label", "unlabel"];
 
     public async Task ExecuteAsync(QueuedOperation operation, CancellationToken ct)
@@ -27,44 +30,49 @@ public class LabelExecutor(AccountRepository accountRepo, CredentialEncryptor en
         var label = payload.GetProperty("label").GetString()!;
         var add = operation.Operation.Equals("label", StringComparison.OrdinalIgnoreCase);
 
-        var record = accountRepo.ResolveAccount(operation.AccountId)
-            ?? throw new InvalidOperationException($"Account '{operation.AccountId}' not found in database.");
-        var accountConfig = AccountConfigMapper.ToAccountConfig(record, encryptor);
-        using var connMgr = new ImapConnectionManager(accountConfig, encryptor,
-            oauthProvider: oauthProvider, accountId: record.Id);
-
         var usedImap = false;
-        await connMgr.ExecuteAsync(async client =>
+
+        // Skip IMAP entirely for accounts we already know don't support keywords
+        if (!_localOnlyAccounts.Contains(operation.AccountId))
         {
-            var folder = await client.GetFolderAsync(folderPath, ct);
-            await folder.OpenAsync(FolderAccess.ReadWrite, ct);
-            try
+            var record = accountRepo.ResolveAccount(operation.AccountId)
+                ?? throw new InvalidOperationException($"Account '{operation.AccountId}' not found in database.");
+            var accountConfig = AccountConfigMapper.ToAccountConfig(record, encryptor);
+            using var connMgr = new ImapConnectionManager(accountConfig, encryptor,
+                oauthProvider: oauthProvider, accountId: record.Id);
+
+            await connMgr.ExecuteAsync(async client =>
             {
-                if (folder.PermanentFlags.HasFlag(MessageFlags.UserDefined))
+                var folder = await client.GetFolderAsync(folderPath, ct);
+                await folder.OpenAsync(FolderAccess.ReadWrite, ct);
+                try
                 {
-                    // Server supports custom keywords — use IMAP STORE
-                    var keywords = new HashSet<string> { label };
-                    if (add)
-                        await folder.AddFlagsAsync(uids, MessageFlags.None, keywords, true, ct);
+                    if (folder.PermanentFlags.HasFlag(MessageFlags.UserDefined))
+                    {
+                        var keywords = new HashSet<string> { label };
+                        if (add)
+                            await folder.AddFlagsAsync(uids, MessageFlags.None, keywords, true, ct);
+                        else
+                            await folder.RemoveFlagsAsync(uids, MessageFlags.None, keywords, true, ct);
+                        usedImap = true;
+                    }
                     else
-                        await folder.RemoveFlagsAsync(uids, MessageFlags.None, keywords, true, ct);
-                    usedImap = true;
+                    {
+                        _localOnlyAccounts.Add(operation.AccountId);
+                        logger.LogInformation(
+                            "IMAP server for {AccountId} doesn't support keywords — using local label storage (cached for session)",
+                            operation.AccountId);
+                    }
                 }
-                else
+                finally
                 {
-                    logger.LogInformation(
-                        "IMAP server for {AccountId} doesn't support keywords — using local label storage for '{Label}'",
-                        operation.AccountId, label);
+                    try { await folder.CloseAsync(false, ct); }
+                    catch (Exception ex) when (ex is MailKit.ServiceNotConnectedException
+                        or MailKit.ServiceNotAuthenticatedException
+                        or IOException or OperationCanceledException) { }
                 }
-            }
-            finally
-            {
-                try { await folder.CloseAsync(false, ct); }
-                catch (Exception ex) when (ex is MailKit.ServiceNotConnectedException
-                    or MailKit.ServiceNotAuthenticatedException
-                    or IOException or OperationCanceledException) { }
-            }
-        }, ct);
+            }, ct);
+        }
 
         // For accounts without IMAP keyword support: persist in local labels DB
         if (!usedImap)
