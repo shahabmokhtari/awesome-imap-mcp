@@ -553,7 +553,7 @@ function SearchResults({
   onSelect,
   selectedUid,
 }: {
-  accountId: string
+  accountId: string | undefined
   query: string
   onSelect: (msg: MessageSummary) => void
   selectedUid: number | undefined
@@ -667,7 +667,7 @@ export default function Messages() {
   }, [handleKeyDown])
 
   const handleAccountChange = (id: string) => {
-    setSelectedAccountId(id)
+    setSelectedAccountId(id || undefined)  // empty string → undefined (all accounts)
     setSelectedFolderId(undefined)
     setSelectedMsg(undefined)
     setSearchQuery('')
@@ -721,10 +721,11 @@ export default function Messages() {
       {/* Top bar: account selector + search */}
       <div className="flex items-center gap-3 mb-4 flex-shrink-0">
         <select
-          value={accountId ?? ''}
+          value={selectedAccountId ?? ''}
           onChange={e => handleAccountChange(e.target.value)}
           className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
         >
+          <option value="">All Accounts</option>
           {accounts.map((a) => (
             <option key={a.id as string} value={a.id as string}>
               {a.name as string}
@@ -761,22 +762,24 @@ export default function Messages() {
 
       {/* Main content: folder sidebar + message list + message detail */}
       <div className="flex flex-1 bg-white rounded-lg shadow overflow-hidden min-h-0">
-        {/* Folder sidebar */}
-        <div className="w-56 border-r border-gray-200 overflow-y-auto flex-shrink-0 p-2">
-          {foldersLoading ? (
-            <div className="text-center py-4 text-gray-400 text-xs">Loading folders...</div>
-          ) : folders && folders.length > 0 ? (
-            <FolderList
-              folders={folders}
-              selectedFolderId={isSearching ? undefined : effectiveFolderId}
-              onSelect={handleFolderSelect}
-            />
-          ) : (
-            <div className="text-center py-4 text-gray-400 text-xs">
-              No folders synced yet
-            </div>
-          )}
-        </div>
+        {/* Folder sidebar — hidden when "All Accounts" is selected */}
+        {accountId && (
+          <div className="w-56 border-r border-gray-200 overflow-y-auto flex-shrink-0 p-2">
+            {foldersLoading ? (
+              <div className="text-center py-4 text-gray-400 text-xs">Loading folders...</div>
+            ) : folders && folders.length > 0 ? (
+              <FolderList
+                folders={folders}
+                selectedFolderId={isSearching ? undefined : effectiveFolderId}
+                onSelect={handleFolderSelect}
+              />
+            ) : (
+              <div className="text-center py-4 text-gray-400 text-xs">
+                No folders synced yet
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Message list */}
         <div className={`border-r border-gray-200 overflow-y-auto flex-shrink-0 ${
@@ -784,11 +787,15 @@ export default function Messages() {
         }`}>
           {isSearching ? (
             <SearchResults
-              accountId={accountId!}
+              accountId={selectedAccountId}
               query={searchQuery}
               onSelect={handleSelectMessage}
               selectedUid={selectedMsg?.uid}
             />
+          ) : !accountId ? (
+            <div className="text-center py-12 text-gray-400 text-sm">
+              <p>Select an account to browse folders, or search across all accounts.</p>
+            </div>
           ) : effectiveFolderId == null ? (
             <div className="text-center py-12 text-gray-400 text-sm">
               Select a folder to view messages

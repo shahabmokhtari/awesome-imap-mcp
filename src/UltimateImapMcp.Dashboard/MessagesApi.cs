@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using UltimateImapMcp.ImapClient.Repositories;
 
@@ -203,13 +204,29 @@ public static class MessagesApi
                 return Results.BadRequest(new { error = $"Search query error: {ex.Message}" });
             }
 
-            // Build a folder ID -> path lookup for ALL account folders (cross-folder search)
+            // Build folder ID -> path lookup (for all relevant accounts)
             Dictionary<int, string> folderPaths = new();
             if (!string.IsNullOrEmpty(accountId))
             {
-                var folders = folderRepo.GetByAccount(accountId);
-                foreach (var f in folders)
+                foreach (var f in folderRepo.GetByAccount(accountId))
                     folderPaths[f.Id] = f.Path;
+            }
+            else
+            {
+                // Cross-account search: collect folder paths for all accounts in results
+                var accountIds = messages.Select(m => m.AccountId).Distinct();
+                foreach (var aid in accountIds)
+                    foreach (var f in folderRepo.GetByAccount(aid))
+                        folderPaths.TryAdd(f.Id, f.Path);
+            }
+
+            // Build account ID -> name lookup for cross-account results
+            var accountRepo = ctx.RequestServices.GetService<AccountRepository>();
+            Dictionary<string, string> accountNames = new();
+            if (accountRepo is not null)
+            {
+                foreach (var a in accountRepo.GetAll())
+                    accountNames[a.Id] = a.Name;
             }
 
             var result = messages.Select(m => new
@@ -217,6 +234,8 @@ public static class MessagesApi
                 id = m.Id,
                 uid = m.Uid,
                 folderId = m.FolderId,
+                accountId = m.AccountId,
+                accountName = accountNames.TryGetValue(m.AccountId, out var aName) ? aName : null,
                 subject = m.Subject ?? "(no subject)",
                 fromAddress = m.FromAddress ?? "",
                 fromEmail = m.FromEmail ?? "",
