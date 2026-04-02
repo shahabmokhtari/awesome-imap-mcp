@@ -187,7 +187,15 @@ public static class MessagesApi
             if (!string.IsNullOrEmpty(folderIdStr) && int.TryParse(folderIdStr, out var parsedFolderId))
                 folderId = parsedFolderId;
 
-            var messages = messageRepo.SearchFts(query, accountId, folderId, limit);
+            List<MessageRecord> messages;
+            try
+            {
+                messages = messageRepo.SearchFts(query, accountId, folderId, limit);
+            }
+            catch (Microsoft.Data.Sqlite.SqliteException ex)
+            {
+                return Results.BadRequest(new { error = $"Search query error: {ex.Message}" });
+            }
 
             // Build a folder ID -> path lookup
             Dictionary<int, string> folderPaths = new();

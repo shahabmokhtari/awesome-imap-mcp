@@ -201,7 +201,7 @@ public class MessageRepository(AppDatabase db)
             ORDER BY m.date_epoch DESC
             LIMIT $limit;
             """;
-        cmd.Parameters.AddWithValue("$query", query);
+        cmd.Parameters.AddWithValue("$query", SanitizeFtsQuery(query));
         if (accountId != null) cmd.Parameters.AddWithValue("$accountId", accountId);
         if (folderId != null) cmd.Parameters.AddWithValue("$folderId", folderId);
         cmd.Parameters.AddWithValue("$limit", maxResults);
@@ -244,7 +244,7 @@ public class MessageRepository(AppDatabase db)
 
         cmd.CommandText = $"SELECT m.* FROM messages m {join} {where} {orderClause} LIMIT $limit OFFSET $offset;";
 
-        if (useFts) cmd.Parameters.AddWithValue("$query", filter.Query!);
+        if (useFts) cmd.Parameters.AddWithValue("$query", SanitizeFtsQuery(filter.Query!));
         if (filter.AccountId is not null) cmd.Parameters.AddWithValue("$accountId", filter.AccountId);
         if (filter.FolderId is not null) cmd.Parameters.AddWithValue("$folderId", filter.FolderId);
         if (filter.FromAddress is not null) cmd.Parameters.AddWithValue("$from", $"%{EscapeLike(filter.FromAddress)}%");
@@ -861,6 +861,19 @@ public class MessageRepository(AppDatabase db)
 
     private static string EscapeLike(string value) =>
         value.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
+
+    /// <summary>
+    /// Sanitizes user input for SQLite FTS5 MATCH queries.
+    /// Wraps the query in double quotes to treat it as a literal phrase,
+    /// preventing syntax errors from special characters like . * + - ( ) etc.
+    /// </summary>
+    private static string SanitizeFtsQuery(string query)
+    {
+        // Escape any double quotes in the query itself
+        var escaped = query.Replace("\"", "\"\"");
+        // Wrap in double quotes to treat as a phrase/literal search
+        return $"\"{escaped}\"";
+    }
 
     private static MessageRecord ReadRecord(Microsoft.Data.Sqlite.SqliteDataReader r) => new(
         Id: r.GetInt32(r.GetOrdinal("id")),
