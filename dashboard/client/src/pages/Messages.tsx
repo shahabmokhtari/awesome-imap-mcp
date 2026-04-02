@@ -692,7 +692,7 @@ export default function Messages() {
             type="text"
             value={searchInput}
             onChange={e => setSearchInput(e.target.value)}
-            placeholder="Search messages..."
+            placeholder="Search subject, sender, or body — e.g. invoice, john@example.com, meeting notes"
             className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
           <button
