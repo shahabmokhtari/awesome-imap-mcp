@@ -4,11 +4,13 @@ using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
 using UltimateImapMcp.Core.Configuration;
 using UltimateImapMcp.Core.Database;
+using UltimateImapMcp.Queue;
+using UltimateImapMcp.Queue.Models;
 
 namespace UltimateImapMcp.McpServer.Tools;
 
 [McpServerToolType]
-public class DuplicateTools(AppDatabase db, AppConfig config, ILogger<DuplicateTools> logger)
+public class DuplicateTools(AppDatabase db, QueueManager queueManager, AppConfig config, ILogger<DuplicateTools> logger)
 {
     [McpServerTool, Description(
         "Detect emails that exist in multiple IMAP accounts (same RFC Message-ID across different account_ids). " +
@@ -31,8 +33,11 @@ public class DuplicateTools(AppDatabase db, AppConfig config, ILogger<DuplicateT
                         : "";
 
                     cmd.CommandText = $"""
-                        SELECT m.message_id, m.account_id, m.id, m.subject, m.from_address, m.date, m.folder_id
+                        SELECT m.message_id, m.account_id, m.id, m.subject, m.from_address, m.date,
+                               mf.uid, f.path as folder_path
                         FROM messages m
+                        JOIN message_folders mf ON mf.message_id = m.id
+                        JOIN folders f ON f.id = mf.folder_id
                         WHERE m.message_id IS NOT NULL AND m.deleted_at IS NULL
                         AND m.message_id IN (
                             SELECT message_id FROM messages
@@ -58,7 +63,8 @@ public class DuplicateTools(AppDatabase db, AppConfig config, ILogger<DuplicateT
                         var subject = reader.IsDBNull(3) ? null : reader.GetString(3);
                         var from = reader.IsDBNull(4) ? null : reader.GetString(4);
                         var date = reader.IsDBNull(5) ? null : reader.GetString(5);
-                        var folderId = reader.GetInt32(6);
+                        var uid = reader.IsDBNull(6) ? 0 : reader.GetInt32(6);
+                        var folderPath = reader.IsDBNull(7) ? null : reader.GetString(7);
 
                         if (!groups.ContainsKey(msgId))
                             groups[msgId] = (subject, from, date, []);
@@ -67,7 +73,9 @@ public class DuplicateTools(AppDatabase db, AppConfig config, ILogger<DuplicateT
                         {
                             account_id = acct,
                             db_id = dbId,
-                            folder_id = folderId
+                            folder_path = folderPath,
+                            uid,
+                            date
                         });
                     }
 
@@ -99,7 +107,7 @@ public class DuplicateTools(AppDatabase db, AppConfig config, ILogger<DuplicateT
     [McpServerTool, Description(
         "Delete duplicate emails from a specific account, keeping them in the other account(s). " +
         "Only deletes messages whose RFC Message-ID also exists in at least one other account. " +
-        "Defaults to dry run (preview only).")]
+        "Deletions are queued via the operation queue. Defaults to dry run (preview only).")]
     public string DeleteDuplicates(
         [Description("Account ID to delete duplicates FROM")] string accountId,
         [Description("Optional folder name filter (only delete duplicates in this folder)")] string? folder = null,
@@ -111,20 +119,22 @@ public class DuplicateTools(AppDatabase db, AppConfig config, ILogger<DuplicateT
             {
                 try
                 {
-                    // Find duplicate message IDs (db primary key ids) in this account
                     using var readConn = db.GetReadConnection();
                     using var findCmd = readConn.CreateCommand();
 
-                    var folderJoin = folder is not null
-                        ? "JOIN message_folders mf ON mf.message_id = m.id JOIN folders f ON f.id = mf.folder_id AND f.path = $folder"
+                    var folderFilter = folder is not null
+                        ? "AND f.path = $folder"
                         : "";
 
                     findCmd.CommandText = $"""
-                        SELECT m.id FROM messages m
-                        {folderJoin}
+                        SELECT m.account_id, f.path, mf.uid
+                        FROM messages m
+                        JOIN message_folders mf ON mf.message_id = m.id
+                        JOIN folders f ON f.id = mf.folder_id
                         WHERE m.account_id = $acct
                           AND m.message_id IS NOT NULL
                           AND m.deleted_at IS NULL
+                          {folderFilter}
                           AND m.message_id IN (
                               SELECT message_id FROM messages
                               WHERE message_id IS NOT NULL AND deleted_at IS NULL
@@ -136,10 +146,17 @@ public class DuplicateTools(AppDatabase db, AppConfig config, ILogger<DuplicateT
                     if (folder is not null)
                         findCmd.Parameters.AddWithValue("$folder", folder);
 
-                    var idsToDelete = new List<int>();
+                    var toDelete = new List<(string AccountId, string FolderPath, int Uid)>();
                     using var reader = findCmd.ExecuteReader();
                     while (reader.Read())
-                        idsToDelete.Add(reader.GetInt32(0));
+                    {
+                        var acct = reader.GetString(0);
+                        var folderPath = reader.GetString(1);
+                        var uid = reader.GetInt32(2);
+                        toDelete.Add((acct, folderPath, uid));
+                    }
+
+                    var count = toDelete.Count;
 
                     if (dryRun)
                     {
@@ -147,40 +164,30 @@ public class DuplicateTools(AppDatabase db, AppConfig config, ILogger<DuplicateT
                         {
                             account_id = accountId,
                             folder = folder ?? "all",
-                            duplicates_found = idsToDelete.Count,
-                            would_delete = idsToDelete.Count,
+                            duplicates_found = count,
+                            would_delete = count,
                             dry_run = true
                         }, McpJsonDefaults.Options);
                     }
 
-                    // Soft-delete the duplicates
-                    var deleted = 0;
-                    if (idsToDelete.Count > 0)
+                    // Group by account + folder for efficient queue operations
+                    var grouped = toDelete.GroupBy(d => (d.AccountId, d.FolderPath));
+                    var enqueued = 0;
+                    foreach (var group in grouped)
                     {
-                        deleted = db.ExecuteWrite(conn =>
-                        {
-                            const int batchSize = 100;
-                            var count = 0;
-                            for (var i = 0; i < idsToDelete.Count; i += batchSize)
-                            {
-                                var batch = idsToDelete.Skip(i).Take(batchSize).ToList();
-                                using var cmd = conn.CreateCommand();
-                                var placeholders = string.Join(", ", batch.Select((_, idx) => $"$id{idx}"));
-                                cmd.CommandText = $"UPDATE messages SET deleted_at = datetime('now') WHERE id IN ({placeholders}) AND deleted_at IS NULL";
-                                for (var j = 0; j < batch.Count; j++)
-                                    cmd.Parameters.AddWithValue($"$id{j}", batch[j]);
-                                count += cmd.ExecuteNonQuery();
-                            }
-                            return count;
-                        });
+                        var uidList = group.Select(g => g.Uid).ToList();
+                        var payload = JsonSerializer.Serialize(new { uids = uidList, folder = group.Key.FolderPath });
+                        var operationType = uidList.Count > 10 ? OperationType.BulkDelete : OperationType.Delete;
+                        queueManager.EnqueueOperation(group.Key.AccountId, operationType, payload);
+                        enqueued += uidList.Count;
                     }
 
                     return JsonSerializer.Serialize(new
                     {
                         account_id = accountId,
                         folder = folder ?? "all",
-                        duplicates_found = idsToDelete.Count,
-                        deleted,
+                        duplicates_found = count,
+                        enqueued,
                         dry_run = false
                     }, McpJsonDefaults.Options);
                 }
