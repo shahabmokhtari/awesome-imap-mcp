@@ -156,6 +156,9 @@ public class SyncConfig
     [JsonPropertyName("max_messages_per_sync")]
     public int MaxMessagesPerSync { get; set; } = 500;
 
+    [JsonPropertyName("max_connections")]
+    public int MaxConnections { get; set; } = 5;
+
     [JsonPropertyName("folders")]
     public List<FolderSyncConfig> Folders { get; set; } = [];
 }

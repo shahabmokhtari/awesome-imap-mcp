@@ -22,7 +22,9 @@ public sealed class ImapConnectionManager : IDisposable
     private readonly string? _accountId;
     private readonly ILogger _logger;
     private readonly SemaphoreSlim _semaphore = new(1, 1);
+    private readonly int _maxConnections;
     private ImapClientLib? _client;
+    private IDisposable? _throttleSlot;
     private bool _disposed;
 
     /// <summary>Maximum number of reconnection attempts before giving up.</summary>
@@ -41,6 +43,7 @@ public sealed class ImapConnectionManager : IDisposable
         _encryptor = encryptor;
         _oauthProvider = oauthProvider;
         _accountId = accountId;
+        _maxConnections = config.Sync.MaxConnections;
         _logger = logger ?? NullLogger<ImapConnectionManager>.Instance;
     }
 
@@ -109,6 +112,13 @@ public sealed class ImapConnectionManager : IDisposable
     /// </summary>
     private async Task<ImapClientLib> EnsureConnectedInternalAsync(CancellationToken ct)
     {
+        // Acquire per-account connection slot if we don't already have one
+        if (_throttleSlot is null && _accountId is not null)
+        {
+            _throttleSlot = await ConnectionThrottle.AcquireAsync(_accountId, _maxConnections, ct)
+                .ConfigureAwait(false);
+        }
+
         // Reuse existing connection if still healthy.
         if (_client is { IsConnected: true, IsAuthenticated: true })
             return _client;
@@ -203,6 +213,8 @@ public sealed class ImapConnectionManager : IDisposable
             if (_client is { IsConnected: true })
             {
                 await _client.DisconnectAsync(true, ct).ConfigureAwait(false);
+                _throttleSlot?.Dispose();
+                _throttleSlot = null;
             }
         }
         finally
@@ -217,6 +229,8 @@ public sealed class ImapConnectionManager : IDisposable
         _disposed = true;
 
         try { _client?.Dispose(); } catch (Exception ex) { _logger.LogDebug(ex, "IMAP client cleanup failed (non-fatal)"); }
+        _throttleSlot?.Dispose();
+        _throttleSlot = null;
         _semaphore.Dispose();
     }
 }

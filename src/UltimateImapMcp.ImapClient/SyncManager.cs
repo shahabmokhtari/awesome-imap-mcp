@@ -180,8 +180,13 @@ public class SyncManager(
             }
 
             ImapClientLib? idleClient = null;
+            IDisposable? throttleSlot = null;
             try
             {
+                throttleSlot = await ConnectionThrottle.AcquireAsync(
+                    accountId, account.Sync.MaxConnections, idleCts.Token)
+                    .ConfigureAwait(false);
+
                 idleClient = new ImapClientLib();
                 await idleClient.ConnectAsync(
                     account.ImapHost, account.ImapPort,
@@ -274,6 +279,7 @@ public class SyncManager(
             finally
             {
                 try { idleClient?.Dispose(); } catch (Exception ex) { logger.LogDebug(ex, "IDLE client cleanup failed (non-fatal)"); }
+                throttleSlot?.Dispose();
             }
         }
     }
