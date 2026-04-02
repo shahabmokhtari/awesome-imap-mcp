@@ -32,9 +32,11 @@ public class DuplicateTools(AppDatabase db, QueueManager queueManager, AppConfig
                         ? "AND m.message_id IN (SELECT message_id FROM messages WHERE account_id = $acct AND message_id IS NOT NULL AND deleted_at IS NULL)"
                         : "";
 
+                    // Use MIN(mf.uid) and MIN(f.path) to pick one folder per account
+                    // (avoids duplicate rows when a message appears in multiple folders)
                     cmd.CommandText = $"""
                         SELECT m.message_id, m.account_id, m.id, m.subject, m.from_address, m.date,
-                               mf.uid, f.path as folder_path
+                               MIN(mf.uid) as uid, MIN(f.path) as folder_path
                         FROM messages m
                         JOIN message_folders mf ON mf.message_id = m.id
                         JOIN folders f ON f.id = mf.folder_id
@@ -46,6 +48,7 @@ public class DuplicateTools(AppDatabase db, QueueManager queueManager, AppConfig
                             HAVING COUNT(DISTINCT account_id) > 1
                         )
                         {accountFilter}
+                        GROUP BY m.message_id, m.account_id, m.id
                         ORDER BY m.message_id, m.account_id
                         """;
 
