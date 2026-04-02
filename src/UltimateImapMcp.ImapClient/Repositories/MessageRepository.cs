@@ -275,18 +275,25 @@ public class MessageRepository(AppDatabase db)
         return list;
     }
 
-    public void UpdateBody(int messageId, string? bodyText, string? bodyHtml)
+    public void UpdateBody(int messageId, string? bodyText, string? bodyHtml, string? rawHeaders = null)
     {
         db.ExecuteWrite(conn =>
         {
             using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                UPDATE messages SET body_text = $bodyText, body_html = $bodyHtml,
-                    body_fetched = 1 WHERE id = $id;
-                """;
+            cmd.CommandText = rawHeaders is not null
+                ? """
+                    UPDATE messages SET body_text = $bodyText, body_html = $bodyHtml,
+                        raw_headers = $rawHeaders, body_fetched = 1 WHERE id = $id;
+                    """
+                : """
+                    UPDATE messages SET body_text = $bodyText, body_html = $bodyHtml,
+                        body_fetched = 1 WHERE id = $id;
+                    """;
             cmd.Parameters.AddWithValue("$id", messageId);
             cmd.Parameters.AddWithValue("$bodyText", (object?)bodyText ?? DBNull.Value);
             cmd.Parameters.AddWithValue("$bodyHtml", (object?)bodyHtml ?? DBNull.Value);
+            if (rawHeaders is not null)
+                cmd.Parameters.AddWithValue("$rawHeaders", rawHeaders);
             cmd.ExecuteNonQuery();
         });
     }

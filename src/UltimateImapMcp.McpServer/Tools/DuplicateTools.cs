@@ -40,7 +40,7 @@ public class DuplicateTools(AppDatabase db, QueueManager queueManager, AppConfig
                         FROM messages m
                         JOIN message_folders mf ON mf.message_id = m.id
                         JOIN folders f ON f.id = mf.folder_id
-                        WHERE m.message_id IS NOT NULL AND m.deleted_at IS NULL
+                        WHERE m.message_id IS NOT NULL AND m.message_id != '' AND m.deleted_at IS NULL
                         AND m.message_id IN (
                             SELECT message_id FROM messages
                             WHERE message_id IS NOT NULL AND deleted_at IS NULL

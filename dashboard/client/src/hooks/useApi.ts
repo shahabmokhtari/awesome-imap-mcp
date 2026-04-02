@@ -451,6 +451,10 @@ export interface MessageDetail extends MessageSummary {
   bodyHtml: string | null
   bodyFetched: boolean
   threadId: string | null
+  messageId: string | null
+  inReplyTo: string | null
+  referencesHdr: string | null
+  sizeBytes: number | null
   rawHeaders: string | null
 }
 

@@ -102,10 +102,20 @@ internal sealed class ImapSyncBackend : IEmailSyncBackend
                     var bodyText = message.TextBody;
                     var bodyHtml = message.HtmlBody;
 
+                    // Extract raw headers from the MIME message
+                    string? rawHeaders = null;
+                    try
+                    {
+                        using var headerStream = new System.IO.MemoryStream();
+                        message.Headers.WriteTo(headerStream);
+                        rawHeaders = System.Text.Encoding.UTF8.GetString(headerStream.ToArray());
+                    }
+                    catch { /* non-fatal — headers are optional */ }
+
                     var dbMessage = _messageRepo.GetByUid(accountId, folder.Id, uid);
                     if (dbMessage is not null)
                     {
-                        _messageRepo.UpdateBody(dbMessage.Id, bodyText, bodyHtml);
+                        _messageRepo.UpdateBody(dbMessage.Id, bodyText, bodyHtml, rawHeaders);
                     }
                 }
             }

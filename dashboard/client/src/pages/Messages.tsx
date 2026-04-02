@@ -438,17 +438,44 @@ function MessageView({
 
       {/* Body */}
       <div className="flex-1 overflow-auto p-6">
-        {/* Raw headers section */}
+        {/* Headers section */}
         {showHeaders && (
-          <div className="mb-4">
-            {msg.rawHeaders ? (
-              <pre className="text-xs font-mono bg-gray-50 p-4 rounded border border-gray-200 overflow-auto max-h-64 whitespace-pre-wrap break-all">
-                {msg.rawHeaders}
-              </pre>
-            ) : (
-              <div className="text-xs text-gray-400 bg-gray-50 p-4 rounded border border-gray-200">
-                Raw headers are not available for this message. They are stored when the message body is fetched.
-              </div>
+          <div className="mb-4 space-y-3">
+            {/* Structured headers — always available from sync metadata */}
+            <div className="text-xs bg-gray-50 p-4 rounded border border-gray-200 space-y-1.5">
+              <div className="font-medium text-gray-700 mb-2">Message Headers</div>
+              {msg.messageId && (
+                <div><span className="font-mono text-gray-500 w-28 inline-block">Message-ID:</span> <span className="font-mono break-all">{msg.messageId}</span></div>
+              )}
+              {msg.threadId && (
+                <div><span className="font-mono text-gray-500 w-28 inline-block">Thread-ID:</span> <span className="font-mono break-all">{msg.threadId}</span></div>
+              )}
+              {msg.inReplyTo && (
+                <div><span className="font-mono text-gray-500 w-28 inline-block">In-Reply-To:</span> <span className="font-mono break-all">{msg.inReplyTo}</span></div>
+              )}
+              {msg.referencesHdr && (
+                <div><span className="font-mono text-gray-500 w-28 inline-block">References:</span> <span className="font-mono break-all">{msg.referencesHdr}</span></div>
+              )}
+              {msg.toAddresses && (
+                <div><span className="font-mono text-gray-500 w-28 inline-block">To:</span> <span className="break-all">{msg.toAddresses}</span></div>
+              )}
+              {msg.ccAddresses && (
+                <div><span className="font-mono text-gray-500 w-28 inline-block">Cc:</span> <span className="break-all">{msg.ccAddresses}</span></div>
+              )}
+              {msg.sizeBytes != null && (
+                <div><span className="font-mono text-gray-500 w-28 inline-block">Size:</span> {(msg.sizeBytes / 1024).toFixed(1)} KB</div>
+              )}
+              <div><span className="font-mono text-gray-500 w-28 inline-block">UID:</span> {msg.uid}</div>
+              <div><span className="font-mono text-gray-500 w-28 inline-block">Flags:</span> <span className="font-mono">{msg.flags || '(none)'}</span></div>
+            </div>
+            {/* Raw headers — available after body fetch */}
+            {msg.rawHeaders && (
+              <details className="text-xs">
+                <summary className="cursor-pointer text-gray-500 hover:text-gray-700 font-medium">Raw Headers</summary>
+                <pre className="mt-2 font-mono bg-gray-50 p-4 rounded border border-gray-200 overflow-auto max-h-64 whitespace-pre-wrap break-all">
+                  {msg.rawHeaders}
+                </pre>
+              </details>
             )}
           </div>
         )}
