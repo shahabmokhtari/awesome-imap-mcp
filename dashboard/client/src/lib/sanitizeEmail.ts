@@ -49,5 +49,29 @@ export function sanitizeEmailHtml(html: string, allowRemoteImages: boolean = fal
     }
   })
 
+  // Strip javascript: URLs from all href attributes
+  doc.querySelectorAll('a[href]').forEach(a => {
+    const href = a.getAttribute('href') || ''
+    if (href.trim().toLowerCase().startsWith('javascript:')) {
+      a.removeAttribute('href')
+    }
+  })
+
+  // Inject a tiny script to intercept link clicks and postMessage to the parent.
+  // The iframe must use sandbox="allow-scripts" (without allow-same-origin, this
+  // is safe — the script cannot access the parent's DOM, cookies, or localStorage).
+  const interceptScript = doc.createElement('script')
+  interceptScript.textContent = `
+    document.addEventListener('click', function(e) {
+      var a = e.target;
+      while (a && a.tagName !== 'A') a = a.parentElement;
+      if (a && a.href) {
+        e.preventDefault();
+        window.parent.postMessage({ type: 'email-link-click', url: a.href }, '*');
+      }
+    });
+  `
+  doc.body.appendChild(interceptScript)
+
   return doc.documentElement.outerHTML
 }
