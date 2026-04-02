@@ -32,23 +32,25 @@ public class DuplicateTools(AppDatabase db, QueueManager queueManager, AppConfig
                         ? "AND m.message_id IN (SELECT message_id FROM messages WHERE account_id = $acct AND message_id IS NOT NULL AND deleted_at IS NULL)"
                         : "";
 
-                    // Use MIN(mf.uid) and MIN(f.path) to pick one folder per account
-                    // (avoids duplicate rows when a message appears in multiple folders)
+                    // One row per (message_id, account_id) — a message may have
+                    // multiple rows in the messages table (different folders) or
+                    // multiple entries in message_folders. MIN() picks one representative.
                     cmd.CommandText = $"""
-                        SELECT m.message_id, m.account_id, m.id, m.subject, m.from_address, m.date,
-                               MIN(mf.uid) as uid, MIN(f.path) as folder_path
+                        SELECT m.message_id, m.account_id, MIN(m.id) as id,
+                               MIN(m.subject) as subject, MIN(m.from_address) as from_address,
+                               MIN(m.date) as date, MIN(mf.uid) as uid, MIN(f.path) as folder_path
                         FROM messages m
                         JOIN message_folders mf ON mf.message_id = m.id
                         JOIN folders f ON f.id = mf.folder_id
                         WHERE m.message_id IS NOT NULL AND m.message_id != '' AND m.deleted_at IS NULL
                         AND m.message_id IN (
                             SELECT message_id FROM messages
-                            WHERE message_id IS NOT NULL AND deleted_at IS NULL
+                            WHERE message_id IS NOT NULL AND message_id != '' AND deleted_at IS NULL
                             GROUP BY message_id
                             HAVING COUNT(DISTINCT account_id) > 1
                         )
                         {accountFilter}
-                        GROUP BY m.message_id, m.account_id, m.id
+                        GROUP BY m.message_id, m.account_id
                         ORDER BY m.message_id, m.account_id
                         """;
 
