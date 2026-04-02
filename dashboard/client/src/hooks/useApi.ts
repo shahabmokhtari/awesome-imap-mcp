@@ -671,12 +671,18 @@ export function useToolSuggestions() {
 }
 
 export function useExecuteTool() {
+  const qc = useQueryClient()
   return useMutation({
     mutationFn: (params: { name: string; args: Record<string, unknown> }) =>
       apiFetch<unknown>(`/api/tools/${encodeURIComponent(params.name)}/execute`, {
         method: 'POST',
         body: JSON.stringify(params.args),
       }),
+    onSuccess: () => {
+      // Invalidate queue + messages so dashboard reflects tool side-effects
+      qc.invalidateQueries({ queryKey: ['queue'] })
+      qc.invalidateQueries({ queryKey: ['messages'] })
+    },
   })
 }
 

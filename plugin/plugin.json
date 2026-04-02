@@ -1,0 +1,10 @@
+{
+  "name": "ultimate-imap-mcp",
+  "version": "0.1.0",
+  "description": "Email management via IMAP — search, organize, analyze, and compose emails across multiple accounts",
+  "skills": [
+    "skills/email-analysis.md",
+    "skills/email-search.md",
+    "skills/email-management.md"
+  ]
+}
