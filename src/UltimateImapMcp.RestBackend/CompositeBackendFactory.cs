@@ -6,8 +6,6 @@ using UltimateImapMcp.Core.Providers;
 using UltimateImapMcp.ImapClient;
 using UltimateImapMcp.ImapClient.Repositories;
 using UltimateImapMcp.RestBackend.Imap;
-using UltimateImapMcp.RestBackend.Zoho;
-
 namespace UltimateImapMcp.RestBackend;
 
 /// <summary>
@@ -16,7 +14,6 @@ namespace UltimateImapMcp.RestBackend;
 ///
 /// Currently supported backends:
 /// - "imap" (default): wraps existing IMAP sync and SMTP operations
-/// - "zoho_rest": uses Zoho Mail REST API
 /// </summary>
 public sealed class CompositeBackendFactory : IEmailBackendFactory
 {
@@ -30,7 +27,6 @@ public sealed class CompositeBackendFactory : IEmailBackendFactory
     private readonly IOAuthAccessTokenProvider _oauthProvider;
     private readonly OAuthTokenRepository _tokenRepo;
     private readonly ImapSyncService _imapSyncService;
-    private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILoggerFactory _loggerFactory;
 
     public CompositeBackendFactory(
@@ -44,7 +40,6 @@ public sealed class CompositeBackendFactory : IEmailBackendFactory
         IOAuthAccessTokenProvider oauthProvider,
         OAuthTokenRepository tokenRepo,
         ImapSyncService imapSyncService,
-        IHttpClientFactory httpClientFactory,
         ILoggerFactory loggerFactory)
     {
         _accountRepo = accountRepo;
@@ -57,30 +52,17 @@ public sealed class CompositeBackendFactory : IEmailBackendFactory
         _oauthProvider = oauthProvider;
         _tokenRepo = tokenRepo;
         _imapSyncService = imapSyncService;
-        _httpClientFactory = httpClientFactory;
         _loggerFactory = loggerFactory;
     }
 
     public IEmailSyncBackend CreateSyncBackend(string accountId)
     {
-        var backendType = GetBackendType(accountId);
-
-        return backendType switch
-        {
-            "zoho_rest" => CreateZohoSyncBackend(),
-            _ => CreateImapSyncBackend(accountId)
-        };
+        return CreateImapSyncBackend(accountId);
     }
 
     public IEmailOperationBackend CreateOperationBackend(string accountId)
     {
-        var backendType = GetBackendType(accountId);
-
-        return backendType switch
-        {
-            "zoho_rest" => CreateZohoOperationBackend(),
-            _ => CreateImapOperationBackend(accountId)
-        };
+        return CreateImapOperationBackend(accountId);
     }
 
     public string GetBackendType(string accountId)
@@ -88,20 +70,6 @@ public sealed class CompositeBackendFactory : IEmailBackendFactory
         var record = _accountRepo.ResolveAccount(accountId);
         if (record is null)
             throw new InvalidOperationException($"Account '{accountId}' not found.");
-
-        // Use explicit backend_type if set
-        if (!string.IsNullOrEmpty(record.BackendType) &&
-            !record.BackendType.Equals("imap", StringComparison.OrdinalIgnoreCase))
-        {
-            return record.BackendType;
-        }
-
-        // Derive from provider for known REST-only providers
-        if (record.Provider.Equals("zoho", StringComparison.OrdinalIgnoreCase) &&
-            record.AuthType.Equals("oauth2", StringComparison.OrdinalIgnoreCase))
-        {
-            return "zoho_rest";
-        }
 
         return "imap";
     }
@@ -150,39 +118,4 @@ public sealed class CompositeBackendFactory : IEmailBackendFactory
             _loggerFactory.CreateLogger<ImapOperationBackend>());
     }
 
-    // ------------------------------------------------------------------
-    // Zoho backend creation
-    // ------------------------------------------------------------------
-
-    private ZohoSyncBackend CreateZohoSyncBackend()
-    {
-        var apiClient = new ZohoApiClient(
-            _httpClientFactory,
-            _oauthProvider,
-            _tokenRepo,
-            _loggerFactory.CreateLogger<ZohoApiClient>());
-
-        return new ZohoSyncBackend(
-            apiClient,
-            _accountRepo,
-            _folderRepo,
-            _messageRepo,
-            _loggerFactory.CreateLogger<ZohoSyncBackend>());
-    }
-
-    private ZohoOperationBackend CreateZohoOperationBackend()
-    {
-        var apiClient = new ZohoApiClient(
-            _httpClientFactory,
-            _oauthProvider,
-            _tokenRepo,
-            _loggerFactory.CreateLogger<ZohoApiClient>());
-
-        return new ZohoOperationBackend(
-            apiClient,
-            _accountRepo,
-            _folderRepo,
-            _messageRepo,
-            _loggerFactory.CreateLogger<ZohoOperationBackend>());
-    }
 }

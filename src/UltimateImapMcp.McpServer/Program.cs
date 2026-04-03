@@ -21,7 +21,6 @@ using UltimateImapMcp.Queue;
 using UltimateImapMcp.Queue.Executors;
 using UltimateImapMcp.Core.Email;
 using UltimateImapMcp.RestBackend;
-using UltimateImapMcp.RestBackend.Zoho;
 using UltimateImapMcp.McpServer;
 using UltimateImapMcp.McpServer.Tools;
 
@@ -186,10 +185,8 @@ builder.Services.AddSingleton<SyncManager>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<SyncManager>());
 builder.Services.AddHostedService<CacheEvictor>();
 
-// Email backend abstraction (routes to IMAP or REST per account)
+// Email backend abstraction (routes to IMAP backend per account)
 builder.Services.AddSingleton<IEmailBackendFactory, CompositeBackendFactory>();
-builder.Services.AddHttpClient("ZohoMail");
-builder.Services.AddHostedService<ZohoSyncService>();
 
 // Queue
 builder.Services.AddSingleton<QueueRepository>();

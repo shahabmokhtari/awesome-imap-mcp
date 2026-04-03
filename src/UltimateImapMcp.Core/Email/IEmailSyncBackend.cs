@@ -7,7 +7,7 @@ namespace UltimateImapMcp.Core.Email;
 /// </summary>
 public interface IEmailSyncBackend : IAsyncDisposable
 {
-    /// <summary>The backend type identifier (e.g., "imap", "zoho_rest").</summary>
+    /// <summary>The backend type identifier (e.g., "imap").</summary>
     string BackendType { get; }
 
     /// <summary>Sync the folder list for the given account into the local cache.</summary>

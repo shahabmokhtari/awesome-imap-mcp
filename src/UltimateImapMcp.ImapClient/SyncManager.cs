@@ -82,11 +82,10 @@ public class SyncManager(
 
             var account = AccountConfigMapper.ToAccountConfig(record, encryptor);
 
-            // Skip REST-only accounts (e.g. Zoho OAuth) — they have no IMAP host
-            // and are synced via their own REST backend (ZohoSyncService, etc.)
+            // Skip accounts with no IMAP host configured
             if (string.IsNullOrEmpty(account.ImapHost))
             {
-                logger.LogDebug("Skipping IMAP sync for {Account} — no IMAP host (REST-only account)", accountId);
+                logger.LogDebug("Skipping IMAP sync for {Account} — no IMAP host configured", accountId);
                 continue;
             }
 

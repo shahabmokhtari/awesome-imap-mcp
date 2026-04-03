@@ -35,16 +35,6 @@ public static class OAuthProviderDefaults
                        "offline_access"]
         },
 
-        // Zoho Mail: OAuth is for REST API only (no XOAUTH2 for IMAP).
-        // When a Zoho account uses OAuth, it routes through the REST backend
-        // instead of IMAP. IMAP+app-password is still supported for Zoho.
-        // Users must create a "Self Client" at https://api-console.zoho.com/
-        // and supply their own client_id/client_secret in config.
-        // Zoho OAuth disabled — Zoho's token exchange returns empty tokens and
-        // INVALID_TICKET errors due to datacenter routing issues. Zoho Mail can
-        // still be used with app passwords via IMAP. The REST API backend code
-        // is preserved in src/UltimateImapMcp.RestBackend/Zoho/ for future use.
-        // ["zoho"] = new OAuthProviderConfig { ... },
     };
 
     /// <summary>XOR-deobfuscates a base64 string with a repeating key.</summary>

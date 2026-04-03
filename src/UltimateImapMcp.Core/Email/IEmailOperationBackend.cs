@@ -6,7 +6,7 @@ namespace UltimateImapMcp.Core.Email;
 /// </summary>
 public interface IEmailOperationBackend : IAsyncDisposable
 {
-    /// <summary>The backend type identifier (e.g., "imap", "zoho_rest").</summary>
+    /// <summary>The backend type identifier (e.g., "imap").</summary>
     string BackendType { get; }
 
     /// <summary>Send an email message via this backend.</summary>
