@@ -12,7 +12,7 @@ Every existing IMAP MCP server hits the IMAP server on every single tool call. N
 
 ## Key Features
 
-- **OAuth2 sign-in** - one-click sign-in for Gmail, Outlook, Yahoo, and Zoho via PKCE (no client secrets needed). App passwords also supported for all providers
+- **OAuth2 sign-in** - one-click sign-in for Gmail, Outlook, and Yahoo via PKCE (no client secrets needed). App passwords also supported for all providers
 - **Web dashboard with setup wizard** - guided first-run setup, account management, message browsing, editable settings, sync monitoring, queue viewer, duplicate detection, and direct tool execution
 - **Local SQLite cache with full-text search** - instant search, no IMAP round-trips
 - **IMAP IDLE + polling** - real-time inbox sync, configurable per folder
@@ -119,7 +119,7 @@ Edit `~/.ultimate-imap-mcp/config.json` with your email account details.
 
 #### 2. Set up authentication
 
-**OAuth2 (Gmail, Outlook, Yahoo, Zoho)** — Use the dashboard wizard or the OAuth flow in the Accounts page. No manual token management needed.
+**OAuth2 (Gmail, Outlook, Yahoo)** — Use the dashboard wizard or the OAuth flow in the Accounts page. No manual token management needed.
 
 **App Password (all providers)** — Reference environment variables in config using `${ENV_VAR}` syntax:
 
@@ -327,7 +327,7 @@ CLI arguments take precedence over values in the config file. You can also set t
 | `list_accounts` | List all configured email accounts with connection status |
 | `get_account_status` | Get detailed status for an account (config, sync progress, folder counts) |
 | `add_account_imap` | Add a new IMAP email account (password encrypted before storage) |
-| `add_account_oauth` | Start the OAuth2 flow for Gmail, Outlook, Yahoo, or Zoho (requires dashboard) |
+| `add_account_oauth` | Start the OAuth2 flow for Gmail, Outlook, or Yahoo (requires dashboard) |
 | `start_dashboard` | Get the dashboard URL or status message |
 
 ### Sync
@@ -490,9 +490,9 @@ See [`config.example.json`](config.example.json) for a full example.
 
 #### Authentication Methods
 
-**OAuth2 (recommended for Gmail, Outlook, Yahoo, Zoho)**: Use the dashboard to sign in with your email provider. The server handles token exchange and automatic refresh via PKCE — no client secrets or manual token management needed. Built-in OAuth client IDs are provided for Gmail, Outlook, and Zoho.
+**OAuth2 (recommended for Gmail, Outlook, Yahoo)**: Use the dashboard to sign in with your email provider. The server handles token exchange and automatic refresh via PKCE — no client secrets or manual token management needed. Built-in OAuth client IDs are provided for Gmail and Outlook.
 
-**App Password (all providers)**: Generate an app-specific password from your email provider and set it in the config. Required for providers that don't support OAuth (iCloud, ProtonMail via Bridge, Fastmail).
+**App Password (all providers)**: Generate an app-specific password from your email provider and set it in the config. Required for providers that don't support OAuth (iCloud, Fastmail, Zoho, ProtonMail via Bridge).
 
 #### Provider-Specific Setup
 
@@ -500,7 +500,7 @@ See [`config.example.json`](config.example.json) for a full example.
 
 **Outlook/Hotmail/Live.com**: OAuth sign-in via dashboard, or use an [App Password](https://support.microsoft.com/en-us/account-billing/using-app-passwords-with-apps-that-don-t-support-two-step-verification-5896ed9b-4263-e681-128a-a6f2979a7944). Set `provider: "outlook"`.
 
-**Zoho**: OAuth sign-in via dashboard. Set `provider: "zoho"`.
+**Zoho**: Use an [App Password](https://www.zoho.com/mail/help/adminconsole/two-factor-authentication.html). Set `provider: "zoho"`.
 
 **Yahoo**: OAuth sign-in via dashboard, or use an [App Password](https://help.yahoo.com/kb/generate-manage-third-party-passwords-sln15241.html). Set `provider: "yahoo"`.
 
@@ -512,7 +512,7 @@ See [`config.example.json`](config.example.json) for a full example.
 
 ### OAuth Providers
 
-Override or add OAuth client IDs for providers. Built-in client IDs are provided for Gmail, Outlook, and Zoho. You can override them or add your own providers:
+Override or add OAuth client IDs for providers. Built-in client IDs are provided for Gmail and Outlook. You can override them or add your own providers:
 
 ```json
 {

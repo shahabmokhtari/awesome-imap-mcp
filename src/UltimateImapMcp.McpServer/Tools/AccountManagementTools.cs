@@ -15,7 +15,7 @@ public class AccountManagementTools(
     AppConfig config,
     ILogger<AccountManagementTools> logger)
 {
-    private static readonly string[] ValidOAuthProviders = ["gmail", "outlook", "yahoo", "zoho"];
+    private static readonly string[] ValidOAuthProviders = ["gmail", "outlook", "yahoo"];
 
     [McpServerTool, Description(
         "Get the dashboard URL if the web dashboard is enabled, or a status message if disabled.")]
@@ -151,7 +151,7 @@ public class AccountManagementTools(
         "Start the OAuth2 authentication flow for a supported email provider. " +
         "Requires the dashboard to be enabled. Returns a URL to complete the OAuth flow.")]
     public string AddAccountOauth(
-        [Description("OAuth provider: gmail, outlook, yahoo, or zoho")] string provider)
+        [Description("OAuth provider: gmail, outlook, or yahoo")] string provider)
     {
         return McpJsonDefaults.LogToolCall(logger, "add_account_oauth",
             new Dictionary<string, object?> { ["provider"] = provider },

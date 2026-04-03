@@ -16,6 +16,7 @@ export const PROVIDER_PRESETS: Record<string, Partial<CreateAccountRequest>> = {
   outlook: { imapHost: 'outlook.office365.com', imapPort: 993, smtpHost: 'smtp.office365.com', smtpPort: 587, smtpUseSsl: false },
   yahoo: { imapHost: 'imap.mail.yahoo.com', imapPort: 993, smtpHost: 'smtp.mail.yahoo.com', smtpPort: 465, smtpUseSsl: true },
   icloud: { imapHost: 'imap.mail.me.com', imapPort: 993, smtpHost: 'smtp.mail.me.com', smtpPort: 587, smtpUseSsl: false },
+  fastmail: { imapHost: 'imap.fastmail.com', imapPort: 993, smtpHost: 'smtp.fastmail.com', smtpPort: 465, smtpUseSsl: true },
   zoho: { imapHost: 'imap.zoho.com', imapPort: 993, smtpHost: 'smtp.zoho.com', smtpPort: 465, smtpUseSsl: true },
   protonmail: { imapHost: '127.0.0.1', imapPort: 1143, smtpHost: '127.0.0.1', smtpPort: 1025, smtpUseSsl: false },
   generic: {},
@@ -26,6 +27,7 @@ export const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
   outlook: 'Outlook',
   yahoo: 'Yahoo',
   icloud: 'iCloud',
+  fastmail: 'Fastmail',
   zoho: 'Zoho',
   protonmail: 'ProtonMail',
   generic: 'Other',
@@ -36,6 +38,7 @@ export const PROVIDER_HELP_LINKS: Record<string, { label: string; url: string }>
   outlook: { label: 'Create an Outlook App Password', url: 'https://support.microsoft.com/en-us/account-billing/manage-app-passwords-for-two-step-verification-d6dc8c6d-4bf7-4851-ad95-6d07799205e9' },
   yahoo: { label: 'Generate a Yahoo App Password', url: 'https://help.yahoo.com/kb/generate-manage-third-party-passwords-sln15241.html' },
   icloud: { label: 'Generate an iCloud App-Specific Password', url: 'https://support.apple.com/en-us/102654' },
+  fastmail: { label: 'Create a Fastmail App Password', url: 'https://www.fastmail.help/hc/en-us/articles/360058752854-App-passwords' },
   zoho: { label: 'Generate a Zoho App-Specific Password', url: 'https://www.zoho.com/mail/help/adminconsole/two-factor-authentication.html' },
   protonmail: { label: 'Set up ProtonMail Bridge', url: 'https://proton.me/mail/bridge' },
 }
@@ -80,6 +83,13 @@ function ProviderIcon({ provider, size = 36 }: { provider: string; size?: number
         <path d="M38.5 32h-27A7.5 7.5 0 014 24.5a7.5 7.5 0 016.08-7.36A11 11 0 0121 8a11 11 0 0110.92 9.64A8.5 8.5 0 0140 26a8.49 8.49 0 01-1.5 6z" fill="#3693F3"/>
       </svg>
     ),
+    // Fastmail "F"
+    fastmail: (
+      <svg width={s} height={s} viewBox="0 0 48 48">
+        <rect x="4" y="4" width="40" height="40" rx="8" fill="#304FFE"/>
+        <text x="24" y="26" textAnchor="middle" dominantBaseline="central" fill="#fff" fontSize="26" fontWeight="bold" fontFamily="system-ui">F</text>
+      </svg>
+    ),
     // Zoho "Z"
     zoho: (
       <svg width={s} height={s} viewBox="0 0 48 48">
@@ -109,7 +119,6 @@ function ProviderIcon({ provider, size = 36 }: { provider: string; size?: number
 const OAUTH_SIGN_IN_LABELS: Record<string, string> = {
   gmail: 'Sign in with Google',
   outlook: 'Sign in with Microsoft',
-  zoho: 'Sign in with Zoho',
 }
 
 function emptyForm(): CreateAccountRequest {
@@ -246,7 +255,7 @@ export default function AddAccountForm({ onComplete, onCancel }: AddAccountFormP
   const providerOAuthEntry = selectedProvider ? oauthProviders?.[selectedProvider] : undefined
   const providerHasOAuth = providerOAuthEntry?.configured === true
   const providerNeedsOAuthConfig = selectedProvider && !providerHasOAuth &&
-    ['zoho', 'gmail', 'outlook'].includes(selectedProvider) && !providerOAuthEntry?.configured
+    ['gmail', 'outlook'].includes(selectedProvider) && !providerOAuthEntry?.configured
   const isValid = form.name.trim() && form.username.trim() && (form.password ?? '').trim() && form.imapHost.trim()
 
   const handleTestAndSave = async () => {
@@ -308,7 +317,7 @@ export default function AddAccountForm({ onComplete, onCancel }: AddAccountFormP
               <span className="text-sm font-medium text-gray-900">{PROVIDER_DISPLAY_NAMES[provider] ?? provider}</span>
               {oauthProviders?.[provider]?.configured ? (
                 <span className="text-xs text-green-600">OAuth</span>
-              ) : ['zoho', 'gmail', 'outlook'].includes(provider) ? (
+              ) : ['gmail', 'outlook'].includes(provider) ? (
                 <span className="text-xs text-amber-500">OAuth (needs config)</span>
               ) : null}
             </button>
@@ -363,7 +372,6 @@ export default function AddAccountForm({ onComplete, onCancel }: AddAccountFormP
             <code className="bg-amber-100 px-1 rounded">oauth_providers.{selectedProvider}</code> with your{' '}
             <code className="bg-amber-100 px-1 rounded">client_id</code> and{' '}
             <code className="bg-amber-100 px-1 rounded">client_secret</code>.
-            {selectedProvider === 'zoho' && ' Create a Self Client at api-console.zoho.com.'}
           </p>
           <div className="relative mt-3">
             <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-amber-200" /></div>

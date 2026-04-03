@@ -2,7 +2,6 @@ namespace UltimateImapMcp.Core.Email;
 
 /// <summary>
 /// Factory that creates the appropriate email backend for each account.
-/// Routes based on provider and auth_type (e.g., IMAP for Gmail, REST for Zoho).
 /// </summary>
 public interface IEmailBackendFactory
 {
@@ -12,6 +11,6 @@ public interface IEmailBackendFactory
     /// <summary>Create an operation backend for the given account.</summary>
     IEmailOperationBackend CreateOperationBackend(string accountId);
 
-    /// <summary>Get the backend type string for the given account (e.g., "imap", "zoho_rest").</summary>
+    /// <summary>Get the backend type string for the given account (e.g., "imap").</summary>
     string GetBackendType(string accountId);
 }

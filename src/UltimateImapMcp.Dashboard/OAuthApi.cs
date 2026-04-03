@@ -302,7 +302,6 @@ public static class OAuthApi
             {
                 "gmail" => ("imap.gmail.com", 993, "smtp.gmail.com", 465, true),
                 "outlook" or "outlook365" => ("outlook.office365.com", 993, "smtp.office365.com", 587, false),
-                "zoho" => ("", 0, "", 0, false), // Zoho OAuth uses REST API, not IMAP
                 _ => ("", 993, "", 587, false)
             };
 
@@ -417,7 +416,6 @@ public static class OAuthApi
             var url = provider.ToLowerInvariant() switch
             {
                 "google" or "gmail" => "https://www.googleapis.com/oauth2/v2/userinfo",
-                "zoho" => "https://accounts.zoho.com/oauth/user/info",
                 "outlook" or "outlook365" => "https://graph.microsoft.com/v1.0/me",
                 _ => null
             };
@@ -425,13 +423,8 @@ public static class OAuthApi
             if (url is null) return (null, null);
 
             using var request = new HttpRequestMessage(HttpMethod.Get, url);
-            // Zoho uses "Zoho-oauthtoken" prefix instead of "Bearer"
-            if (provider.Equals("zoho", StringComparison.OrdinalIgnoreCase))
-                request.Headers.Authorization =
-                    new System.Net.Http.Headers.AuthenticationHeaderValue("Zoho-oauthtoken", accessToken);
-            else
-                request.Headers.Authorization =
-                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+            request.Headers.Authorization =
+                new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
 
             using var response = await http.SendAsync(request, ct).ConfigureAwait(false);
             var json = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
