@@ -706,6 +706,58 @@ Claude / MCP Client
 - **Sync boundaries** are derived from actual DB data (`GetMaxUid`/`GetMinUid`), not stored columns, ensuring consistency.
 - **Queue-based writes** — all CRUD operations (send, delete, move, flag, label) are enqueued with priority tiers (P0 critical, P1 normal, P2 bulk) and support undo/cancel before execution.
 
+## Claude Code Plugin
+
+This repository includes a [Claude Code plugin](https://docs.anthropic.com/en/docs/claude-code/plugins) with skills for email management. The plugin teaches Claude how to effectively use the MCP tools.
+
+### Installation
+
+Add this repository as a plugin source in Claude Code:
+
+```bash
+claude plugin add https://github.com/shahabmokhtari/ultimate-imap-mcp
+```
+
+Or reference the plugin directory directly if you've cloned the repo:
+
+```bash
+claude plugin add /path/to/ultimate-imap-mcp/plugin
+```
+
+### Included Skills
+
+| Skill | Description |
+|-------|-------------|
+| `email-analysis` | Analyze, categorize, and report on emails using LLM analysis and statistical tools |
+| `email-search` | Search emails with advanced filters — from, to, subject, date, labels, attachments |
+| `email-management` | Manage emails — send, reply, forward, delete, move, flag, organize, and bulk operations |
+
+### Plugin Structure
+
+```
+plugin/
+├── plugin.json              # Plugin manifest
+└── skills/
+    ├── email-analysis.md    # LLM analysis, labeling, reports workflow
+    ├── email-search.md      # Advanced search operators and examples
+    └── email-management.md  # CRUD operations, queue, sync, accounts
+```
+
+### Usage Examples
+
+Once the plugin is installed, Claude Code can use the skills automatically:
+
+```
+> Analyze my inbox and categorize the last 50 emails
+  (uses email-analysis skill → analyze_folder + label_messages)
+
+> Find all emails from boss@company.com with attachments since March
+  (uses email-search skill → search_emails with from: and has:attachments)
+
+> Delete all duplicate emails from my Yahoo account
+  (uses email-management skill → detect_duplicates + delete_messages)
+```
+
 ## Documentation
 
 - [Design Specification](docs/superpowers/specs/2026-03-18-ultimate-imap-mcp-design.md) - full system design, architecture, and implementation plan
