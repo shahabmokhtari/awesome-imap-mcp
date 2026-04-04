@@ -6,6 +6,7 @@
 - NEVER REMOVE A FEATURE OR OPTION WITHOUT EXPLICIT CONFIRMATION OF THE USER.
 - Test changes before claiming they work. Build and run tests.
 - When fixing bugs, verify the root cause before applying fixes.
+- NEVER push directly to main/master. Always create a feature branch, push it, and create a PR. Merge via PR only.
 
 ## Project
 
