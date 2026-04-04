@@ -151,7 +151,9 @@ export default function Duplicates() {
       if (errors.length > 0) {
         setActionStatus({ type: 'error', message: `Errors: ${errors.join('; ')}` })
       } else {
-        setActionStatus({ type: 'success', message: `Queued deletion of ${totalQueued} message(s).` })
+        setActionStatus({ type: 'success', message: `Deleted ${totalQueued} message(s). Refreshing...` })
+        // Re-scan to refresh the list (deleted messages are immediately soft-deleted from cache)
+        setTimeout(() => handleScan(), 500)
       }
       setSelectedCopies(new Set())
     } catch (err) {
@@ -221,7 +223,9 @@ export default function Duplicates() {
       if (errors.length > 0) {
         setActionStatus({ type: 'error', message: `Errors: ${errors.join('; ')}` })
       } else {
-        setActionStatus({ type: 'success', message: `Queued deletion of ${totalQueued} duplicate(s) from "${accountName}".` })
+        setActionStatus({ type: 'success', message: `Deleted ${totalQueued} duplicate(s) from "${accountName}". Refreshing...` })
+        // Re-scan to refresh (deleted messages are immediately soft-deleted from cache)
+        setTimeout(() => handleScan(), 500)
       }
       setSelectedCopies(new Set())
     } catch (err) {

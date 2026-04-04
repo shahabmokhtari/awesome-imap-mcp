@@ -3,13 +3,15 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
 using UltimateImapMcp.Core.Configuration;
+using UltimateImapMcp.ImapClient.Repositories;
 using UltimateImapMcp.Queue;
 using UltimateImapMcp.Queue.Models;
 
 namespace UltimateImapMcp.McpServer.Tools;
 
 [McpServerToolType]
-public class OrganizeTools(QueueManager queueManager, AppConfig config, ILogger<OrganizeTools> logger)
+public class OrganizeTools(QueueManager queueManager, MessageRepository messageRepo,
+    FolderRepository folderRepo, AppConfig config, ILogger<OrganizeTools> logger)
 {
     private static List<int> ParseUids(string uids)
     {
@@ -41,6 +43,19 @@ public class OrganizeTools(QueueManager queueManager, AppConfig config, ILogger<
                     var payload = JsonSerializer.Serialize(new { uids = uidList, folder });
                     var operationType = uidList.Count > 10 ? OperationType.BulkDelete : OperationType.Delete;
                     var pendingId = queueManager.EnqueueOperation(accountId, operationType, payload);
+
+                    // Immediately soft-delete in cache so messages disappear from UI/queries
+                    // (the executor will also soft-delete after IMAP confirms, which is a harmless no-op)
+                    try
+                    {
+                        var folderRecord = folderRepo.GetByPath(accountId, folder);
+                        if (folderRecord is not null)
+                            messageRepo.SoftDeleteByUids(accountId, folderRecord.Id, uidList.Select(u => (long)u));
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogDebug(ex, "Eager cache soft-delete failed (non-fatal, executor will retry)");
+                    }
 
                     return JsonSerializer.Serialize(new { pending_id = pendingId, operation = "delete", uids = uidList, folder }, McpJsonDefaults.Options);
                 }
