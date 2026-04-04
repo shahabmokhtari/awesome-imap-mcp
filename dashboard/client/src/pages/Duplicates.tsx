@@ -40,6 +40,9 @@ export default function Duplicates() {
   // Bulk delete state
   const [bulkDeleteAccount, setBulkDeleteAccount] = useState('')
 
+  // Pagination
+  const [scanLimit, setScanLimit] = useState(50)
+
   // Action feedback
   const [actionStatus, setActionStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
   const [deleting, setDeleting] = useState(false)
@@ -65,7 +68,7 @@ export default function Duplicates() {
     setActionStatus(null)
 
     try {
-      const args: Record<string, unknown> = { limit: 100 }
+      const args: Record<string, unknown> = { limit: scanLimit }
       if (filterAccountId) args.accountId = filterAccountId
       const res = await executeTool.mutateAsync({ name: 'detect_duplicates', args })
       const parsed = parseDetectResult(res)
@@ -276,6 +279,22 @@ export default function Duplicates() {
               ))}
             </select>
           </div>
+          <div className="w-32">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Per page
+            </label>
+            <select
+              value={scanLimit}
+              onChange={(e) => setScanLimit(Number(e.target.value))}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value={25}>25</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+              <option value={200}>200</option>
+              <option value={500}>500</option>
+            </select>
+          </div>
           <button
             onClick={handleScan}
             disabled={scanning}
@@ -318,9 +337,48 @@ export default function Duplicates() {
         </div>
       )}
 
-      {/* Results table */}
+      {/* Results */}
       {result !== null && result.groups.length > 0 && (
         <>
+          {/* Action bar — above the table */}
+          <div className="bg-white rounded-lg shadow p-4 mb-4">
+            <div className="flex flex-wrap items-center gap-4">
+              {/* Delete selected */}
+              <button
+                onClick={handleDeleteSelected}
+                disabled={selectedCopies.size === 0 || deleting}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {deleting ? 'Deleting...' : `Delete Selected${selectedCopies.size > 0 ? ` (${selectedCopies.size})` : ''}`}
+              </button>
+
+              <div className="h-6 border-l border-gray-300" />
+
+              {/* Bulk delete from account */}
+              <span className="text-sm text-gray-500">Delete all from</span>
+              <select
+                value={bulkDeleteAccount}
+                onChange={(e) => setBulkDeleteAccount(e.target.value)}
+                className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-40"
+              >
+                <option value="">Select account...</option>
+                {accountsInResults.map(aid => (
+                  <option key={aid} value={aid}>
+                    {accountMap[aid] || aid}
+                  </option>
+                ))}
+              </select>
+              <button
+                onClick={handleBulkDelete}
+                disabled={!bulkDeleteAccount || deleting}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {deleting ? 'Deleting...' : 'Delete All From Account'}
+              </button>
+            </div>
+          </div>
+
+          {/* Results table */}
           <div className="bg-white rounded-lg shadow overflow-hidden mb-6">
             <div className="px-4 py-3 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
               <span className="text-sm font-medium text-gray-700">
@@ -430,59 +488,6 @@ export default function Duplicates() {
             </table>
           </div>
 
-          {/* Action bar */}
-          <div className="bg-white rounded-lg shadow p-4">
-            <h3 className="text-lg font-medium text-gray-900 mb-3">Delete Duplicates</h3>
-
-            {/* Selected delete */}
-            <div className="flex flex-wrap items-center gap-4 mb-4 pb-4 border-b border-gray-200">
-              <p className="text-sm text-gray-600">
-                {selectedCopies.size > 0
-                  ? `${selectedCopies.size} copy/copies selected`
-                  : 'Expand groups above and select individual copies to delete'}
-              </p>
-              <button
-                onClick={handleDeleteSelected}
-                disabled={selectedCopies.size === 0 || deleting}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {deleting ? 'Queuing...' : 'Delete Selected'}
-              </button>
-            </div>
-
-            {/* Bulk delete */}
-            <div>
-              <p className="text-sm text-gray-500 mb-3">
-                Or bulk-delete all copies from one account that also exist in other accounts.
-              </p>
-              <div className="flex flex-wrap items-end gap-4">
-                <div className="flex-1 min-w-48">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Delete all copies from
-                  </label>
-                  <select
-                    value={bulkDeleteAccount}
-                    onChange={(e) => setBulkDeleteAccount(e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">Select an account...</option>
-                    {accountsInResults.map(aid => (
-                      <option key={aid} value={aid}>
-                        {accountMap[aid] || aid}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <button
-                  onClick={handleBulkDelete}
-                  disabled={!bulkDeleteAccount || deleting}
-                  className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {deleting ? 'Queuing...' : 'Delete All From Account'}
-                </button>
-              </div>
-            </div>
-          </div>
         </>
       )}
     </div>
