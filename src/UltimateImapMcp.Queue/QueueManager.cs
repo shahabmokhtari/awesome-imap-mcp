@@ -64,11 +64,7 @@ public class QueueManager(QueueRepository repo, AccountRepository accountRepo,
             ?? throw new InvalidOperationException($"Account '{accountId}' not found.");
         var resolvedId = dbAccount.Id;
 
-        var priority = operation switch
-        {
-            OperationType.BulkDelete or OperationType.BulkMove => OperationPriority.P2,
-            _ => OperationPriority.P1
-        };
+        var priority = OperationPriority.P1;
 
         var id = repo.Insert(new EnqueueRequest
         {
