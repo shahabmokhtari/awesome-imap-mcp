@@ -14,11 +14,13 @@ import Messages from './pages/Messages'
 import Duplicates from './pages/Duplicates'
 import Logs from './pages/Logs'
 import Tools from './pages/Tools'
+import Analytics from './pages/Analytics'
 
 const navItems = [
   { to: '/', label: 'Overview' },
   { to: '/accounts', label: 'Accounts' },
   { to: '/messages', label: 'Messages' },
+  { to: '/analytics', label: 'Analytics' },
   { to: '/duplicates', label: 'Duplicates' },
   { to: '/sync', label: 'Sync' },
   { to: '/queue', label: 'Queue' },
@@ -85,6 +87,7 @@ function MainLayout({ onLogout }: { onLogout?: () => void }) {
           <Route path="/" element={<Overview />} />
           <Route path="/accounts" element={<Accounts />} />
           <Route path="/messages" element={<Messages />} />
+          <Route path="/analytics" element={<Analytics />} />
           <Route path="/duplicates" element={<Duplicates />} />
           <Route path="/sync" element={<Sync />} />
           <Route path="/queue" element={<Queue />} />

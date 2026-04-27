@@ -1,17 +1,8 @@
 {
   "mcpServers": {
     "ultimate-imap-mcp": {
-      "command": "dotnet",
-      "args": [
-        "run",
-        "--project",
-        "src/UltimateImapMcp.McpServer",
-        "--",
-        "--transport",
-        "both",
-        "--dashboard",
-	"--dashboard-auto-open"
-      ]
+      "type": "sse",
+      "url": "http://localhost:3846/sse"
     }
   }
 }

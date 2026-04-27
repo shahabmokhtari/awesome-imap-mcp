@@ -200,6 +200,7 @@ public sealed class DashboardHost : BackgroundService
         app.MapServerApi();
         app.MapToolsApi();
         app.MapCacheApi();
+        app.MapAnalyticsApi();
 
         // Map SignalR hub
         app.MapHub<DashboardHub>("/hub");

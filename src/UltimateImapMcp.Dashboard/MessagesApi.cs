@@ -1,9 +1,12 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using UltimateImapMcp.ImapClient.Repositories;
+using UltimateImapMcp.Queue;
+using UltimateImapMcp.Queue.Models;
 
 namespace UltimateImapMcp.Dashboard;
 
@@ -174,7 +177,7 @@ public static class MessagesApi
             });
         });
 
-        // GET /api/messages/search?account_id=X&query=text&limit=50 — Advanced search with structured operators
+        // GET /api/messages/search?account_id=X&query=text&limit=50&offset=0 — Advanced search with structured operators
         app.MapGet("/api/messages/search", (HttpContext ctx, MessageRepository messageRepo, FolderRepository folderRepo) =>
         {
             var accountId = ctx.Request.Query["account_id"].FirstOrDefault();
@@ -185,7 +188,12 @@ public static class MessagesApi
             var limitStr = ctx.Request.Query["limit"].FirstOrDefault();
             var limit = 50;
             if (!string.IsNullOrEmpty(limitStr) && int.TryParse(limitStr, out var parsedLimit))
-                limit = Math.Clamp(parsedLimit, 1, 100);
+                limit = Math.Clamp(parsedLimit, 1, 200);
+
+            var offsetStr = ctx.Request.Query["offset"].FirstOrDefault();
+            var offset = 0;
+            if (!string.IsNullOrEmpty(offsetStr) && int.TryParse(offsetStr, out var parsedOffset))
+                offset = Math.Max(0, parsedOffset);
 
             var folderIdStr = ctx.Request.Query["folder_id"].FirstOrDefault();
             int? folderId = null;
@@ -193,6 +201,7 @@ public static class MessagesApi
                 folderId = parsedFolderId;
 
             var filter = ParseAdvancedQuery(query, accountId, folderId, limit);
+            filter = filter with { Offset = offset };
 
             List<MessageRecord> messages;
             try
@@ -251,7 +260,174 @@ public static class MessagesApi
             return Results.Ok(result);
         });
 
+        // POST /api/messages/bulk-action — Bulk delete/trash/archive messages
+        app.MapPost("/api/messages/bulk-action", (HttpContext ctx,
+            MessageRepository messageRepo, FolderRepository folderRepo,
+            AccountRepository accountRepo, QueueManager queueManager,
+            ILoggerFactory loggerFactory) =>
+        {
+            var logger = loggerFactory.CreateLogger("MessagesApi");
+            try
+            {
+                var body = ctx.Request.ReadFromJsonAsync<BulkActionRequest>().GetAwaiter().GetResult();
+                if (body is null)
+                    return Results.BadRequest(new { error = "Request body is required" });
+
+                var action = (body.Action ?? "delete").ToLowerInvariant();
+                if (action is not "delete" and not "trash" and not "archive")
+                    return Results.BadRequest(new { error = "action must be 'delete', 'trash', or 'archive'" });
+
+                // Collect messages to operate on: either from selectedIds or from search
+                var messageBatches = new List<(string AccountId, int FolderId, string FolderPath, List<long> Uids)>();
+
+                if (body.Scope == "search")
+                {
+                    // Run the search query with a high limit to collect all matching messages
+                    if (string.IsNullOrEmpty(body.SearchQuery))
+                        return Results.BadRequest(new { error = "searchQuery is required when scope is 'search'" });
+
+                    var maxResults = Math.Clamp(body.MaxResults ?? 10000, 1, 50000);
+                    var filter = ParseAdvancedQuery(body.SearchQuery, body.SearchAccountId, null, maxResults);
+
+                    List<MessageRecord> messages;
+                    try
+                    {
+                        messages = messageRepo.SearchAdvanced(filter);
+                    }
+                    catch (Microsoft.Data.Sqlite.SqliteException ex)
+                    {
+                        return Results.BadRequest(new { error = $"Search query error: {ex.Message}" });
+                    }
+
+                    // Group by account_id + folder_id
+                    var grouped = messages.GroupBy(m => (m.AccountId, m.FolderId));
+                    foreach (var group in grouped)
+                    {
+                        var folders = folderRepo.GetByAccount(group.Key.AccountId);
+                        var folder = folders.FirstOrDefault(f => f.Id == group.Key.FolderId);
+                        if (folder is null) continue;
+                        messageBatches.Add((group.Key.AccountId, group.Key.FolderId, folder.Path, group.Select(m => m.Uid).ToList()));
+                    }
+                }
+                else
+                {
+                    // scope == "selected" (default)
+                    if (body.SelectedIds is null || body.SelectedIds.Count == 0)
+                        return Results.BadRequest(new { error = "selectedIds is required when scope is 'selected'" });
+
+                    // Group by account_id + folder_id
+                    var grouped = body.SelectedIds.GroupBy(s => (s.AccountId, s.FolderId));
+                    foreach (var group in grouped)
+                    {
+                        var folders = folderRepo.GetByAccount(group.Key.AccountId);
+                        var folder = folders.FirstOrDefault(f => f.Id == group.Key.FolderId);
+                        if (folder is null) continue;
+                        messageBatches.Add((group.Key.AccountId, group.Key.FolderId, folder.Path, group.Select(s => s.Uid).ToList()));
+                    }
+                }
+
+                var isMove = action is "trash" or "archive";
+                var operationIds = new List<string>();
+                var totalQueued = 0;
+                const int chunkSize = 50;
+
+                foreach (var (acctId, folderId, folderPath, uids) in messageBatches)
+                {
+                    // Validate account exists and is enabled
+                    var account = accountRepo.ResolveEnabledAccount(acctId);
+                    if (account is null) continue;
+
+                    // For move operations, find destination folder
+                    string? destFolder = null;
+                    if (isMove)
+                    {
+                        var folders = folderRepo.GetByAccount(acctId);
+                        destFolder = action == "trash"
+                            ? folders.FirstOrDefault(f => f.Role == "trash")?.Path
+                              ?? folders.FirstOrDefault(f => f.Path.Contains("Trash", StringComparison.OrdinalIgnoreCase))?.Path
+                              ?? "Trash"
+                            : folders.FirstOrDefault(f => f.Role == "archive")?.Path
+                              ?? folders.FirstOrDefault(f => f.Path.Contains("Archive", StringComparison.OrdinalIgnoreCase))?.Path
+                              ?? "Archive";
+                    }
+
+                    // Chunk UIDs into batches of 50
+                    for (var i = 0; i < uids.Count; i += chunkSize)
+                    {
+                        var chunk = uids.Skip(i).Take(chunkSize).ToList();
+
+                        object payloadObj;
+                        OperationType opType;
+
+                        if (isMove)
+                        {
+                            opType = chunk.Count > 10 ? OperationType.BulkMove : OperationType.Move;
+                            payloadObj = new
+                            {
+                                folder = folderPath,
+                                destination = destFolder,
+                                uids = chunk,
+                                reason = $"Bulk {action} from dashboard"
+                            };
+                        }
+                        else
+                        {
+                            opType = chunk.Count > 10 ? OperationType.BulkDelete : OperationType.Delete;
+                            payloadObj = new
+                            {
+                                folder = folderPath,
+                                uids = chunk,
+                                reason = "Bulk delete from dashboard"
+                            };
+                        }
+
+                        var payload = JsonSerializer.Serialize(payloadObj);
+
+                        try
+                        {
+                            var opId = queueManager.EnqueueOperation(acctId, opType, payload);
+                            operationIds.Add(opId);
+                            totalQueued += chunk.Count;
+                        }
+                        catch (Exception ex)
+                        {
+                            logger.LogWarning(ex, "Failed to enqueue bulk {Action} for account {AccountId} folder {FolderId} chunk starting at {Offset}",
+                                action, acctId, folderId, i);
+                        }
+                    }
+                }
+
+                return Results.Ok(new
+                {
+                    queued = totalQueued,
+                    operationIds
+                });
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to process bulk action request");
+                return Results.Json(new { error = ex.Message }, statusCode: 500);
+            }
+        });
+
         return app;
+    }
+
+    private record BulkActionRequest
+    {
+        public string? Action { get; init; }
+        public string? Scope { get; init; }
+        public List<SelectedMessageId>? SelectedIds { get; init; }
+        public string? SearchQuery { get; init; }
+        public string? SearchAccountId { get; init; }
+        public int? MaxResults { get; init; }
+    }
+
+    private record SelectedMessageId
+    {
+        public string AccountId { get; init; } = "";
+        public int FolderId { get; init; }
+        public long Uid { get; init; }
     }
 
     private static SearchFilter ParseAdvancedQuery(string rawQuery, string? accountId, int? folderId, int limit)
