@@ -113,7 +113,7 @@ public class AccountsData
 /// Thread-safe in-memory store backed by accounts.json.
 /// Shared by <c>AccountRepository</c> and <c>OAuthTokenRepository</c>.
 /// </summary>
-public class AccountsStore
+public class AccountsStore : IDisposable
 {
     private static readonly JsonSerializerOptions ReadOptions = new()
     {
@@ -130,11 +130,48 @@ public class AccountsStore
     private readonly string _filePath;
     private readonly object _lock = new();
     private AccountsData _data;
+    private readonly FileSystemWatcher? _watcher;
+    private DateTime _lastWriteByUs;
 
     public AccountsStore(string filePath)
     {
         _filePath = filePath;
         _data = Load(filePath);
+
+        // Watch for external modifications to accounts.json so the in-memory
+        // store stays in sync when another process (or manual edit) changes it.
+        var dir = Path.GetDirectoryName(filePath);
+        var fileName = Path.GetFileName(filePath);
+        if (dir is not null && Directory.Exists(dir))
+        {
+            _watcher = new FileSystemWatcher(dir, fileName)
+            {
+                NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size,
+                EnableRaisingEvents = true,
+            };
+            _watcher.Changed += OnFileChanged;
+        }
+    }
+
+    private void OnFileChanged(object sender, FileSystemEventArgs e)
+    {
+        lock (_lock)
+        {
+            // Skip reloads triggered by our own Save() calls (within 2 seconds)
+            if ((DateTime.UtcNow - _lastWriteByUs).TotalSeconds < 2)
+                return;
+
+            try
+            {
+                // Small delay to let the writer finish flushing
+                Thread.Sleep(100);
+                _data = Load(_filePath);
+            }
+            catch
+            {
+                // File might be mid-write; ignore and try next time
+            }
+        }
     }
 
     /// <summary>
@@ -157,8 +194,14 @@ public class AccountsStore
         lock (_lock)
         {
             mutator(_data);
+            _lastWriteByUs = DateTime.UtcNow;
             Save();
         }
+    }
+
+    public void Dispose()
+    {
+        _watcher?.Dispose();
     }
 
     /// <summary>

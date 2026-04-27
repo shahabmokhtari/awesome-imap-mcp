@@ -8,8 +8,10 @@ import {
   useFetchBody,
   useClearFolderCache,
   useExecuteTool,
+  useBulkMessageAction,
   type MessageSummary,
   type FolderInfo,
+  type BulkMessageActionRequest,
 } from '../hooks/useApi'
 import { sanitizeEmailHtml } from '../lib/sanitizeEmail'
 
@@ -125,60 +127,180 @@ function FolderList({
 // Message row in the list
 // ---------------------------------------------------------------------------
 
+/** Build a unique key for a message to track selection state. */
+function msgKey(accountId: string, folderId: number, uid: number): string {
+  return `${accountId}-${folderId}-${uid}`
+}
+
 function MessageRow({
   msg,
   isSelected,
+  isChecked,
+  showCheckbox,
   onClick,
+  onCheckChange,
 }: {
   msg: MessageSummary
   isSelected: boolean
+  isChecked: boolean
+  showCheckbox: boolean
   onClick: () => void
+  onCheckChange: (checked: boolean) => void
 }) {
   const unread = isUnread(msg.flags)
   const dateFormatted = formatDate(msg.dateEpoch, msg.date)
 
   return (
-    <button
-      onClick={onClick}
-      className={`w-full text-left px-4 py-3 border-b border-gray-100 last:border-0 transition-colors ${
-        isSelected ? 'bg-blue-50' : 'hover:bg-gray-50'
+    <div
+      className={`w-full text-left px-4 py-3 border-b border-gray-100 last:border-0 transition-colors flex items-start gap-2 cursor-pointer ${
+        isSelected ? 'bg-blue-50' : isChecked ? 'bg-indigo-50' : 'hover:bg-gray-50'
       }`}
+      onClick={onClick}
     >
-      <div className="flex items-start gap-3">
-        {/* Unread indicator */}
-        <div className="mt-1.5 flex-shrink-0">
-          {unread ? (
-            <span className="block w-2 h-2 rounded-full bg-blue-500" />
-          ) : (
-            <span className="block w-2 h-2" />
-          )}
+      {/* Checkbox */}
+      {showCheckbox && (
+        <div className="mt-1 flex-shrink-0" onClick={e => e.stopPropagation()}>
+          <input
+            type="checkbox"
+            checked={isChecked}
+            onChange={e => onCheckChange(e.target.checked)}
+            className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+          />
         </div>
+      )}
 
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between gap-2">
-            <span className={`text-sm truncate ${unread ? 'font-semibold text-gray-900' : 'text-gray-700'}`}>
-              {msg.fromAddress || msg.fromEmail || '(unknown sender)'}
+      {/* Unread indicator */}
+      <div className="mt-1.5 flex-shrink-0">
+        {unread ? (
+          <span className="block w-2 h-2 rounded-full bg-blue-500" />
+        ) : (
+          <span className="block w-2 h-2" />
+        )}
+      </div>
+
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between gap-2">
+          <span className={`text-sm truncate ${unread ? 'font-semibold text-gray-900' : 'text-gray-700'}`}>
+            {msg.fromAddress || msg.fromEmail || '(unknown sender)'}
+          </span>
+          <span className="text-xs text-gray-400 flex-shrink-0">{dateFormatted}</span>
+        </div>
+        <div className={`text-sm truncate mt-0.5 ${unread ? 'font-medium text-gray-900' : 'text-gray-600'}`}>
+          {msg.hasAttachments && <span className="mr-1 text-gray-400" title="Has attachments">{'\u{1F4CE}'}</span>}
+          {msg.bodyFetched && <span className="mr-1 text-green-400" title="Body cached">{'\u{2709}'}</span>}
+          {msg.subject}
+        </div>
+        <div className="flex items-center gap-1 mt-0.5">
+          {msg.snippet && (
+            <span className="text-xs text-gray-400 truncate">{msg.snippet}</span>
+          )}
+          {getLabels(msg.flags).map(label => (
+            <span key={label} className={`inline-block px-1.5 py-0 rounded text-[10px] font-medium flex-shrink-0 ${labelColor(label)}`}>
+              {label}
             </span>
-            <span className="text-xs text-gray-400 flex-shrink-0">{dateFormatted}</span>
-          </div>
-          <div className={`text-sm truncate mt-0.5 ${unread ? 'font-medium text-gray-900' : 'text-gray-600'}`}>
-            {msg.hasAttachments && <span className="mr-1 text-gray-400" title="Has attachments">{'\u{1F4CE}'}</span>}
-            {msg.bodyFetched && <span className="mr-1 text-green-400" title="Body cached">{'\u{2709}'}</span>}
-            {msg.subject}
-          </div>
-          <div className="flex items-center gap-1 mt-0.5">
-            {msg.snippet && (
-              <span className="text-xs text-gray-400 truncate">{msg.snippet}</span>
-            )}
-            {getLabels(msg.flags).map(label => (
-              <span key={label} className={`inline-block px-1.5 py-0 rounded text-[10px] font-medium flex-shrink-0 ${labelColor(label)}`}>
-                {label}
-              </span>
-            ))}
-          </div>
+          ))}
         </div>
       </div>
-    </button>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Bulk Action Bar
+// ---------------------------------------------------------------------------
+
+function BulkActionBar({
+  selectedCount,
+  onAction,
+  onClear,
+  isPending,
+}: {
+  selectedCount: number
+  onAction: (action: 'delete' | 'trash' | 'archive') => void
+  onClear: () => void
+  isPending: boolean
+}) {
+  if (selectedCount === 0) return null
+
+  return (
+    <div className="flex items-center gap-3 px-4 py-2 bg-indigo-50 border-b border-indigo-200 flex-shrink-0">
+      <span className="text-sm font-medium text-indigo-800">
+        {selectedCount} selected
+      </span>
+      <div className="flex items-center gap-2 ml-auto">
+        <button
+          onClick={() => onAction('delete')}
+          disabled={isPending}
+          className="px-3 py-1 text-xs font-medium text-white bg-red-600 rounded hover:bg-red-700 disabled:opacity-50 transition-colors"
+        >
+          Delete
+        </button>
+        <button
+          onClick={() => onAction('trash')}
+          disabled={isPending}
+          className="px-3 py-1 text-xs font-medium text-white bg-yellow-600 rounded hover:bg-yellow-700 disabled:opacity-50 transition-colors"
+        >
+          Move to Trash
+        </button>
+        <button
+          onClick={() => onAction('archive')}
+          disabled={isPending}
+          className="px-3 py-1 text-xs font-medium text-white bg-blue-600 rounded hover:bg-blue-700 disabled:opacity-50 transition-colors"
+        >
+          Archive
+        </button>
+        <button
+          onClick={onClear}
+          disabled={isPending}
+          className="px-3 py-1 text-xs font-medium text-gray-600 bg-white border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 transition-colors"
+        >
+          Clear
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Confirmation Dialog
+// ---------------------------------------------------------------------------
+
+function ConfirmDialog({
+  title,
+  message,
+  confirmLabel,
+  confirmClass,
+  onConfirm,
+  onCancel,
+}: {
+  title: string
+  message: string
+  confirmLabel: string
+  confirmClass?: string
+  onConfirm: () => void
+  onCancel: () => void
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4 p-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-2">{title}</h3>
+        <p className="text-sm text-gray-600 mb-6 whitespace-pre-wrap">{message}</p>
+        <div className="flex justify-end gap-3">
+          <button
+            onClick={onCancel}
+            className="px-4 py-2 text-sm text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            className={`px-4 py-2 text-sm text-white rounded-lg transition-colors ${confirmClass || 'bg-red-600 hover:bg-red-700'}`}
+          >
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -343,6 +465,12 @@ function MessageView({
                     ? new Date(msg.dateEpoch * 1000).toLocaleString()
                     : msg.date}
                 </span>
+              </div>
+              <div className="flex items-center gap-2 text-sm">
+                <span className="text-gray-500 w-12 flex-shrink-0">Folder</span>
+                <span className="text-gray-700">{folderPath || `Folder #${folderId}`}</span>
+                <span className="text-gray-300">|</span>
+                <span className="text-gray-500 text-xs">{accountId.slice(0, 8)}…</span>
               </div>
             </div>
           </div>
@@ -552,13 +680,28 @@ function SearchResults({
   query,
   onSelect,
   selectedUid,
+  checkedMessages,
+  onCheckChange,
+  onBulkSearchAction,
+  bulkActionPending,
 }: {
   accountId: string | undefined
   query: string
   onSelect: (msg: MessageSummary) => void
   selectedUid: number | undefined
+  checkedMessages: Set<string>
+  onCheckChange: (key: string, msg: MessageSummary, checked: boolean) => void
+  onBulkSearchAction: (action: 'delete' | 'trash' | 'archive') => void
+  bulkActionPending: boolean
 }) {
-  const { data: results, isLoading, error } = useSearchMessages(accountId, query, 50)
+  const pageSize = 50
+  const [searchPage, setSearchPage] = useState(0)
+  const [showSearchBulkDialog, setShowSearchBulkDialog] = useState<'delete' | 'trash' | 'archive' | null>(null)
+
+  // Reset page when query changes
+  useEffect(() => { setSearchPage(0) }, [query, accountId])
+
+  const { data: results, isLoading, error } = useSearchMessages(accountId, query, pageSize, searchPage * pageSize)
 
   if (isLoading) {
     return <div className="text-center py-8 text-gray-400 text-sm">Searching...</div>
@@ -573,6 +716,14 @@ function SearchResults({
   }
 
   if (!results || results.length === 0) {
+    if (searchPage > 0) {
+      return (
+        <div className="text-center py-8 text-gray-400 text-sm">
+          No more results.
+          <button onClick={() => setSearchPage(0)} className="ml-2 text-blue-600 hover:underline">Back to first page</button>
+        </div>
+      )
+    }
     return (
       <div className="text-center py-12 text-gray-400 text-sm">
         No messages found matching &quot;{query}&quot;
@@ -580,19 +731,183 @@ function SearchResults({
     )
   }
 
+  const hasMore = results.length === pageSize
+
+  // Check all on current page
+  const pageKeys = results.map(msg => {
+    const aId = msg.accountId || accountId || ''
+    const fId = msg.folderId ?? 0
+    return msgKey(aId, fId, msg.uid)
+  })
+  const allPageChecked = pageKeys.length > 0 && pageKeys.every(k => checkedMessages.has(k))
+
+  const handleSelectAllPage = (checked: boolean) => {
+    results.forEach(msg => {
+      const aId = msg.accountId || accountId || ''
+      const fId = msg.folderId ?? 0
+      const key = msgKey(aId, fId, msg.uid)
+      onCheckChange(key, msg, checked)
+    })
+  }
+
   return (
     <div>
-      <div className="px-4 py-2 text-xs text-gray-500 border-b border-gray-100">
-        {results.length} result{results.length !== 1 ? 's' : ''} for &quot;{query}&quot;
+      <div className="px-4 py-2 text-xs text-gray-500 border-b border-gray-100 flex justify-between items-center">
+        <div className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={allPageChecked}
+            onChange={e => handleSelectAllPage(e.target.checked)}
+            className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+            title="Select all on page"
+          />
+          <span>
+            {searchPage * pageSize + 1}--{searchPage * pageSize + results.length} results for &quot;{query}&quot;
+          </span>
+        </div>
+        <div className="flex gap-2 items-center">
+          {/* Bulk action on ALL search results */}
+          <div className="relative group">
+            <button
+              disabled={bulkActionPending}
+              className="px-2 py-0.5 rounded text-xs border border-red-200 text-red-600 bg-red-50 hover:bg-red-100 disabled:opacity-50 transition-colors"
+              onClick={() => setShowSearchBulkDialog('delete')}
+            >
+              Delete All Results
+            </button>
+          </div>
+          <button
+            onClick={() => setSearchPage(p => Math.max(0, p - 1))}
+            disabled={searchPage === 0}
+            className="px-2 py-0.5 rounded text-xs border border-gray-200 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            Prev
+          </button>
+          <button
+            onClick={() => setSearchPage(p => p + 1)}
+            disabled={!hasMore}
+            className="px-2 py-0.5 rounded text-xs border border-gray-200 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            Next
+          </button>
+        </div>
       </div>
-      {results.map((msg) => (
-        <MessageRow
-          key={`${msg.id}-${msg.uid}`}
-          msg={msg}
-          isSelected={msg.uid === selectedUid}
-          onClick={() => onSelect(msg)}
+      {results.map((msg) => {
+        const aId = msg.accountId || accountId || ''
+        const fId = msg.folderId ?? 0
+        const key = msgKey(aId, fId, msg.uid)
+        return (
+          <MessageRow
+            key={`${msg.id}-${msg.uid}`}
+            msg={msg}
+            isSelected={msg.uid === selectedUid}
+            isChecked={checkedMessages.has(key)}
+            showCheckbox={true}
+            onClick={() => onSelect(msg)}
+            onCheckChange={(checked) => onCheckChange(key, msg, checked)}
+          />
+        )
+      })}
+      {(hasMore || searchPage > 0) && (
+        <div className="flex items-center justify-between px-4 py-2 border-t border-gray-100 bg-gray-50">
+          <button
+            onClick={() => setSearchPage(p => Math.max(0, p - 1))}
+            disabled={searchPage === 0}
+            className="px-3 py-1 rounded text-xs border border-gray-200 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            &larr; Previous
+          </button>
+          <span className="text-xs text-gray-500">Page {searchPage + 1}</span>
+          <button
+            onClick={() => setSearchPage(p => p + 1)}
+            disabled={!hasMore}
+            className="px-3 py-1 rounded text-xs border border-gray-200 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            Next &rarr;
+          </button>
+        </div>
+      )}
+
+      {/* Bulk search action dialog */}
+      {showSearchBulkDialog && (
+        <SearchBulkActionDialog
+          query={query}
+          onAction={(action) => {
+            onBulkSearchAction(action)
+            setShowSearchBulkDialog(null)
+          }}
+          onCancel={() => setShowSearchBulkDialog(null)}
         />
-      ))}
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Search Bulk Action Dialog — lets user choose delete/trash/archive for search
+// ---------------------------------------------------------------------------
+
+function SearchBulkActionDialog({
+  query,
+  onAction,
+  onCancel,
+}: {
+  query: string
+  onAction: (action: 'delete' | 'trash' | 'archive') => void
+  onCancel: () => void
+}) {
+  const [action, setAction] = useState<'delete' | 'trash' | 'archive'>('delete')
+
+  const actionLabels = {
+    delete: { label: 'Delete All', class: 'bg-red-600 hover:bg-red-700' },
+    trash: { label: 'Move All to Trash', class: 'bg-yellow-600 hover:bg-yellow-700' },
+    archive: { label: 'Archive All', class: 'bg-blue-600 hover:bg-blue-700' },
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4 p-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-2">Bulk Action on Search Results</h3>
+        <p className="text-sm text-gray-600 mb-4">
+          This will apply the chosen action to <strong>all messages</strong> matching:
+        </p>
+        <div className="bg-gray-50 rounded-lg px-3 py-2 mb-4 text-sm font-mono text-gray-800 break-all">
+          {query}
+        </div>
+
+        <div className="flex gap-2 mb-6">
+          {(['delete', 'trash', 'archive'] as const).map(a => (
+            <button
+              key={a}
+              onClick={() => setAction(a)}
+              className={`flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-colors border ${
+                action === a
+                  ? a === 'delete' ? 'bg-red-100 border-red-400 text-red-800'
+                    : a === 'trash' ? 'bg-yellow-100 border-yellow-400 text-yellow-800'
+                    : 'bg-blue-100 border-blue-400 text-blue-800'
+                  : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              {a === 'delete' ? 'Delete' : a === 'trash' ? 'Trash' : 'Archive'}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex justify-end gap-3">
+          <button
+            onClick={onCancel}
+            className="px-4 py-2 text-sm text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => onAction(action)}
+            className={`px-4 py-2 text-sm text-white rounded-lg transition-colors ${actionLabels[action].class}`}
+          >
+            {actionLabels[action].label}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
@@ -606,11 +921,20 @@ export default function Messages() {
 
   const [selectedAccountId, setSelectedAccountId] = useState<string | undefined>(undefined)
   const [selectedFolderId, setSelectedFolderId] = useState<number | undefined>(undefined)
-  const [selectedMsg, setSelectedMsg] = useState<{ uid: number; folderId: number; folderPath: string } | undefined>(undefined)
+  const [selectedMsg, setSelectedMsg] = useState<{ uid: number; folderId: number; folderPath: string; accountId?: string } | undefined>(undefined)
   const [searchInput, setSearchInput] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [page, setPage] = useState(0)
   const pageSize = 50
+
+  // Bulk selection state
+  const [checkedMessages, setCheckedMessages] = useState<Set<string>>(new Set())
+  // Map from key to { accountId, folderId, uid } for building the request
+  const [checkedMsgData, setCheckedMsgData] = useState<Map<string, { accountId: string; folderId: number; uid: number }>>(new Map())
+  const [confirmDialog, setConfirmDialog] = useState<{ action: 'delete' | 'trash' | 'archive'; count: number; mode: 'selected' | 'search' } | null>(null)
+  const [bulkStatus, setBulkStatus] = useState<string | null>(null)
+
+  const bulkAction = useBulkMessageAction()
 
   // Auto-select first account if none selected
   const accountId = useMemo(() => {
@@ -673,6 +997,7 @@ export default function Messages() {
     setSearchQuery('')
     setSearchInput('')
     setPage(0)
+    clearSelection()
   }
 
   const handleFolderSelect = (id: number) => {
@@ -681,12 +1006,14 @@ export default function Messages() {
     setSearchQuery('')
     setSearchInput('')
     setPage(0)
+    clearSelection()
   }
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
     setSearchQuery(searchInput.trim())
     setSelectedMsg(undefined)
+    clearSelection()
     if (searchInput.trim()) {
       setSelectedFolderId(undefined) // Clear folder selection for cross-folder search
     }
@@ -696,13 +1023,88 @@ export default function Messages() {
     setSearchQuery('')
     setSearchInput('')
     setSelectedMsg(undefined)
+    clearSelection()
   }
 
   const handleSelectMessage = (msg: MessageSummary) => {
     const fId = msg.folderId ?? effectiveFolderId!
     const fPath = msg.folderPath || folders?.find(f => f.id === fId)?.path || ''
-    setSelectedMsg({ uid: msg.uid, folderId: fId, folderPath: fPath })
+    setSelectedMsg({ uid: msg.uid, folderId: fId, folderPath: fPath, accountId: msg.accountId })
   }
+
+  // --- Bulk selection handlers ---
+  const clearSelection = useCallback(() => {
+    setCheckedMessages(new Set())
+    setCheckedMsgData(new Map())
+    setBulkStatus(null)
+  }, [])
+
+  const handleCheckChange = useCallback((key: string, msg: MessageSummary, checked: boolean) => {
+    setCheckedMessages(prev => {
+      const next = new Set(prev)
+      if (checked) next.add(key)
+      else next.delete(key)
+      return next
+    })
+    setCheckedMsgData(prev => {
+      const next = new Map(prev)
+      if (checked) {
+        next.set(key, {
+          accountId: msg.accountId || accountId || '',
+          folderId: msg.folderId ?? effectiveFolderId ?? 0,
+          uid: msg.uid,
+        })
+      } else {
+        next.delete(key)
+      }
+      return next
+    })
+  }, [accountId, effectiveFolderId])
+
+  const handleBulkAction = useCallback((action: 'delete' | 'trash' | 'archive') => {
+    setConfirmDialog({ action, count: checkedMessages.size, mode: 'selected' })
+  }, [checkedMessages.size])
+
+  const handleBulkSearchAction = useCallback((action: 'delete' | 'trash' | 'archive') => {
+    setConfirmDialog({ action, count: -1, mode: 'search' })  // -1 = unknown count (all results)
+  }, [])
+
+  const executeBulkAction = useCallback(() => {
+    if (!confirmDialog) return
+    setBulkStatus(`Queuing ${confirmDialog.action}...`)
+
+    let request: BulkMessageActionRequest
+
+    if (confirmDialog.mode === 'search') {
+      request = {
+        action: confirmDialog.action,
+        scope: 'search',
+        searchQuery: searchQuery,
+        searchAccountId: selectedAccountId || undefined,
+      }
+    } else {
+      const selectedIds = Array.from(checkedMsgData.values())
+      request = {
+        action: confirmDialog.action,
+        scope: 'selected',
+        selectedIds,
+      }
+    }
+
+    bulkAction.mutate(request, {
+      onSuccess: (data) => {
+        setBulkStatus(`Queued ${data.queued} message${data.queued !== 1 ? 's' : ''} for ${confirmDialog.action}`)
+        clearSelection()
+        setTimeout(() => setBulkStatus(null), 5000)
+      },
+      onError: (err) => {
+        setBulkStatus(`Error: ${err.message}`)
+        setTimeout(() => setBulkStatus(null), 8000)
+      },
+    })
+
+    setConfirmDialog(null)
+  }, [confirmDialog, searchQuery, selectedAccountId, checkedMsgData, bulkAction, clearSelection])
 
   if (accountsLoading) {
     return <div className="text-center py-8 text-gray-400">Loading accounts...</div>
@@ -782,15 +1184,35 @@ export default function Messages() {
         )}
 
         {/* Message list */}
-        <div className={`border-r border-gray-200 overflow-y-auto flex-shrink-0 ${
+        <div className={`border-r border-gray-200 flex-shrink-0 flex flex-col ${
           selectedMsg ? 'w-80' : 'flex-1'
         }`}>
+          {/* Bulk status feedback */}
+          {bulkStatus && (
+            <div className={`px-4 py-1.5 text-xs flex-shrink-0 ${bulkStatus.startsWith('Error') ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-700'}`}>
+              {bulkStatus}
+            </div>
+          )}
+
+          {/* Bulk action bar */}
+          <BulkActionBar
+            selectedCount={checkedMessages.size}
+            onAction={handleBulkAction}
+            onClear={clearSelection}
+            isPending={bulkAction.isPending}
+          />
+
+          <div className="overflow-y-auto flex-1">
           {isSearching ? (
             <SearchResults
               accountId={selectedAccountId}
               query={searchQuery}
               onSelect={handleSelectMessage}
               selectedUid={selectedMsg?.uid}
+              checkedMessages={checkedMessages}
+              onCheckChange={handleCheckChange}
+              onBulkSearchAction={handleBulkSearchAction}
+              bulkActionPending={bulkAction.isPending}
             />
           ) : !accountId ? (
             <div className="text-center py-12 text-gray-400 text-sm">
@@ -805,39 +1227,61 @@ export default function Messages() {
           ) : messages && messages.length > 0 ? (
             <>
               <div className="px-4 py-2 text-xs text-gray-500 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
-                <span>
-                  {totalCount.toLocaleString()} message{totalCount !== 1 ? 's' : ''}
-                  {folders && (
-                    <> in {folders.find(f => f.id === effectiveFolderId)?.displayName ?? 'folder'}</>
-                  )}
-                </span>
-                {accountId && effectiveFolderId != null && (
-                  <button
-                    onClick={() => {
-                      if (window.confirm('Clear cached messages for this folder?'))
-                        clearFolderCache.mutate({ accountId, folderId: effectiveFolderId })
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={messages.length > 0 && messages.every(msg => checkedMessages.has(msgKey(accountId, effectiveFolderId, msg.uid)))}
+                    onChange={e => {
+                      messages.forEach(msg => {
+                        const key = msgKey(accountId, effectiveFolderId, msg.uid)
+                        handleCheckChange(key, { ...msg, accountId, folderId: effectiveFolderId } as MessageSummary, e.target.checked)
+                      })
                     }}
-                    disabled={clearFolderCache.isPending}
-                    className="px-2 py-0.5 text-xs text-red-600 bg-red-50 border border-red-200 rounded hover:bg-red-100 transition-colors disabled:opacity-50"
-                    title="Clear folder cache"
-                  >
-                    {clearFolderCache.isPending ? 'Clearing...' : 'Clear Cache'}
-                  </button>
-                )}
-                {clearFolderCache.error && (
-                  <span className="ml-2 text-xs text-red-600" title={clearFolderCache.error.message}>
-                    Clear failed
+                    className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                    title="Select all on page"
+                  />
+                  <span>
+                    {totalCount.toLocaleString()} message{totalCount !== 1 ? 's' : ''}
+                    {folders && (
+                      <> in {folders.find(f => f.id === effectiveFolderId)?.displayName ?? 'folder'}</>
+                    )}
                   </span>
-                )}
+                </div>
+                <div className="flex items-center gap-2">
+                  {accountId && effectiveFolderId != null && (
+                    <button
+                      onClick={() => {
+                        if (window.confirm('Clear cached messages for this folder?'))
+                          clearFolderCache.mutate({ accountId, folderId: effectiveFolderId })
+                      }}
+                      disabled={clearFolderCache.isPending}
+                      className="px-2 py-0.5 text-xs text-red-600 bg-red-50 border border-red-200 rounded hover:bg-red-100 transition-colors disabled:opacity-50"
+                      title="Clear folder cache"
+                    >
+                      {clearFolderCache.isPending ? 'Clearing...' : 'Clear Cache'}
+                    </button>
+                  )}
+                  {clearFolderCache.error && (
+                    <span className="ml-2 text-xs text-red-600" title={clearFolderCache.error.message}>
+                      Clear failed
+                    </span>
+                  )}
+                </div>
               </div>
-              {messages.map((msg) => (
-                <MessageRow
-                  key={`${msg.id}-${msg.uid}`}
-                  msg={msg}
-                  isSelected={selectedMsg?.uid === msg.uid}
-                  onClick={() => handleSelectMessage(msg)}
-                />
-              ))}
+              {messages.map((msg) => {
+                const key = msgKey(accountId, effectiveFolderId, msg.uid)
+                return (
+                  <MessageRow
+                    key={`${msg.id}-${msg.uid}`}
+                    msg={msg}
+                    isSelected={selectedMsg?.uid === msg.uid}
+                    isChecked={checkedMessages.has(key)}
+                    showCheckbox={true}
+                    onClick={() => handleSelectMessage(msg)}
+                    onCheckChange={(checked) => handleCheckChange(key, { ...msg, accountId, folderId: effectiveFolderId } as MessageSummary, checked)}
+                  />
+                )
+              })}
               <div className="flex items-center justify-between px-4 py-2 border-t border-gray-100 bg-gray-50">
                 <button
                   onClick={() => setPage(p => Math.max(0, p - 1))}
@@ -863,13 +1307,14 @@ export default function Messages() {
               No messages in this folder
             </div>
           )}
+          </div>
         </div>
 
         {/* Message detail pane */}
         {selectedMsg && accountId && (
           <div className="flex-1 overflow-hidden min-w-0">
             <MessageView
-              accountId={accountId}
+              accountId={selectedMsg.accountId || accountId!}
               folderId={selectedMsg.folderId}
               folderPath={selectedMsg.folderPath}
               uid={selectedMsg.uid}
@@ -878,6 +1323,30 @@ export default function Messages() {
           </div>
         )}
       </div>
+
+      {/* Confirmation dialog */}
+      {confirmDialog && (
+        <ConfirmDialog
+          title={`${confirmDialog.action === 'delete' ? 'Delete' : confirmDialog.action === 'trash' ? 'Move to Trash' : 'Archive'} Messages`}
+          message={
+            confirmDialog.mode === 'search'
+              ? `This will ${confirmDialog.action} ALL messages matching the current search query.\n\nQuery: ${searchQuery}\n\nThis action will be queued and cannot be easily undone.`
+              : `${confirmDialog.action === 'delete' ? 'Delete' : confirmDialog.action === 'trash' ? 'Move to trash' : 'Archive'} ${confirmDialog.count} selected message${confirmDialog.count !== 1 ? 's' : ''}?\n\nThis action will be queued and cannot be easily undone.`
+          }
+          confirmLabel={
+            confirmDialog.action === 'delete' ? 'Delete'
+              : confirmDialog.action === 'trash' ? 'Move to Trash'
+              : 'Archive'
+          }
+          confirmClass={
+            confirmDialog.action === 'delete' ? 'bg-red-600 hover:bg-red-700'
+              : confirmDialog.action === 'trash' ? 'bg-yellow-600 hover:bg-yellow-700'
+              : 'bg-blue-600 hover:bg-blue-700'
+          }
+          onConfirm={executeBulkAction}
+          onCancel={() => setConfirmDialog(null)}
+        />
+      )}
     </div>
   )
 }

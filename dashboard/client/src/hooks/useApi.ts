@@ -432,6 +432,8 @@ export interface MessageSummary {
   id: number
   uid: number
   folderId?: number
+  accountId?: string
+  accountName?: string
   subject: string
   fromAddress: string
   fromEmail: string
@@ -493,13 +495,14 @@ export function useMessage(accountId: string | undefined, folderId: number | und
   })
 }
 
-export function useSearchMessages(accountId: string | undefined, query: string, limit: number = 50) {
+export function useSearchMessages(accountId: string | undefined, query: string, limit: number = 50, offset: number = 0) {
   const qs = new URLSearchParams()
   if (accountId) qs.set('account_id', accountId)
   if (query) qs.set('query', query)
   qs.set('limit', String(limit))
+  if (offset > 0) qs.set('offset', String(offset))
   return useQuery({
-    queryKey: ['messages-search', accountId, query, limit],
+    queryKey: ['messages-search', accountId, query, limit, offset],
     queryFn: () => apiFetch<MessageSummary[]>(`/api/messages/search?${qs}`),
     enabled: query.length > 0,
   })
@@ -685,6 +688,185 @@ export function useExecuteTool() {
       qc.invalidateQueries({ queryKey: ['messages'] })
       qc.invalidateQueries({ queryKey: ['messages-search'] })
       qc.invalidateQueries({ queryKey: ['message'] })
+      qc.invalidateQueries({ queryKey: ['folders'] })
+    },
+  })
+}
+
+// ---------- Analytics hooks ----------
+
+export interface VolumeMonth {
+  month: string
+  count: number
+}
+
+export interface VolumeResponse {
+  months: VolumeMonth[]
+}
+
+export function useAnalyticsVolume(params: { startDate?: string; endDate?: string; accountId?: string }) {
+  const qs = new URLSearchParams()
+  if (params.startDate) qs.set('startDate', params.startDate)
+  if (params.endDate) qs.set('endDate', params.endDate)
+  if (params.accountId) qs.set('accountId', params.accountId)
+  return useQuery({
+    queryKey: ['analytics-volume', params.startDate, params.endDate, params.accountId],
+    queryFn: () => apiFetch<VolumeResponse>(`/api/analytics/volume?${qs}`),
+  })
+}
+
+export interface TopSender {
+  email: string
+  name: string
+  count: number
+  firstSeen: string | null
+  lastSeen: string | null
+  last3m: number
+  last6m: number
+  last12m: number
+  last24m: number
+}
+
+export interface TopSendersResponse {
+  senders: TopSender[]
+}
+
+export function useAnalyticsTopSenders(params: { limit?: number; startDate?: string; endDate?: string; accountId?: string; search?: string; type?: string }) {
+  const qs = new URLSearchParams()
+  if (params.limit) qs.set('limit', String(params.limit))
+  if (params.startDate) qs.set('startDate', params.startDate)
+  if (params.endDate) qs.set('endDate', params.endDate)
+  if (params.accountId) qs.set('accountId', params.accountId)
+  if (params.search) qs.set('search', params.search)
+  if (params.type) qs.set('type', params.type)
+  return useQuery({
+    queryKey: ['analytics-top-senders', params.limit, params.startDate, params.endDate, params.accountId, params.search, params.type],
+    queryFn: () => apiFetch<TopSendersResponse>(`/api/analytics/top-senders?${qs}`),
+  })
+}
+
+export interface AccountBreakdownEntry {
+  id: string
+  name: string
+  email: string
+  totalMessages: number
+  totalSizeMb: number
+  enabled: boolean
+}
+
+export interface AccountBreakdownResponse {
+  accounts: AccountBreakdownEntry[]
+}
+
+export function useAnalyticsAccountBreakdown() {
+  return useQuery({
+    queryKey: ['analytics-account-breakdown'],
+    queryFn: () => apiFetch<AccountBreakdownResponse>('/api/analytics/account-breakdown'),
+  })
+}
+
+export interface LabelEntry {
+  name: string
+  count: number
+  percentage: number
+}
+
+export interface LabelDistributionResponse {
+  labels: LabelEntry[]
+}
+
+export function useAnalyticsLabelDistribution(accountId?: string) {
+  const qs = new URLSearchParams()
+  if (accountId) qs.set('accountId', accountId)
+  return useQuery({
+    queryKey: ['analytics-label-distribution', accountId],
+    queryFn: () => apiFetch<LabelDistributionResponse>(`/api/analytics/label-distribution?${qs}`),
+  })
+}
+
+export interface AnalyticsSummary {
+  totalEmails: number
+  uniqueSenders: number
+  monthsOfHistory: number
+  flaggedCount: number
+  unreadCount: number
+  withAttachments: number
+}
+
+export function useAnalyticsSummary(accountId?: string) {
+  const qs = new URLSearchParams()
+  if (accountId) qs.set('accountId', accountId)
+  return useQuery({
+    queryKey: ['analytics-summary', accountId],
+    queryFn: () => apiFetch<AnalyticsSummary>(`/api/analytics/summary?${qs}`),
+  })
+}
+
+export interface BulkDeleteRequest {
+  senderEmail: string
+  accountId?: string
+  startDate?: string
+  endDate?: string
+  folder?: string
+  action?: 'delete' | 'trash' | 'archive'
+}
+
+export interface BulkDeleteResponse {
+  queued: number
+  operationIds: string[]
+}
+
+export function useBulkDelete() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: BulkDeleteRequest) =>
+      apiFetch<BulkDeleteResponse>('/api/analytics/bulk-delete', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['queue'] })
+      qc.invalidateQueries({ queryKey: ['analytics-top-senders'] })
+      qc.invalidateQueries({ queryKey: ['analytics-summary'] })
+      qc.invalidateQueries({ queryKey: ['analytics-volume'] })
+    },
+  })
+}
+
+// ---------- Bulk Message Action hooks ----------
+
+export interface BulkMessageActionSelectedId {
+  accountId: string
+  folderId: number
+  uid: number
+}
+
+export interface BulkMessageActionRequest {
+  action: 'delete' | 'trash' | 'archive'
+  scope: 'selected' | 'search'
+  selectedIds?: BulkMessageActionSelectedId[]
+  searchQuery?: string
+  searchAccountId?: string
+  maxResults?: number
+}
+
+export interface BulkMessageActionResponse {
+  queued: number
+  operationIds: string[]
+}
+
+export function useBulkMessageAction() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: BulkMessageActionRequest) =>
+      apiFetch<BulkMessageActionResponse>('/api/messages/bulk-action', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['queue'] })
+      qc.invalidateQueries({ queryKey: ['messages'] })
+      qc.invalidateQueries({ queryKey: ['messages-search'] })
       qc.invalidateQueries({ queryKey: ['folders'] })
     },
   })
