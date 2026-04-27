@@ -149,6 +149,8 @@ public class MessageRepository(AppDatabase db)
     public MessageRecord? GetByUid(string accountId, int folderId, long uid)
     {
         using var conn = db.GetReadConnection();
+
+        // Primary lookup via junction table (handles deduplicated messages)
         using var cmd = conn.CreateCommand();
         cmd.CommandText = """
             SELECT m.* FROM messages m
@@ -160,7 +162,23 @@ public class MessageRepository(AppDatabase db)
         cmd.Parameters.AddWithValue("$f", folderId);
         cmd.Parameters.AddWithValue("$u", uid);
         using var reader = cmd.ExecuteReader();
-        return reader.Read() ? ReadRecord(reader) : null;
+        if (reader.Read()) return ReadRecord(reader);
+        reader.Close();
+
+        // Fallback: look directly in messages table (covers messages whose
+        // folder_id/uid in the messages table was never linked into message_folders,
+        // e.g. due to deduplication or legacy data)
+        using var fallbackCmd = conn.CreateCommand();
+        fallbackCmd.CommandText = """
+            SELECT * FROM messages
+            WHERE account_id = $a AND folder_id = $f AND uid = $u AND deleted_at IS NULL
+            LIMIT 1;
+            """;
+        fallbackCmd.Parameters.AddWithValue("$a", accountId);
+        fallbackCmd.Parameters.AddWithValue("$f", folderId);
+        fallbackCmd.Parameters.AddWithValue("$u", uid);
+        using var fallbackReader = fallbackCmd.ExecuteReader();
+        return fallbackReader.Read() ? ReadRecord(fallbackReader) : null;
     }
 
     private MessageRecord? GetByUidDirect(string accountId, int folderId, long uid)
