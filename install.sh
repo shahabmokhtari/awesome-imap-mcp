@@ -2,9 +2,9 @@
 set -euo pipefail
 
 # Ultimate IMAP MCP — single-binary installer
-# Usage: curl -fsSL https://raw.githubusercontent.com/shahab1363/ultimate-imap-mcp/main/install.sh | bash
+# Usage: curl -fsSL https://raw.githubusercontent.com/shahabmokhtari/ultimate-imap-mcp/main/install.sh | bash
 
-REPO="shahab1363/ultimate-imap-mcp"
+REPO="shahabmokhtari/ultimate-imap-mcp"
 INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
 TAG="${TAG:-snapshot}"
 

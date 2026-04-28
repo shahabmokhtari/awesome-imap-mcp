@@ -10,9 +10,9 @@
     <PackageId>ultimate-imap-mcp</PackageId>
     <Version>0.1.0</Version>
     <Description>Batteries-included MCP server for email with local cache, operation queue, web dashboard, and LLM analysis</Description>
-    <Authors>Shahab</Authors>
-    <PackageProjectUrl>https://github.com/shahab1363/ultimate-imap-mcp</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/shahab1363/ultimate-imap-mcp</RepositoryUrl>
+    <Authors>Shahab Mokhtari</Authors>
+    <PackageProjectUrl>https://github.com/shahabmokhtari/ultimate-imap-mcp</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/shahabmokhtari/ultimate-imap-mcp</RepositoryUrl>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
 

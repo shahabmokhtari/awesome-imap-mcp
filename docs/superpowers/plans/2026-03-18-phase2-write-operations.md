@@ -74,7 +74,7 @@ src/
 - [ ] **Step 1: Create Queue project and test project**
 
 ```bash
-cd /Users/shahab/repos/ultimate-imap-mcp
+cd ultimate-imap-mcp
 dotnet new classlib -n UltimateImapMcp.Queue -o src/UltimateImapMcp.Queue
 dotnet new xunit -n UltimateImapMcp.Queue.Tests -o tests/UltimateImapMcp.Queue.Tests
 dotnet sln add src/UltimateImapMcp.Queue tests/UltimateImapMcp.Queue.Tests
