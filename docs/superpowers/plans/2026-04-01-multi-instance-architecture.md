@@ -46,7 +46,7 @@
 
 - [ ] **Step 1: Install DOMPurify**
 
-Run: `cd /Users/shahab/repos/ultimate-imap-mcp/dashboard/client && npm install dompurify && npm install -D @types/dompurify`
+Run: `cd dashboard/client && npm install dompurify && npm install -D @types/dompurify`
 Expected: Package added to package.json
 
 - [ ] **Step 2: Create the sanitizer module**
@@ -108,7 +108,7 @@ export function sanitizeEmailHtml(html: string, allowRemoteImages: boolean = fal
 
 - [ ] **Step 3: Verify build**
 
-Run: `cd /Users/shahab/repos/ultimate-imap-mcp/dashboard/client && npm run build`
+Run: `cd dashboard/client && npm run build`
 Expected: Build succeeds
 
 - [ ] **Step 4: Commit**
@@ -196,7 +196,7 @@ Place this after the `useState` hooks and before any conditional returns.
 
 - [ ] **Step 5: Build and verify**
 
-Run: `cd /Users/shahab/repos/ultimate-imap-mcp/dashboard/client && npm run build`
+Run: `cd dashboard/client && npm run build`
 Expected: Build succeeds
 
 - [ ] **Step 6: Commit**
@@ -1305,7 +1305,7 @@ Expected: All 278+ tests pass
 
 - [ ] **Step 3: Build frontend**
 
-Run: `cd /Users/shahab/repos/ultimate-imap-mcp/dashboard/client && npm run build`
+Run: `cd dashboard/client && npm run build`
 Expected: Build succeeds
 
 - [ ] **Step 4: Commit if any changes**

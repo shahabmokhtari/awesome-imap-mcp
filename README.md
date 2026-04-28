@@ -47,10 +47,10 @@ Download a self-contained binary for your platform — no .NET SDK required.
 
 ```bash
 # One-liner install (Linux/macOS)
-curl -fsSL https://raw.githubusercontent.com/shahab1363/ultimate-imap-mcp/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/shahabmokhtari/ultimate-imap-mcp/main/install.sh | bash
 ```
 
-Or download manually from the [releases page](https://github.com/shahab1363/ultimate-imap-mcp/releases):
+Or download manually from the [releases page](https://github.com/shahabmokhtari/ultimate-imap-mcp/releases):
 
 | Platform | Binary |
 |----------|--------|
@@ -78,7 +78,7 @@ dotnet tool install -g ultimate-imap-mcp
 ### Option 3: From Source
 
 ```bash
-git clone https://github.com/shahab1363/ultimate-imap-mcp.git
+git clone https://github.com/shahabmokhtari/ultimate-imap-mcp.git
 cd ultimate-imap-mcp
 dotnet build
 ```
