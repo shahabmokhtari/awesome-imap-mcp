@@ -180,7 +180,8 @@ public static class AccountsApi
                     await client.AuthenticateAsync(account.Username, password).ConfigureAwait(false);
                 }
 
-                var inbox = client.Inbox;
+                var inbox = client.Inbox
+                    ?? throw new InvalidOperationException("IMAP server did not expose an INBOX folder.");
                 await inbox.OpenAsync(MailKit.FolderAccess.ReadOnly).ConfigureAwait(false);
 
                 var count = inbox.Count;
