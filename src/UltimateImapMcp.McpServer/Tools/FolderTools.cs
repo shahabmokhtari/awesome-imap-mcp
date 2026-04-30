@@ -98,7 +98,9 @@ public class FolderTools(FolderRepository folderRepo,
                         var separator = ns?.DirectorySeparator ?? '/';
                         var topFolder = ns is not null
                             ? await client.GetFolderAsync(ns.Path).ConfigureAwait(false)
-                            : client.Inbox.ParentFolder;
+                            : client.Inbox?.ParentFolder;
+                        if (topFolder is null)
+                            return new { error = (string?)"IMAP server did not expose a top-level folder to create under.", path = (string?)null, separator = (char?)null };
 
                         // Check if the folder already exists
                         try
@@ -116,7 +118,7 @@ public class FolderTools(FolderRepository folderRepo,
                         var normalizedPath = folderPath.Replace('/', separator);
 
                         var created = await topFolder.CreateAsync(normalizedPath, true).ConfigureAwait(false);
-                        return new { error = (string?)null, path = (string?)created.FullName, separator = (char?)separator };
+                        return new { error = (string?)null, path = (string?)created?.FullName, separator = (char?)separator };
                     });
 
                     if (result.error is not null)
