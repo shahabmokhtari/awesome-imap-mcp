@@ -24,6 +24,7 @@ jobs:
         with:
           name: dashboard-spa
           path: src/UltimateImapMcp.Dashboard/wwwroot/
+          retention-days: 1
 
   build-binaries:
     needs: build-frontend
@@ -83,6 +84,7 @@ jobs:
         with:
           name: ${{ matrix.artifact }}
           path: publish/${{ matrix.artifact }}
+          retention-days: 1
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')

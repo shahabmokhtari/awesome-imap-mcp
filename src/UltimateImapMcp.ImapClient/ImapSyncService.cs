@@ -61,11 +61,15 @@ public sealed class ImapSyncService
             allFolders = await client.GetFoldersAsync(personalNs, false, ct)
                 .ConfigureAwait(false);
         }
-        else
+        else if (client.Inbox is { } inbox)
         {
             // Fallback: start from INBOX and recurse subfolders.
-            allFolders = await GetAllSubfoldersAsync(client.Inbox, ct)
+            allFolders = await GetAllSubfoldersAsync(inbox, ct)
                 .ConfigureAwait(false);
+        }
+        else
+        {
+            allFolders = [];
         }
 
         // Ensure INBOX is always present.
