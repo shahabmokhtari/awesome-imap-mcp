@@ -1,4 +1,4 @@
-# Ultimate IMAP MCP
+# Awesome IMAP MCP
 
 A batteries-included MCP server for email. Works with any IMAP provider (Gmail, Outlook, Fastmail, ProtonMail, Yahoo, Zoho, self-hosted, etc.).
 
@@ -13,7 +13,7 @@ Every existing IMAP MCP server hits the IMAP server on every single tool call. N
 ## Key Features
 
 - **OAuth2 sign-in** - one-click sign-in for Gmail, Outlook, and Yahoo via PKCE (no client secrets needed). App passwords also supported for all providers
-- **Web dashboard with setup wizard** - guided first-run setup, account management, message browsing, editable settings, sync monitoring, queue viewer, duplicate detection, and direct tool execution
+- **Web dashboard with setup wizard** - guided first-run setup, account management, message browsing with bulk operations, an analytics page (volume charts, top senders, label distribution), editable settings, sync monitoring, queue viewer, duplicate detection, and direct tool execution
 - **Local SQLite cache with full-text search** - instant search, no IMAP round-trips
 - **IMAP IDLE + polling** - real-time inbox sync, configurable per folder
 - **Operation queue** - all writes are queued with priority tiers, retry logic, and undo
@@ -47,24 +47,24 @@ Download a self-contained binary for your platform — no .NET SDK required.
 
 ```bash
 # One-liner install (Linux/macOS)
-curl -fsSL https://raw.githubusercontent.com/shahabmokhtari/ultimate-imap-mcp/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/shahabmokhtari/awesome-imap-mcp/main/install.sh | bash
 ```
 
-Or download manually from the [releases page](https://github.com/shahabmokhtari/ultimate-imap-mcp/releases):
+Or download manually from the [releases page](https://github.com/shahabmokhtari/awesome-imap-mcp/releases):
 
 | Platform | Binary |
 |----------|--------|
-| Linux x64 | `ultimate-imap-mcp-linux-x64` |
-| Linux arm64 | `ultimate-imap-mcp-linux-arm64` |
-| macOS x64 (Intel) | `ultimate-imap-mcp-osx-x64` |
-| macOS arm64 (Apple Silicon) | `ultimate-imap-mcp-osx-arm64` |
-| Windows x64 | `ultimate-imap-mcp-win-x64.exe` |
-| Windows arm64 | `ultimate-imap-mcp-win-arm64.exe` |
+| Linux x64 | `awesome-imap-mcp-linux-x64` |
+| Linux arm64 | `awesome-imap-mcp-linux-arm64` |
+| macOS x64 (Intel) | `awesome-imap-mcp-osx-x64` |
+| macOS arm64 (Apple Silicon) | `awesome-imap-mcp-osx-arm64` |
+| Windows x64 | `awesome-imap-mcp-win-x64.exe` |
+| Windows arm64 | `awesome-imap-mcp-win-arm64.exe` |
 
 ```bash
 # After downloading, make it executable and run
-chmod +x ultimate-imap-mcp-*
-./ultimate-imap-mcp-osx-arm64 --config ./config.json
+chmod +x awesome-imap-mcp-*
+./awesome-imap-mcp-osx-arm64 --config ./config.json
 ```
 
 ### Option 2: .NET Global Tool
@@ -72,21 +72,21 @@ chmod +x ultimate-imap-mcp-*
 Requires [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0).
 
 ```bash
-dotnet tool install -g ultimate-imap-mcp
+dotnet tool install -g awesome-imap-mcp
 ```
 
 ### Option 3: From Source
 
 ```bash
-git clone https://github.com/shahabmokhtari/ultimate-imap-mcp.git
-cd ultimate-imap-mcp
+git clone https://github.com/shahabmokhtari/awesome-imap-mcp.git
+cd awesome-imap-mcp
 dotnet build
 ```
 
 ### Option 4: Docker
 
 ```bash
-docker build -t ultimate-imap-mcp .
+docker build -t awesome-imap-mcp .
 docker compose up -d
 ```
 
@@ -99,7 +99,7 @@ docker compose up -d
 The easiest way to get started is with the dashboard's built-in setup wizard:
 
 ```bash
-ultimate-imap-mcp --dashboard --dashboard-auto-open
+awesome-imap-mcp --dashboard --dashboard-auto-open
 ```
 
 This opens the dashboard in your browser. The wizard walks you through:
@@ -111,11 +111,11 @@ This opens the dashboard in your browser. The wizard walks you through:
 #### 1. Create a configuration file
 
 ```bash
-mkdir -p ~/.ultimate-imap-mcp
-cp config.example.json ~/.ultimate-imap-mcp/config.json
+mkdir -p ~/.awesome-imap-mcp
+cp config.example.json ~/.awesome-imap-mcp/config.json
 ```
 
-Edit `~/.ultimate-imap-mcp/config.json` with your email account details.
+Edit `~/.awesome-imap-mcp/config.json` with your email account details.
 
 #### 2. Set up authentication
 
@@ -136,29 +136,29 @@ export ACCOUNT_PERSONAL_PASSWORD="your-app-password"
 #### 3. Run the server
 
 ```bash
-# With default config (~/.ultimate-imap-mcp/config.json)
-ultimate-imap-mcp
+# With default config (~/.awesome-imap-mcp/config.json)
+awesome-imap-mcp
 
 # With dashboard enabled
-ultimate-imap-mcp --dashboard
+awesome-imap-mcp --dashboard
 
 # With a specific config file
-ultimate-imap-mcp --config ./config.json
+awesome-imap-mcp --config ./config.json
 
 # HTTP transport for multi-client setups
-ultimate-imap-mcp --transport both --dashboard
+awesome-imap-mcp --transport both --dashboard
 ```
 
 #### 4. Run from source
 
 ```bash
-dotnet run --project src/UltimateImapMcp.McpServer -- --config ./config.example.json --dashboard
+dotnet run --project src/AwesomeImapMcp.McpServer -- --config ./config.example.json --dashboard
 ```
 
 #### 5. Run with Docker
 
 ```bash
-docker run -v ./config.json:/app/config.json -v imap-cache:/data -p 3847:3847 ultimate-imap-mcp
+docker run -v ./config.json:/app/config.json -v imap-cache:/data -p 3847:3847 awesome-imap-mcp
 ```
 
 ---
@@ -168,13 +168,13 @@ docker run -v ./config.json:/app/config.json -v imap-cache:/data -p 3847:3847 ul
 ### Claude Code
 
 ```bash
-claude mcp add ultimate-imap-mcp -- ultimate-imap-mcp
+claude mcp add awesome-imap-mcp -- awesome-imap-mcp
 ```
 
 Or with dashboard and HTTP transport for multi-client use:
 
 ```bash
-claude mcp add ultimate-imap-mcp -- ultimate-imap-mcp --transport both --dashboard
+claude mcp add awesome-imap-mcp -- awesome-imap-mcp --transport both --dashboard
 ```
 
 ### Claude Desktop
@@ -184,8 +184,8 @@ Add to your `claude_desktop_config.json`:
 ```json
 {
   "mcpServers": {
-    "ultimate-imap-mcp": {
-      "command": "ultimate-imap-mcp",
+    "awesome-imap-mcp": {
+      "command": "awesome-imap-mcp",
       "args": ["--config", "/path/to/config.json"]
     }
   }
@@ -199,8 +199,8 @@ Add to `.cursor/mcp.json` (project) or `~/.cursor/mcp.json` (global):
 ```json
 {
   "mcpServers": {
-    "ultimate-imap-mcp": {
-      "command": "ultimate-imap-mcp",
+    "awesome-imap-mcp": {
+      "command": "awesome-imap-mcp",
       "args": ["--config", "/path/to/config.json"]
     }
   }
@@ -214,8 +214,8 @@ Add to `~/.codeium/windsurf/mcp_config.json`:
 ```json
 {
   "mcpServers": {
-    "ultimate-imap-mcp": {
-      "command": "ultimate-imap-mcp",
+    "awesome-imap-mcp": {
+      "command": "awesome-imap-mcp",
       "args": ["--config", "/path/to/config.json"]
     }
   }
@@ -225,7 +225,7 @@ Add to `~/.codeium/windsurf/mcp_config.json`:
 ### HTTP+SSE (any client)
 
 ```bash
-ultimate-imap-mcp --transport http --port 3846
+awesome-imap-mcp --transport http --port 3846
 ```
 
 Connect your client to `http://localhost:3846/sse`.
@@ -236,14 +236,14 @@ Connect your client to `http://localhost:3846/sse`.
 
 | Argument | Description |
 |----------|-------------|
-| `--config <path>` | Path to config file (default: `~/.ultimate-imap-mcp/config.json`) |
+| `--config <path>` | Path to config file (default: `~/.awesome-imap-mcp/config.json`) |
 | `--port <number>` | Override the HTTP+SSE transport port (default: `3846`) |
 | `--dashboard-port <number>` | Override the web dashboard port (default: `3847`) |
 | `--transport <mode>` | Override transport mode: `stdio`, `http`, or `both` |
 | `--dashboard` | Enable the web dashboard |
 | `--dashboard-auto-open` | Enable dashboard and auto-open it in the browser on first launch |
 
-CLI arguments take precedence over values in the config file. You can also set the config path via the `UIMAP_CONFIG_PATH` environment variable.
+CLI arguments take precedence over values in the config file. You can also set the config path via the `AIMAP_CONFIG_PATH` environment variable.
 
 **Port standby**: If the HTTP or dashboard port is already in use (e.g., another instance is running), the server runs in standby mode and automatically takes over when the port is released. This means multiple MCP clients can each launch their own server process — the first one claims the HTTP port, and the others wait in standby. If the primary goes down, a standby instance takes over seamlessly.
 
@@ -362,7 +362,11 @@ On first launch (no accounts configured), the dashboard shows a guided setup wiz
 - **Overview** — account count, sync status, queue summary, system stats
 - **Messages** — browse and search emails across all accounts and folders. Features include:
   - Advanced search operators: `from:`, `to:`, `subject:`, `label:`, `has:attachments`, `before:`, `after:`
-  - Read/unread/delete actions on messages
+  - Search result pagination (50 per page, Prev/Next)
+  - Multi-select checkboxes with a bulk action bar (delete / move to trash / archive on selected messages)
+  - "Delete all search results" with optional move to trash or archive (chunked into 50-UID batches under the hood)
+  - Read/unread/delete actions on individual messages
+  - Account + folder displayed in the message detail header (so cross-account search results are unambiguous)
   - View full message headers
   - Open messages in a new window
   - HTML email rendering with DOMPurify sanitization, script stripping, and remote image blocking
@@ -370,8 +374,15 @@ On first launch (no accounts configured), the dashboard shows a guided setup wiz
   - Label display with color coding
   - Body-cached indicator
   - Keyboard navigation
-- **Accounts** — add (IMAP/OAuth), edit settings (connection limits, sync config, queue settings), test connection, enable/disable, delete accounts
-- **Duplicates** — cross-account duplicate detection, selectable copies per duplicate group, bulk delete via queue
+- **Analytics** — visual mailbox insights and bulk cleanup tools:
+  - Summary cards (total messages, accounts, attachments, storage)
+  - Per-month volume chart (CSS bar chart with auto-scroll to most recent, hover dates)
+  - Account breakdown (messages per account)
+  - Label distribution (counts and percentages)
+  - Top senders table with toggle for received/sent/all and time-window filter (last 3 / 6 / 12 / 24 months)
+  - Per-row delete dialog with action toggle (Delete / Move to Trash / Move to Archive), chunked into 50-UID batches automatically
+- **Accounts** — add (IMAP/OAuth), edit settings (connection limits, sync config, queue settings), test connection, enable/disable, delete accounts. `accounts.json` is watched on disk and changes made by other processes are picked up automatically.
+- **Duplicates** — cross-account duplicate detection, selectable copies per duplicate group, bulk delete via queue, page-size selector
 - **Queue** — view pending operations with account names, confirm or cancel sends
 - **Sync** — per-folder real-time sync status, trigger manual syncs
 - **Settings** — edit all configuration in-browser. Changes saved to `config.json` automatically
@@ -389,7 +400,7 @@ On first launch (no accounts configured), the dashboard shows a guided setup wiz
 
 ## Configuration
 
-Configuration is loaded from `config.json`. The default path is `~/.ultimate-imap-mcp/config.json`. Override with `--config <path>` or `UIMAP_CONFIG_PATH` env var.
+Configuration is loaded from `config.json`. The default path is `~/.awesome-imap-mcp/config.json`. Override with `--config <path>` or `AIMAP_CONFIG_PATH` env var.
 
 All settings can also be edited from the dashboard's **Settings** page — changes are persisted to `config.json` automatically.
 
@@ -547,7 +558,7 @@ Override or add OAuth client IDs for providers. Built-in client IDs are provided
 ```json
 {
   "cache": {
-    "db_path": "~/.ultimate-imap-mcp/cache.db",
+    "db_path": "~/.awesome-imap-mcp/cache.db",
     "max_size_mb": 500,
     "default_window_days": 0,
     "max_body_age_days": 0,
@@ -558,7 +569,7 @@ Override or add OAuth client IDs for providers. Built-in client IDs are provided
 
 | Field | Default | Description |
 |-------|---------|-------------|
-| `db_path` | `"~/.ultimate-imap-mcp/cache.db"` | Path to the SQLite database |
+| `db_path` | `"~/.awesome-imap-mcp/cache.db"` | Path to the SQLite database |
 | `max_size_mb` | `500` | Maximum cache size in MB |
 | `default_window_days` | `0` | Default number of days to cache (0 = unlimited) |
 | `max_body_age_days` | `0` | Auto-evict message bodies older than N days (0 = keep forever) |
@@ -715,13 +726,13 @@ This repository includes a [Claude Code plugin](https://docs.anthropic.com/en/do
 Add this repository as a plugin source in Claude Code:
 
 ```bash
-claude plugin add https://github.com/shahabmokhtari/ultimate-imap-mcp
+claude plugin add https://github.com/shahabmokhtari/awesome-imap-mcp
 ```
 
 Or reference the plugin directory directly if you've cloned the repo:
 
 ```bash
-claude plugin add /path/to/ultimate-imap-mcp/plugin
+claude plugin add /path/to/awesome-imap-mcp/plugin
 ```
 
 ### Included Skills
@@ -760,8 +771,24 @@ Once the plugin is installed, Claude Code can use the skills automatically:
 
 ## Documentation
 
-- [Design Specification](docs/superpowers/specs/2026-03-18-ultimate-imap-mcp-design.md) - full system design, architecture, and implementation plan
+- [Design Specification](docs/superpowers/specs/2026-03-18-awesome-imap-mcp-design.md) - full system design, architecture, and implementation plan
 - [Data Model](docs/DATA_MODEL.md) - SQLite schema and indexes
+
+## Migrating from `ultimate-imap-mcp`
+
+This project was renamed from `ultimate-imap-mcp` to `awesome-imap-mcp`. If you were using the old name:
+
+1. **Move your data directory** (one-line):
+   ```bash
+   mv ~/.ultimate-imap-mcp ~/.awesome-imap-mcp
+   ```
+   This preserves `accounts.json`, all SQLite caches (`cache.db`, `health.db`, `labels.db`, `metrics.db`, `logs.db`), and the `logs/` folder.
+2. **Rename environment variables**: `UIMAP_CONFIG_PATH` → `AIMAP_CONFIG_PATH`, `UIMAP_PASSPHRASE` → `AIMAP_PASSPHRASE`.
+3. **Update the binary name** in any wrapper scripts: `ultimate-imap-mcp` → `awesome-imap-mcp`.
+4. **Reinstall** via `dotnet tool install -g awesome-imap-mcp` or `curl -fsSL https://raw.githubusercontent.com/shahabmokhtari/awesome-imap-mcp/main/install.sh | bash`.
+5. **Update MCP client configs** to point at the new command name.
+
+The old GitHub URL `github.com/shahabmokhtari/ultimate-imap-mcp` redirects to the new one, but it's worth updating any pinned references.
 
 ## License
 

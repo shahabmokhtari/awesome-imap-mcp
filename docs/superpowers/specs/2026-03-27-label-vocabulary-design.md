@@ -90,7 +90,7 @@ public LabelsConfig Labels { get; set; } = new();
 
 ## MCP Tools
 
-New tool class: `LabelVocabularyTools` in `src/UltimateImapMcp.McpServer/Tools/`. Receives `AppConfig` via constructor injection: `LabelVocabularyTools(AppConfig config)`.
+New tool class: `LabelVocabularyTools` in `src/AwesomeImapMcp.McpServer/Tools/`. Receives `AppConfig` via constructor injection: `LabelVocabularyTools(AppConfig config)`.
 
 ### `list_labels`
 
@@ -207,11 +207,11 @@ In the `SaveToFile` method, add `Labels = config.Labels,` to the `new AppConfig 
 
 | File | Change |
 |------|--------|
-| `src/UltimateImapMcp.Core/Configuration/AppConfig.cs` | Add `LabelsConfig`, `LabelDefinition`, `Labels` property |
-| `src/UltimateImapMcp.Core/Configuration/ConfigLoader.cs` | Include `Labels` in `SaveToFile` |
-| `src/UltimateImapMcp.McpServer/Tools/LabelVocabularyTools.cs` | New file — 4 MCP tools |
-| `src/UltimateImapMcp.McpServer/Tools/OrganizeTools.cs` | Add vocabulary warning to `LabelMessages` |
-| `src/UltimateImapMcp.Dashboard/SettingsApi.cs` | Expose labels in GET/PUT |
+| `src/AwesomeImapMcp.Core/Configuration/AppConfig.cs` | Add `LabelsConfig`, `LabelDefinition`, `Labels` property |
+| `src/AwesomeImapMcp.Core/Configuration/ConfigLoader.cs` | Include `Labels` in `SaveToFile` |
+| `src/AwesomeImapMcp.McpServer/Tools/LabelVocabularyTools.cs` | New file — 4 MCP tools |
+| `src/AwesomeImapMcp.McpServer/Tools/OrganizeTools.cs` | Add vocabulary warning to `LabelMessages` |
+| `src/AwesomeImapMcp.Dashboard/SettingsApi.cs` | Expose labels in GET/PUT |
 | `dashboard/client/` | Labels section in Settings page |
 
 ## Out of Scope

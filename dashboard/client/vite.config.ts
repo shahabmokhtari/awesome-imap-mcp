@@ -15,7 +15,7 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: '../../src/UltimateImapMcp.Dashboard/wwwroot',
+    outDir: '../../src/AwesomeImapMcp.Dashboard/wwwroot',
     emptyOutDir: true,
   },
 })

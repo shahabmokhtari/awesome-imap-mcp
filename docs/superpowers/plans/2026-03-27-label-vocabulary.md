@@ -15,13 +15,13 @@
 ### Task 1: Config Model — `LabelsConfig` and `LabelDefinition`
 
 **Files:**
-- Modify: `src/UltimateImapMcp.Core/Configuration/AppConfig.cs:36-38` (add Labels property after OAuthProviders)
-- Modify: `src/UltimateImapMcp.Core/Configuration/ConfigLoader.cs:69-109` (add Labels to SaveToFile sanitized copy)
-- Test: `tests/UltimateImapMcp.Core.Tests/Configuration/ConfigLoaderTests.cs`
+- Modify: `src/AwesomeImapMcp.Core/Configuration/AppConfig.cs:36-38` (add Labels property after OAuthProviders)
+- Modify: `src/AwesomeImapMcp.Core/Configuration/ConfigLoader.cs:69-109` (add Labels to SaveToFile sanitized copy)
+- Test: `tests/AwesomeImapMcp.Core.Tests/Configuration/ConfigLoaderTests.cs`
 
 - [ ] **Step 1: Write test — labels config loads from JSON**
 
-Add to `tests/UltimateImapMcp.Core.Tests/Configuration/ConfigLoaderTests.cs`:
+Add to `tests/AwesomeImapMcp.Core.Tests/Configuration/ConfigLoaderTests.cs`:
 
 ```csharp
 [Fact]
@@ -70,12 +70,12 @@ public void Load_NoLabelsSection_DefaultsApplied()
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `dotnet test tests/UltimateImapMcp.Core.Tests/ --filter "Load_LabelsConfig|Load_NoLabelsSection_DefaultsApplied" -v n`
+Run: `dotnet test tests/AwesomeImapMcp.Core.Tests/ --filter "Load_LabelsConfig|Load_NoLabelsSection_DefaultsApplied" -v n`
 Expected: FAIL — `AppConfig` has no `Labels` property.
 
 - [ ] **Step 3: Add `LabelsConfig`, `LabelDefinition`, and `Labels` property**
 
-In `src/UltimateImapMcp.Core/Configuration/AppConfig.cs`, add after the `OAuthProviders` property (line 37):
+In `src/AwesomeImapMcp.Core/Configuration/AppConfig.cs`, add after the `OAuthProviders` property (line 37):
 
 ```csharp
 [JsonPropertyName("labels")]
@@ -111,7 +111,7 @@ public class LabelDefinition
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `dotnet test tests/UltimateImapMcp.Core.Tests/ --filter "Load_LabelsConfig|Load_NoLabelsSection_DefaultsApplied" -v n`
+Run: `dotnet test tests/AwesomeImapMcp.Core.Tests/ --filter "Load_LabelsConfig|Load_NoLabelsSection_DefaultsApplied" -v n`
 Expected: PASS
 
 - [ ] **Step 5: Write test — SaveToFile persists labels**
@@ -148,12 +148,12 @@ public void SaveToFile_PersistsLabels()
 
 - [ ] **Step 6: Run test to verify it fails**
 
-Run: `dotnet test tests/UltimateImapMcp.Core.Tests/ --filter "SaveToFile_PersistsLabels" -v n`
+Run: `dotnet test tests/AwesomeImapMcp.Core.Tests/ --filter "SaveToFile_PersistsLabels" -v n`
 Expected: FAIL — `SaveToFile` doesn't include `Labels` in the sanitized copy.
 
 - [ ] **Step 7: Add Labels to SaveToFile sanitized copy**
 
-In `src/UltimateImapMcp.Core/Configuration/ConfigLoader.cs`, in the `SaveToFile` method's `new AppConfig { ... }` block, add after line 108 (`OAuthProviders = config.OAuthProviders,`):
+In `src/AwesomeImapMcp.Core/Configuration/ConfigLoader.cs`, in the `SaveToFile` method's `new AppConfig { ... }` block, add after line 108 (`OAuthProviders = config.OAuthProviders,`):
 
 ```csharp
 Labels = config.Labels,
@@ -161,13 +161,13 @@ Labels = config.Labels,
 
 - [ ] **Step 8: Run all config tests to verify everything passes**
 
-Run: `dotnet test tests/UltimateImapMcp.Core.Tests/ -v n`
+Run: `dotnet test tests/AwesomeImapMcp.Core.Tests/ -v n`
 Expected: All tests PASS
 
 - [ ] **Step 9: Commit**
 
 ```bash
-git add src/UltimateImapMcp.Core/Configuration/AppConfig.cs src/UltimateImapMcp.Core/Configuration/ConfigLoader.cs tests/UltimateImapMcp.Core.Tests/Configuration/ConfigLoaderTests.cs
+git add src/AwesomeImapMcp.Core/Configuration/AppConfig.cs src/AwesomeImapMcp.Core/Configuration/ConfigLoader.cs tests/AwesomeImapMcp.Core.Tests/Configuration/ConfigLoaderTests.cs
 git commit -m "feat: add LabelsConfig and LabelDefinition to config model"
 ```
 
@@ -176,20 +176,20 @@ git commit -m "feat: add LabelsConfig and LabelDefinition to config model"
 ### Task 2: MCP Tool — `list_labels`
 
 **Files:**
-- Create: `src/UltimateImapMcp.McpServer/Tools/LabelVocabularyTools.cs`
+- Create: `src/AwesomeImapMcp.McpServer/Tools/LabelVocabularyTools.cs`
 
 - [ ] **Step 1: Create `LabelVocabularyTools` with `list_labels` tool**
 
-Create `src/UltimateImapMcp.McpServer/Tools/LabelVocabularyTools.cs`:
+Create `src/AwesomeImapMcp.McpServer/Tools/LabelVocabularyTools.cs`:
 
 ```csharp
 using System.ComponentModel;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using ModelContextProtocol.Server;
-using UltimateImapMcp.Core.Configuration;
+using AwesomeImapMcp.Core.Configuration;
 
-namespace UltimateImapMcp.McpServer.Tools;
+namespace AwesomeImapMcp.McpServer.Tools;
 
 [McpServerToolType]
 public partial class LabelVocabularyTools(AppConfig config)
@@ -221,13 +221,13 @@ public partial class LabelVocabularyTools(AppConfig config)
 
 - [ ] **Step 2: Build to verify it compiles**
 
-Run: `dotnet build src/UltimateImapMcp.McpServer/`
+Run: `dotnet build src/AwesomeImapMcp.McpServer/`
 Expected: Build succeeded.
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add src/UltimateImapMcp.McpServer/Tools/LabelVocabularyTools.cs
+git add src/AwesomeImapMcp.McpServer/Tools/LabelVocabularyTools.cs
 git commit -m "feat: add list_labels MCP tool"
 ```
 
@@ -236,7 +236,7 @@ git commit -m "feat: add list_labels MCP tool"
 ### Task 3: MCP Tools — `add_label`, `update_label`, `remove_label`
 
 **Files:**
-- Modify: `src/UltimateImapMcp.McpServer/Tools/LabelVocabularyTools.cs`
+- Modify: `src/AwesomeImapMcp.McpServer/Tools/LabelVocabularyTools.cs`
 
 - [ ] **Step 1: Add `add_label` tool**
 
@@ -361,13 +361,13 @@ private void PersistConfig()
 
 - [ ] **Step 5: Build to verify it compiles**
 
-Run: `dotnet build src/UltimateImapMcp.McpServer/`
+Run: `dotnet build src/AwesomeImapMcp.McpServer/`
 Expected: Build succeeded.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/UltimateImapMcp.McpServer/Tools/LabelVocabularyTools.cs
+git add src/AwesomeImapMcp.McpServer/Tools/LabelVocabularyTools.cs
 git commit -m "feat: add add_label, update_label, remove_label MCP tools"
 ```
 
@@ -376,32 +376,32 @@ git commit -m "feat: add add_label, update_label, remove_label MCP tools"
 ### Task 4: Unit Tests for MCP Label Vocabulary Tools
 
 **Files:**
-- Create: `tests/UltimateImapMcp.McpServer.Tests/Tools/LabelVocabularyToolsTests.cs`
+- Create: `tests/AwesomeImapMcp.McpServer.Tests/Tools/LabelVocabularyToolsTests.cs`
 
-Note: There is no existing `UltimateImapMcp.McpServer.Tests` project. Create it first, or add tests to an existing test project that references the McpServer project. The simplest approach is to test via the `AppConfig` object directly since the tools are plain methods on a class that takes `AppConfig` in the constructor.
+Note: There is no existing `AwesomeImapMcp.McpServer.Tests` project. Create it first, or add tests to an existing test project that references the McpServer project. The simplest approach is to test via the `AppConfig` object directly since the tools are plain methods on a class that takes `AppConfig` in the constructor.
 
 - [ ] **Step 1: Create McpServer test project if it doesn't exist**
 
 Run:
 ```bash
-dotnet new xunit -o tests/UltimateImapMcp.McpServer.Tests
-dotnet sln add tests/UltimateImapMcp.McpServer.Tests/
-dotnet add tests/UltimateImapMcp.McpServer.Tests/ reference src/UltimateImapMcp.McpServer/
-dotnet add tests/UltimateImapMcp.McpServer.Tests/ reference src/UltimateImapMcp.Core/
+dotnet new xunit -o tests/AwesomeImapMcp.McpServer.Tests
+dotnet sln add tests/AwesomeImapMcp.McpServer.Tests/
+dotnet add tests/AwesomeImapMcp.McpServer.Tests/ reference src/AwesomeImapMcp.McpServer/
+dotnet add tests/AwesomeImapMcp.McpServer.Tests/ reference src/AwesomeImapMcp.Core/
 ```
 
 If the project already exists, skip this step.
 
 - [ ] **Step 2: Write tests for LabelVocabularyTools**
 
-Create `tests/UltimateImapMcp.McpServer.Tests/Tools/LabelVocabularyToolsTests.cs`:
+Create `tests/AwesomeImapMcp.McpServer.Tests/Tools/LabelVocabularyToolsTests.cs`:
 
 ```csharp
 using System.Text.Json;
-using UltimateImapMcp.Core.Configuration;
-using UltimateImapMcp.McpServer.Tools;
+using AwesomeImapMcp.Core.Configuration;
+using AwesomeImapMcp.McpServer.Tools;
 
-namespace UltimateImapMcp.McpServer.Tests.Tools;
+namespace AwesomeImapMcp.McpServer.Tests.Tools;
 
 public class LabelVocabularyToolsTests
 {
@@ -539,13 +539,13 @@ public class LabelVocabularyToolsTests
 
 - [ ] **Step 3: Run the tests**
 
-Run: `dotnet test tests/UltimateImapMcp.McpServer.Tests/ -v n`
+Run: `dotnet test tests/AwesomeImapMcp.McpServer.Tests/ -v n`
 Expected: All 10 tests PASS.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add tests/UltimateImapMcp.McpServer.Tests/
+git add tests/AwesomeImapMcp.McpServer.Tests/
 git commit -m "test: add unit tests for LabelVocabularyTools"
 ```
 
@@ -554,11 +554,11 @@ git commit -m "test: add unit tests for LabelVocabularyTools"
 ### Task 5: Vocabulary Warning in `label_messages`
 
 **Files:**
-- Modify: `src/UltimateImapMcp.McpServer/Tools/OrganizeTools.cs:10,140-163`
+- Modify: `src/AwesomeImapMcp.McpServer/Tools/OrganizeTools.cs:10,140-163`
 
 - [ ] **Step 1: Add `AppConfig` to `OrganizeTools` constructor**
 
-In `src/UltimateImapMcp.McpServer/Tools/OrganizeTools.cs`, change line 10 from:
+In `src/AwesomeImapMcp.McpServer/Tools/OrganizeTools.cs`, change line 10 from:
 
 ```csharp
 public class OrganizeTools(QueueManager queueManager)
@@ -579,7 +579,7 @@ private readonly AppConfig _config = config;
 Add the using at the top of the file:
 
 ```csharp
-using UltimateImapMcp.Core.Configuration;
+using AwesomeImapMcp.Core.Configuration;
 ```
 
 - [ ] **Step 2: Add vocabulary warning to `LabelMessages`**
@@ -627,13 +627,13 @@ public string LabelMessages(
 
 - [ ] **Step 3: Build to verify it compiles**
 
-Run: `dotnet build src/UltimateImapMcp.McpServer/`
+Run: `dotnet build src/AwesomeImapMcp.McpServer/`
 Expected: Build succeeded.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add src/UltimateImapMcp.McpServer/Tools/OrganizeTools.cs
+git add src/AwesomeImapMcp.McpServer/Tools/OrganizeTools.cs
 git commit -m "feat: add vocabulary warning to label_messages tool"
 ```
 
@@ -642,7 +642,7 @@ git commit -m "feat: add vocabulary warning to label_messages tool"
 ### Task 6: Dashboard Settings API — Labels Section
 
 **Files:**
-- Modify: `src/UltimateImapMcp.Dashboard/SettingsApi.cs:17-72` (GET), `75-203` (PUT), `210-218` (DTOs)
+- Modify: `src/AwesomeImapMcp.Dashboard/SettingsApi.cs:17-72` (GET), `75-203` (PUT), `210-218` (DTOs)
 
 - [ ] **Step 1: Add labels to GET `/api/settings` response**
 
@@ -668,7 +668,7 @@ file record LabelsSettingsUpdate
 }
 ```
 
-Add `using UltimateImapMcp.Core.Configuration;` at the top if not already present (it is already imported).
+Add `using AwesomeImapMcp.Core.Configuration;` at the top if not already present (it is already imported).
 
 Add to `SettingsUpdateRequest`:
 
@@ -706,13 +706,13 @@ if (updates.Labels is { } lb)
 
 - [ ] **Step 4: Build to verify it compiles**
 
-Run: `dotnet build src/UltimateImapMcp.Dashboard/`
+Run: `dotnet build src/AwesomeImapMcp.Dashboard/`
 Expected: Build succeeded.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/UltimateImapMcp.Dashboard/SettingsApi.cs
+git add src/AwesomeImapMcp.Dashboard/SettingsApi.cs
 git commit -m "feat: expose labels in dashboard settings API"
 ```
 

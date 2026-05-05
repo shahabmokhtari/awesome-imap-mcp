@@ -16,7 +16,7 @@ A hybrid coordination system using a separate SQLite database for health/heartbe
 
 ### Databases
 
-Two separate SQLite databases, both in `~/.ultimate-imap-mcp/`:
+Two separate SQLite databases, both in `~/.awesome-imap-mcp/`:
 
 | Database | Purpose | Writers |
 |----------|---------|---------|
@@ -218,23 +218,23 @@ New fields in `ServerConfig`:
 ### File Structure
 
 New files:
-- `src/UltimateImapMcp.Core/Database/HealthDatabase.cs`
-- `src/UltimateImapMcp.Core/Coordination/IInstanceCoordinator.cs`
-- `src/UltimateImapMcp.Core/Coordination/InstanceCoordinator.cs`
-- `src/UltimateImapMcp.Core/Coordination/InstanceHeartbeat.cs`
+- `src/AwesomeImapMcp.Core/Database/HealthDatabase.cs`
+- `src/AwesomeImapMcp.Core/Coordination/IInstanceCoordinator.cs`
+- `src/AwesomeImapMcp.Core/Coordination/InstanceCoordinator.cs`
+- `src/AwesomeImapMcp.Core/Coordination/InstanceHeartbeat.cs`
 
 Modified files:
-- `src/UltimateImapMcp.Core/Configuration/AppConfig.cs` — add heartbeat config fields to `ServerConfig`
-- `src/UltimateImapMcp.McpServer/Program.cs` — register `HealthDatabase` (before other services) + `InstanceCoordinator`
-- `src/UltimateImapMcp.Dashboard/ServerApi.cs` — update instances endpoint, add remote shutdown
-- `src/UltimateImapMcp.Dashboard/DashboardHost.cs` — forward `HealthDatabase` + `IInstanceCoordinator` to dashboard DI
-- `src/UltimateImapMcp.Dashboard/LogsApi.cs` — add `live_only` parameter with parameterized IN clause
-- `src/UltimateImapMcp.ImapClient/SyncManager.cs` — add leader gate
-- `src/UltimateImapMcp.Queue/QueueWorker.cs` — add leader gate
-- `src/UltimateImapMcp.Core/Repositories/CacheEvictor.cs` — add leader gate
-- `src/UltimateImapMcp.Core/Repositories/MetricsCollector.cs` — add leader gate
-- `src/UltimateImapMcp.Core/OAuth/OAuthTokenRefreshService.cs` — add leader gate
-- `src/UltimateImapMcp.ImapClient/ZohoSyncService.cs` — add leader gate
+- `src/AwesomeImapMcp.Core/Configuration/AppConfig.cs` — add heartbeat config fields to `ServerConfig`
+- `src/AwesomeImapMcp.McpServer/Program.cs` — register `HealthDatabase` (before other services) + `InstanceCoordinator`
+- `src/AwesomeImapMcp.Dashboard/ServerApi.cs` — update instances endpoint, add remote shutdown
+- `src/AwesomeImapMcp.Dashboard/DashboardHost.cs` — forward `HealthDatabase` + `IInstanceCoordinator` to dashboard DI
+- `src/AwesomeImapMcp.Dashboard/LogsApi.cs` — add `live_only` parameter with parameterized IN clause
+- `src/AwesomeImapMcp.ImapClient/SyncManager.cs` — add leader gate
+- `src/AwesomeImapMcp.Queue/QueueWorker.cs` — add leader gate
+- `src/AwesomeImapMcp.Core/Repositories/CacheEvictor.cs` — add leader gate
+- `src/AwesomeImapMcp.Core/Repositories/MetricsCollector.cs` — add leader gate
+- `src/AwesomeImapMcp.Core/OAuth/OAuthTokenRefreshService.cs` — add leader gate
+- `src/AwesomeImapMcp.ImapClient/ZohoSyncService.cs` — add leader gate
 - `dashboard/client/src/pages/Logs.tsx` — live instances default filter
 - `dashboard/client/src/pages/Settings.tsx` — multi-instance server controls table
 - `dashboard/client/src/hooks/useApi.ts` — update hooks

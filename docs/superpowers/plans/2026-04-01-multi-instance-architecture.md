@@ -15,24 +15,24 @@
 ### New Files
 | File | Responsibility |
 |------|---------------|
-| `src/UltimateImapMcp.Core/Coordination/IToolProxy.cs` | Interface for tool call proxying |
-| `src/UltimateImapMcp.Core/Coordination/ProxyToolExecutor.cs` | HttpClient-based proxy to primary's API |
-| `src/UltimateImapMcp.McpServer/Tools/AccountManagementTools.cs` | `start_dashboard`, `add_account_imap`, `add_account_oauth` tools |
-| `src/UltimateImapMcp.McpServer/Tools/BodyFetchTools.cs` | `fetch_bodies` MCP tool |
-| `tests/UltimateImapMcp.Core.Tests/Coordination/ProxyToolExecutorTests.cs` | Tests for proxy executor |
-| `tests/UltimateImapMcp.McpServer.Tests/Tools/BodyFetchToolsTests.cs` | Tests for batch body fetch tool |
-| `tests/UltimateImapMcp.McpServer.Tests/Tools/AccountManagementToolsTests.cs` | Tests for account management tools |
+| `src/AwesomeImapMcp.Core/Coordination/IToolProxy.cs` | Interface for tool call proxying |
+| `src/AwesomeImapMcp.Core/Coordination/ProxyToolExecutor.cs` | HttpClient-based proxy to primary's API |
+| `src/AwesomeImapMcp.McpServer/Tools/AccountManagementTools.cs` | `start_dashboard`, `add_account_imap`, `add_account_oauth` tools |
+| `src/AwesomeImapMcp.McpServer/Tools/BodyFetchTools.cs` | `fetch_bodies` MCP tool |
+| `tests/AwesomeImapMcp.Core.Tests/Coordination/ProxyToolExecutorTests.cs` | Tests for proxy executor |
+| `tests/AwesomeImapMcp.McpServer.Tests/Tools/BodyFetchToolsTests.cs` | Tests for batch body fetch tool |
+| `tests/AwesomeImapMcp.McpServer.Tests/Tools/AccountManagementToolsTests.cs` | Tests for account management tools |
 | `dashboard/client/src/lib/sanitizeEmail.ts` | DOMPurify email HTML sanitizer |
 
 ### Modified Files
 | File | Changes |
 |------|---------|
-| `src/UltimateImapMcp.McpServer/Tools/McpJsonDefaults.cs` | Add static `IToolProxy?` for proxy dispatch |
-| `src/UltimateImapMcp.McpServer/HttpMcpTransportHost.cs` | Always run, add tool API endpoints, failover hook |
-| `src/UltimateImapMcp.McpServer/Program.cs` | Always register HTTP host, detect mode, set proxy |
-| `src/UltimateImapMcp.Core/Email/IEmailSyncBackend.cs` | Add `FetchMessageBodiesBatchAsync` |
-| `src/UltimateImapMcp.RestBackend/Imap/ImapSyncBackend.cs` | Implement batch body fetch |
-| `src/UltimateImapMcp.McpServer/Tools/SearchTools.cs` | Add `fetchBodies` parameter |
+| `src/AwesomeImapMcp.McpServer/Tools/McpJsonDefaults.cs` | Add static `IToolProxy?` for proxy dispatch |
+| `src/AwesomeImapMcp.McpServer/HttpMcpTransportHost.cs` | Always run, add tool API endpoints, failover hook |
+| `src/AwesomeImapMcp.McpServer/Program.cs` | Always register HTTP host, detect mode, set proxy |
+| `src/AwesomeImapMcp.Core/Email/IEmailSyncBackend.cs` | Add `FetchMessageBodiesBatchAsync` |
+| `src/AwesomeImapMcp.RestBackend/Imap/ImapSyncBackend.cs` | Implement batch body fetch |
+| `src/AwesomeImapMcp.McpServer/Tools/SearchTools.cs` | Add `fetchBodies` parameter |
 | `dashboard/client/src/pages/Messages.tsx` | Default plain text, sanitized HTML, remote image toggle |
 | `dashboard/client/package.json` | Add `dompurify` dependency |
 
@@ -211,8 +211,8 @@ git commit -m "feat: default plain text email view, sanitized HTML with remote i
 ## Task 3: Batch Body Fetch — Add Backend Interface and IMAP Implementation
 
 **Files:**
-- Modify: `src/UltimateImapMcp.Core/Email/IEmailSyncBackend.cs`
-- Modify: `src/UltimateImapMcp.RestBackend/Imap/ImapSyncBackend.cs`
+- Modify: `src/AwesomeImapMcp.Core/Email/IEmailSyncBackend.cs`
+- Modify: `src/AwesomeImapMcp.RestBackend/Imap/ImapSyncBackend.cs`
 
 - [ ] **Step 1: Add batch method to IEmailSyncBackend**
 
@@ -306,7 +306,7 @@ Expected: Build succeeds
 - [ ] **Step 4: Commit**
 
 ```bash
-git add src/UltimateImapMcp.Core/Email/IEmailSyncBackend.cs src/UltimateImapMcp.RestBackend/Imap/ImapSyncBackend.cs
+git add src/AwesomeImapMcp.Core/Email/IEmailSyncBackend.cs src/AwesomeImapMcp.RestBackend/Imap/ImapSyncBackend.cs
 git commit -m "feat: add batch body fetch to IEmailSyncBackend and IMAP implementation"
 ```
 
@@ -315,20 +315,20 @@ git commit -m "feat: add batch body fetch to IEmailSyncBackend and IMAP implemen
 ## Task 4: Batch Body Fetch — `fetch_bodies` MCP Tool
 
 **Files:**
-- Create: `src/UltimateImapMcp.McpServer/Tools/BodyFetchTools.cs`
-- Create: `tests/UltimateImapMcp.McpServer.Tests/Tools/BodyFetchToolsTests.cs`
+- Create: `src/AwesomeImapMcp.McpServer/Tools/BodyFetchTools.cs`
+- Create: `tests/AwesomeImapMcp.McpServer.Tests/Tools/BodyFetchToolsTests.cs`
 
 - [ ] **Step 1: Write the failing test**
 
-Create `tests/UltimateImapMcp.McpServer.Tests/Tools/BodyFetchToolsTests.cs`:
+Create `tests/AwesomeImapMcp.McpServer.Tests/Tools/BodyFetchToolsTests.cs`:
 
 ```csharp
 using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
-using UltimateImapMcp.Core.Configuration;
-using UltimateImapMcp.McpServer.Tools;
+using AwesomeImapMcp.Core.Configuration;
+using AwesomeImapMcp.McpServer.Tools;
 
-namespace UltimateImapMcp.McpServer.Tests.Tools;
+namespace AwesomeImapMcp.McpServer.Tests.Tools;
 
 public class BodyFetchToolsTests
 {
@@ -356,23 +356,23 @@ public class BodyFetchToolsTests
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `dotnet test tests/UltimateImapMcp.McpServer.Tests --nologo -v q --filter "BodyFetchToolsTests"`
+Run: `dotnet test tests/AwesomeImapMcp.McpServer.Tests --nologo -v q --filter "BodyFetchToolsTests"`
 Expected: FAIL — BodyFetchTools type does not exist
 
 - [ ] **Step 3: Create the fetch_bodies tool**
 
-Create `src/UltimateImapMcp.McpServer/Tools/BodyFetchTools.cs`:
+Create `src/AwesomeImapMcp.McpServer/Tools/BodyFetchTools.cs`:
 
 ```csharp
 using System.ComponentModel;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
-using UltimateImapMcp.Core.Configuration;
-using UltimateImapMcp.Core.Email;
-using UltimateImapMcp.ImapClient.Repositories;
+using AwesomeImapMcp.Core.Configuration;
+using AwesomeImapMcp.Core.Email;
+using AwesomeImapMcp.ImapClient.Repositories;
 
-namespace UltimateImapMcp.McpServer.Tools;
+namespace AwesomeImapMcp.McpServer.Tools;
 
 [McpServerToolType]
 public class BodyFetchTools(
@@ -457,7 +457,7 @@ public class BodyFetchTools(
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `dotnet test tests/UltimateImapMcp.McpServer.Tests --nologo -v q --filter "BodyFetchToolsTests"`
+Run: `dotnet test tests/AwesomeImapMcp.McpServer.Tests --nologo -v q --filter "BodyFetchToolsTests"`
 Expected: PASS
 
 - [ ] **Step 5: Build all**
@@ -468,7 +468,7 @@ Expected: Build succeeds
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/UltimateImapMcp.McpServer/Tools/BodyFetchTools.cs tests/UltimateImapMcp.McpServer.Tests/Tools/BodyFetchToolsTests.cs
+git add src/AwesomeImapMcp.McpServer/Tools/BodyFetchTools.cs tests/AwesomeImapMcp.McpServer.Tests/Tools/BodyFetchToolsTests.cs
 git commit -m "feat: add fetch_bodies MCP tool for batch body fetching"
 ```
 
@@ -477,13 +477,13 @@ git commit -m "feat: add fetch_bodies MCP tool for batch body fetching"
 ## Task 5: Batch Body Fetch — Add `fetchBodies` to `search_emails`
 
 **Files:**
-- Modify: `src/UltimateImapMcp.McpServer/Tools/SearchTools.cs`
+- Modify: `src/AwesomeImapMcp.McpServer/Tools/SearchTools.cs`
 
 - [ ] **Step 1: Add IEmailBackendFactory to constructor and fetchBodies parameter**
 
 In `SearchTools.cs`, add the import at top:
 ```csharp
-using UltimateImapMcp.Core.Email;
+using AwesomeImapMcp.Core.Email;
 ```
 
 Change the constructor to add `IEmailBackendFactory`:
@@ -567,7 +567,7 @@ Expected: All tests pass
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/UltimateImapMcp.McpServer/Tools/SearchTools.cs
+git add src/AwesomeImapMcp.McpServer/Tools/SearchTools.cs
 git commit -m "feat: add fetchBodies parameter to search_emails for auto body fetch"
 ```
 
@@ -576,20 +576,20 @@ git commit -m "feat: add fetchBodies parameter to search_emails for auto body fe
 ## Task 6: Account Management — `start_dashboard`, `add_account_imap`, `add_account_oauth`
 
 **Files:**
-- Create: `src/UltimateImapMcp.McpServer/Tools/AccountManagementTools.cs`
-- Create: `tests/UltimateImapMcp.McpServer.Tests/Tools/AccountManagementToolsTests.cs`
+- Create: `src/AwesomeImapMcp.McpServer/Tools/AccountManagementTools.cs`
+- Create: `tests/AwesomeImapMcp.McpServer.Tests/Tools/AccountManagementToolsTests.cs`
 
 - [ ] **Step 1: Write the failing test**
 
-Create `tests/UltimateImapMcp.McpServer.Tests/Tools/AccountManagementToolsTests.cs`:
+Create `tests/AwesomeImapMcp.McpServer.Tests/Tools/AccountManagementToolsTests.cs`:
 
 ```csharp
 using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
-using UltimateImapMcp.Core.Configuration;
-using UltimateImapMcp.McpServer.Tools;
+using AwesomeImapMcp.Core.Configuration;
+using AwesomeImapMcp.McpServer.Tools;
 
-namespace UltimateImapMcp.McpServer.Tests.Tools;
+namespace AwesomeImapMcp.McpServer.Tests.Tools;
 
 public class AccountManagementToolsTests
 {
@@ -662,23 +662,23 @@ public class AccountManagementToolsTests
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `dotnet test tests/UltimateImapMcp.McpServer.Tests --nologo -v q --filter "AccountManagementToolsTests"`
+Run: `dotnet test tests/AwesomeImapMcp.McpServer.Tests --nologo -v q --filter "AccountManagementToolsTests"`
 Expected: FAIL — AccountManagementTools does not exist
 
 - [ ] **Step 3: Create the account management tools**
 
-Create `src/UltimateImapMcp.McpServer/Tools/AccountManagementTools.cs`:
+Create `src/AwesomeImapMcp.McpServer/Tools/AccountManagementTools.cs`:
 
 ```csharp
 using System.ComponentModel;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
-using UltimateImapMcp.Core.Configuration;
-using UltimateImapMcp.Core.Encryption;
-using UltimateImapMcp.ImapClient;
+using AwesomeImapMcp.Core.Configuration;
+using AwesomeImapMcp.Core.Encryption;
+using AwesomeImapMcp.ImapClient;
 
-namespace UltimateImapMcp.McpServer.Tools;
+namespace AwesomeImapMcp.McpServer.Tools;
 
 [McpServerToolType]
 public class AccountManagementTools(
@@ -820,7 +820,7 @@ public class AccountManagementTools(
 
 - [ ] **Step 4: Run tests**
 
-Run: `dotnet test tests/UltimateImapMcp.McpServer.Tests --nologo -v q --filter "AccountManagementToolsTests"`
+Run: `dotnet test tests/AwesomeImapMcp.McpServer.Tests --nologo -v q --filter "AccountManagementToolsTests"`
 Expected: PASS
 
 - [ ] **Step 5: Build all and run all tests**
@@ -831,7 +831,7 @@ Expected: All tests pass
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/UltimateImapMcp.McpServer/Tools/AccountManagementTools.cs tests/UltimateImapMcp.McpServer.Tests/Tools/AccountManagementToolsTests.cs
+git add src/AwesomeImapMcp.McpServer/Tools/AccountManagementTools.cs tests/AwesomeImapMcp.McpServer.Tests/Tools/AccountManagementToolsTests.cs
 git commit -m "feat: add start_dashboard, add_account_imap, add_account_oauth MCP tools"
 ```
 
@@ -840,14 +840,14 @@ git commit -m "feat: add start_dashboard, add_account_imap, add_account_oauth MC
 ## Task 7: Multi-Instance — IToolProxy Interface
 
 **Files:**
-- Create: `src/UltimateImapMcp.Core/Coordination/IToolProxy.cs`
+- Create: `src/AwesomeImapMcp.Core/Coordination/IToolProxy.cs`
 
 - [ ] **Step 1: Create the IToolProxy interface**
 
-Create `src/UltimateImapMcp.Core/Coordination/IToolProxy.cs`:
+Create `src/AwesomeImapMcp.Core/Coordination/IToolProxy.cs`:
 
 ```csharp
-namespace UltimateImapMcp.Core.Coordination;
+namespace AwesomeImapMcp.Core.Coordination;
 
 /// <summary>
 /// Abstraction for proxying MCP tool calls to a remote primary instance.
@@ -871,7 +871,7 @@ Expected: Build succeeds
 - [ ] **Step 3: Commit**
 
 ```bash
-git add src/UltimateImapMcp.Core/Coordination/IToolProxy.cs
+git add src/AwesomeImapMcp.Core/Coordination/IToolProxy.cs
 git commit -m "feat: add IToolProxy interface for multi-instance tool proxying"
 ```
 
@@ -880,17 +880,17 @@ git commit -m "feat: add IToolProxy interface for multi-instance tool proxying"
 ## Task 8: Multi-Instance — ProxyToolExecutor
 
 **Files:**
-- Create: `src/UltimateImapMcp.Core/Coordination/ProxyToolExecutor.cs`
-- Create: `tests/UltimateImapMcp.Core.Tests/Coordination/ProxyToolExecutorTests.cs`
+- Create: `src/AwesomeImapMcp.Core/Coordination/ProxyToolExecutor.cs`
+- Create: `tests/AwesomeImapMcp.Core.Tests/Coordination/ProxyToolExecutorTests.cs`
 
 - [ ] **Step 1: Write the failing test**
 
-Create `tests/UltimateImapMcp.Core.Tests/Coordination/ProxyToolExecutorTests.cs`:
+Create `tests/AwesomeImapMcp.Core.Tests/Coordination/ProxyToolExecutorTests.cs`:
 
 ```csharp
-using UltimateImapMcp.Core.Coordination;
+using AwesomeImapMcp.Core.Coordination;
 
-namespace UltimateImapMcp.Core.Tests.Coordination;
+namespace AwesomeImapMcp.Core.Tests.Coordination;
 
 public class ProxyToolExecutorTests
 {
@@ -923,17 +923,17 @@ public class ProxyToolExecutorTests
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `dotnet test tests/UltimateImapMcp.Core.Tests --nologo -v q --filter "ProxyToolExecutorTests"`
+Run: `dotnet test tests/AwesomeImapMcp.Core.Tests --nologo -v q --filter "ProxyToolExecutorTests"`
 Expected: FAIL — ProxyToolExecutor does not exist
 
 - [ ] **Step 3: Create ProxyToolExecutor**
 
-Create `src/UltimateImapMcp.Core/Coordination/ProxyToolExecutor.cs`:
+Create `src/AwesomeImapMcp.Core/Coordination/ProxyToolExecutor.cs`:
 
 ```csharp
 using System.Text.Json;
 
-namespace UltimateImapMcp.Core.Coordination;
+namespace AwesomeImapMcp.Core.Coordination;
 
 /// <summary>
 /// Proxies MCP tool calls to a primary instance's HTTP API.
@@ -1009,13 +1009,13 @@ public sealed class ProxyToolExecutor : IToolProxy, IDisposable
 
 - [ ] **Step 4: Run tests**
 
-Run: `dotnet test tests/UltimateImapMcp.Core.Tests --nologo -v q --filter "ProxyToolExecutorTests"`
+Run: `dotnet test tests/AwesomeImapMcp.Core.Tests --nologo -v q --filter "ProxyToolExecutorTests"`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/UltimateImapMcp.Core/Coordination/ProxyToolExecutor.cs tests/UltimateImapMcp.Core.Tests/Coordination/ProxyToolExecutorTests.cs
+git add src/AwesomeImapMcp.Core/Coordination/ProxyToolExecutor.cs tests/AwesomeImapMcp.Core.Tests/Coordination/ProxyToolExecutorTests.cs
 git commit -m "feat: add ProxyToolExecutor for multi-instance tool proxying"
 ```
 
@@ -1024,7 +1024,7 @@ git commit -m "feat: add ProxyToolExecutor for multi-instance tool proxying"
 ## Task 9: Multi-Instance — Integrate Proxy into McpJsonDefaults
 
 **Files:**
-- Modify: `src/UltimateImapMcp.McpServer/Tools/McpJsonDefaults.cs`
+- Modify: `src/AwesomeImapMcp.McpServer/Tools/McpJsonDefaults.cs`
 
 - [ ] **Step 1: Add ToolProxy property and proxy dispatch to LogToolCall**
 
@@ -1032,7 +1032,7 @@ Modify `McpJsonDefaults.cs`:
 
 Add using at top:
 ```csharp
-using UltimateImapMcp.Core.Coordination;
+using AwesomeImapMcp.Core.Coordination;
 ```
 
 Add the static property after the existing `Options` field:
@@ -1087,7 +1087,7 @@ Expected: All tests pass (proxy is null by default, so no behavior change)
 - [ ] **Step 3: Commit**
 
 ```bash
-git add src/UltimateImapMcp.McpServer/Tools/McpJsonDefaults.cs
+git add src/AwesomeImapMcp.McpServer/Tools/McpJsonDefaults.cs
 git commit -m "feat: add proxy dispatch to McpJsonDefaults for secondary instances"
 ```
 
@@ -1096,7 +1096,7 @@ git commit -m "feat: add proxy dispatch to McpJsonDefaults for secondary instanc
 ## Task 10: Multi-Instance — Enhance HttpMcpTransportHost with Tool API
 
 **Files:**
-- Modify: `src/UltimateImapMcp.McpServer/HttpMcpTransportHost.cs`
+- Modify: `src/AwesomeImapMcp.McpServer/HttpMcpTransportHost.cs`
 
 - [ ] **Step 1: Add tool API endpoints and IEmailBackendFactory to HTTP host**
 
@@ -1111,10 +1111,10 @@ builder.Services.AddSingleton(_rootServices.GetRequiredService<AccountsStore>())
 
 Add usings at top:
 ```csharp
-using UltimateImapMcp.Core.Email;
-using UltimateImapMcp.Core.Providers;
-using UltimateImapMcp.Core.Configuration;
-using UltimateImapMcp.Dashboard;
+using AwesomeImapMcp.Core.Email;
+using AwesomeImapMcp.Core.Providers;
+using AwesomeImapMcp.Core.Configuration;
+using AwesomeImapMcp.Dashboard;
 ```
 
 - [ ] **Step 2: Make MCP transport registration conditional**
@@ -1128,7 +1128,7 @@ if (addMcpTransport)
 {
     builder.Services.AddMcpServer(options =>
     {
-        options.ServerInfo = new() { Name = "ultimate-imap-mcp", Version = "0.1.0" };
+        options.ServerInfo = new() { Name = "awesome-imap-mcp", Version = "0.1.0" };
     })
     .WithHttpTransport()
     .WithToolsFromAssembly();
@@ -1187,7 +1187,7 @@ Expected: Build succeeds
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/UltimateImapMcp.McpServer/HttpMcpTransportHost.cs
+git add src/AwesomeImapMcp.McpServer/HttpMcpTransportHost.cs
 git commit -m "feat: enhance HttpMcpTransportHost with tool API for multi-instance proxy"
 ```
 
@@ -1196,7 +1196,7 @@ git commit -m "feat: enhance HttpMcpTransportHost with tool API for multi-instan
 ## Task 11: Multi-Instance — Wire Up Mode Detection in Program.cs
 
 **Files:**
-- Modify: `src/UltimateImapMcp.McpServer/Program.cs`
+- Modify: `src/AwesomeImapMcp.McpServer/Program.cs`
 
 - [ ] **Step 1: Always register HttpMcpTransportHost**
 
@@ -1204,8 +1204,8 @@ Replace the existing conditional registration:
 ```csharp
 if (transport is "http" or "both")
 {
-    builder.Services.AddSingleton<UltimateImapMcp.McpServer.HttpMcpTransportHost>();
-    builder.Services.AddHostedService(sp => sp.GetRequiredService<UltimateImapMcp.McpServer.HttpMcpTransportHost>());
+    builder.Services.AddSingleton<AwesomeImapMcp.McpServer.HttpMcpTransportHost>();
+    builder.Services.AddHostedService(sp => sp.GetRequiredService<AwesomeImapMcp.McpServer.HttpMcpTransportHost>());
 }
 ```
 
@@ -1213,8 +1213,8 @@ With unconditional registration:
 ```csharp
 // Always register HTTP host — serves tool API for multi-instance proxy.
 // MCP HTTP transport is only added when configured (handled inside HttpMcpTransportHost).
-builder.Services.AddSingleton<UltimateImapMcp.McpServer.HttpMcpTransportHost>();
-builder.Services.AddHostedService(sp => sp.GetRequiredService<UltimateImapMcp.McpServer.HttpMcpTransportHost>());
+builder.Services.AddSingleton<AwesomeImapMcp.McpServer.HttpMcpTransportHost>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<AwesomeImapMcp.McpServer.HttpMcpTransportHost>());
 ```
 
 - [ ] **Step 2: Add mode detection and proxy setup after host is built**
@@ -1231,10 +1231,10 @@ After `var host = builder.Build();` and the existing coordinator wiring block, a
     {
         var proxyUrl = $"http://localhost:{httpPort}";
         Console.Error.WriteLine($"  [Multi-Instance] Port {httpPort} in use — running as secondary. Proxying tools to {proxyUrl}");
-        McpJsonDefaults.ToolProxy = new UltimateImapMcp.Core.Coordination.ProxyToolExecutor(proxyUrl);
+        McpJsonDefaults.ToolProxy = new AwesomeImapMcp.Core.Coordination.ProxyToolExecutor(proxyUrl);
 
         // Tell the HTTP host the proxy URL for failover recovery
-        var httpHost = host.Services.GetRequiredService<UltimateImapMcp.McpServer.HttpMcpTransportHost>();
+        var httpHost = host.Services.GetRequiredService<AwesomeImapMcp.McpServer.HttpMcpTransportHost>();
         httpHost.SetProxyBaseUrl(proxyUrl);
     }
     else
@@ -1246,7 +1246,7 @@ After `var host = builder.Build();` and the existing coordinator wiring block, a
 
 Add using at top if not present:
 ```csharp
-using UltimateImapMcp.McpServer.Tools;
+using AwesomeImapMcp.McpServer.Tools;
 ```
 
 - [ ] **Step 3: Update startup banner**
@@ -1275,7 +1275,7 @@ Expected: All tests pass
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/UltimateImapMcp.McpServer/Program.cs
+git add src/AwesomeImapMcp.McpServer/Program.cs
 git commit -m "feat: multi-instance mode detection — always start HTTP host, proxy when secondary"
 ```
 
@@ -1286,7 +1286,7 @@ git commit -m "feat: multi-instance mode detection — always start HTTP host, p
 The `HttpMcpTransportHost` also needs to be able to resolve `IEmailBackendFactory` for tools invoked via the API. Verify from Task 10 that the registration was added. This task ensures completeness.
 
 **Files:**
-- Verify: `src/UltimateImapMcp.McpServer/HttpMcpTransportHost.cs`
+- Verify: `src/AwesomeImapMcp.McpServer/HttpMcpTransportHost.cs`
 
 - [ ] **Step 1: Verify all tool dependencies are registered**
 

@@ -8,7 +8,7 @@
 
 **Tech Stack:** .NET 10, MailKit (IDLE), Microsoft.Data.Sqlite, xUnit
 
-**Spec reference:** `docs/superpowers/specs/2026-03-18-ultimate-imap-mcp-design.md` — Sync Manager, Cache Strategy, CacheEvictor sections
+**Spec reference:** `docs/superpowers/specs/2026-03-18-awesome-imap-mcp-design.md` — Sync Manager, Cache Strategy, CacheEvictor sections
 
 ---
 
@@ -17,30 +17,30 @@
 ### New Files
 ```
 src/
-  UltimateImapMcp.Core/
+  AwesomeImapMcp.Core/
     Database/Migrations/
       003_sync_log.sql                    # sync_log table
-  UltimateImapMcp.ImapClient/
+  AwesomeImapMcp.ImapClient/
     SyncManager.cs                        # BackgroundService: IDLE + polling + on-demand
     CacheEvictor.cs                       # BackgroundService: size/time eviction every 10 min
-  UltimateImapMcp.McpServer/
+  AwesomeImapMcp.McpServer/
     Tools/
       SyncTools.cs                        # sync_now, get_sync_status MCP tools
 
 tests/
-  UltimateImapMcp.ImapClient.Tests/
+  AwesomeImapMcp.ImapClient.Tests/
     CacheEvictorTests.cs
 ```
 
 ### Modified Files
 ```
 src/
-  UltimateImapMcp.ImapClient/
+  AwesomeImapMcp.ImapClient/
     ImapConnectionManager.cs              # Add reconnection with exponential backoff
     Repositories/
       MessageRepository.cs               # Add eviction methods
       FolderRepository.cs                # Add sync log methods
-  UltimateImapMcp.McpServer/
+  AwesomeImapMcp.McpServer/
     Program.cs                            # Register SyncManager + CacheEvictor
 ```
 
@@ -50,7 +50,7 @@ src/
 
 ### Task 1: Sync Log Migration + Repository Methods
 
-- Create `src/UltimateImapMcp.Core/Database/Migrations/003_sync_log.sql`
+- Create `src/AwesomeImapMcp.Core/Database/Migrations/003_sync_log.sql`
 - Add sync log write/read methods to FolderRepository or a new SyncLogRepository
 
 ### Task 2: ImapConnectionManager Reconnection

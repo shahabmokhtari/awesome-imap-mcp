@@ -33,7 +33,7 @@
     }
   ],
   "cache": {
-    "db_path": "~/.ultimate-imap-mcp/cache.db",
+    "db_path": "~/.awesome-imap-mcp/cache.db",
     "max_size_mb": 500,
     "default_window_days": 0,
     "max_body_age_days": 0,
