@@ -80,7 +80,7 @@ public interface IEmailOperationBackend : IAsyncDisposable
 
 ### 1. Create Your API Client
 
-In `src/UltimateImapMcp.RestBackend/YourProvider/`:
+In `src/AwesomeImapMcp.RestBackend/YourProvider/`:
 
 ```csharp
 // YourProviderApiClient.cs — low-level HTTP wrapper
@@ -260,7 +260,7 @@ await backend.SetFlagsAsync(accountId, uids, "INBOX", MessageAction.MarkRead, ct
 ## Project Structure
 
 ```
-src/UltimateImapMcp.RestBackend/
+src/AwesomeImapMcp.RestBackend/
 ├── CompositeBackendFactory.cs    # Routes accounts to backends
 ├── Imap/
 │   ├── ImapSyncBackend.cs        # Wraps existing IMAP sync
@@ -272,7 +272,7 @@ src/UltimateImapMcp.RestBackend/
     ├── ZohoOperationBackend.cs   # IEmailOperationBackend implementation
     └── ZohoSyncService.cs        # BackgroundService for polling
 
-src/UltimateImapMcp.Core/Email/
+src/AwesomeImapMcp.Core/Email/
 ├── IEmailSyncBackend.cs          # Sync interface
 ├── IEmailOperationBackend.cs     # Operations interface + EmailMessage + MessageAction
 └── IEmailBackendFactory.cs       # Factory interface

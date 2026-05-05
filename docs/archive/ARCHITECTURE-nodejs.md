@@ -226,7 +226,7 @@ accounts:
     provider: outlook
 
 cache:
-  db_path: ~/.ultimate-imap-mcp/cache.db
+  db_path: ~/.awesome-imap-mcp/cache.db
   max_size_mb: 500
   body_fetch: lazy           # lazy | eager
 

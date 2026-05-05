@@ -1,6 +1,6 @@
 ---
 name: email-analysis
-description: Analyze, categorize, label, and report on emails from all IMAP accounts via MCP tools. Use this skill whenever the user asks to analyze emails, generate an email report, categorize their inbox, label emails, check what's new in their mail, triage their inbox, or review recent messages. Also trigger when they say things like "check my email", "what's in my inbox", "process my emails", "email summary", "inbox report", "label my emails", or "what happened in my email this week/month". Works with the ultimate-imap-mcp MCP server.
+description: Analyze, categorize, label, and report on emails from all IMAP accounts via MCP tools. Use this skill whenever the user asks to analyze emails, generate an email report, categorize their inbox, label emails, check what's new in their mail, triage their inbox, or review recent messages. Also trigger when they say things like "check my email", "what's in my inbox", "process my emails", "email summary", "inbox report", "label my emails", or "what happened in my email this week/month". Works with the awesome-imap-mcp MCP server.
 ---
 
 # Email Analysis & Report
@@ -9,8 +9,8 @@ Analyze emails across all IMAP accounts, categorize them, apply IMAP keyword lab
 
 ## Prerequisites
 
-- The `ultimate-imap-mcp` MCP server must be connected
-- Use `mcp__ultimate-imap-mcp__*` tools throughout
+- The `awesome-imap-mcp` MCP server must be connected
+- Use `mcp__awesome-imap-mcp__*` tools throughout
 
 ## Agent Architecture
 
@@ -31,7 +31,7 @@ Subagent responsibilities:
 1. Fetch email bodies via `get_message` for every assigned email
 2. Categorize each email
 3. Apply IMAP labels
-4. Mark emails with `ultimate-imap-mcp` flag
+4. Mark emails with `awesome-imap-mcp` flag
 5. Return a structured summary including any failed IDs
 
 **If a subagent's context window fills up**, close it and start a fresh one with the remaining unprocessed IDs. Never compact — close and restart.
@@ -52,7 +52,7 @@ After each week completes:
 
 ### Handover Document
 
-Save to `~/.ultimate-imap-mcp/email-report-handover.md` after each week for session resumption:
+Save to `~/.awesome-imap-mcp/email-report-handover.md` after each week for session resumption:
 
 ```markdown
 # Email Report — Handover Document
@@ -150,7 +150,7 @@ Also label by language: lang-en, lang-fr, etc.
 Group UIDs by label. Call label_messages per label (max 50 UIDs per call).
 
 ## Step 4: Mark Processed
-Apply label "ultimate-imap-mcp" to all processed UIDs.
+Apply label "awesome-imap-mcp" to all processed UIDs.
 
 ## Step 5: Extract Unsubscribe URLs
 For each unique sender categorized as marketing/spam:
@@ -215,7 +215,7 @@ Generate a comprehensive report with:
 
 ### HTML Report
 
-Update `~/.ultimate-imap-mcp/email-report.html` after each week:
+Update `~/.awesome-imap-mcp/email-report.html` after each week:
 - Single-file HTML with embedded CSS
 - Collapsible sections per account and category
 - Highlight dangerous and action items prominently

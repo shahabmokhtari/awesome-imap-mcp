@@ -1,8 +1,8 @@
-# Feature Matrix: Ultimate IMAP MCP vs Community MCP Servers
+# Feature Matrix: Awesome IMAP MCP vs Community MCP Servers
 
 ## Competitor Analysis
 
-| Feature | non-dirty/imap-mcp | ai-zerolab/mcp-email-server | marlinjai/email-mcp | **Ultimate IMAP MCP** |
+| Feature | non-dirty/imap-mcp | ai-zerolab/mcp-email-server | marlinjai/email-mcp | **Awesome IMAP MCP** |
 |---|---|---|---|---|
 | **Language** | Python | Python | TypeScript (Node) | TypeScript (Node) |
 | **IMAP Support** | Yes | Yes | Yes (fallback) | Yes (primary) |

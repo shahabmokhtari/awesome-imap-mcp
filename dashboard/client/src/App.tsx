@@ -77,7 +77,7 @@ function MainLayout({ onLogout }: { onLogout?: () => void }) {
               Logout
             </button>
           )}
-          <div className="text-xs text-gray-500">ultimate-imap-mcp v0.1.0</div>
+          <div className="text-xs text-gray-500">awesome-imap-mcp v0.1.0</div>
         </div>
       </nav>
 

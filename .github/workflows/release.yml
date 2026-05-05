@@ -23,7 +23,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: dashboard-spa
-          path: src/UltimateImapMcp.Dashboard/wwwroot/
+          path: src/AwesomeImapMcp.Dashboard/wwwroot/
           retention-days: 1
 
   build-binaries:
@@ -33,22 +33,22 @@ jobs:
         include:
           - rid: linux-x64
             os: ubuntu-latest
-            artifact: ultimate-imap-mcp-linux-x64
+            artifact: awesome-imap-mcp-linux-x64
           - rid: linux-arm64
             os: ubuntu-latest
-            artifact: ultimate-imap-mcp-linux-arm64
+            artifact: awesome-imap-mcp-linux-arm64
           - rid: osx-x64
             os: macos-latest
-            artifact: ultimate-imap-mcp-osx-x64
+            artifact: awesome-imap-mcp-osx-x64
           - rid: osx-arm64
             os: macos-latest
-            artifact: ultimate-imap-mcp-osx-arm64
+            artifact: awesome-imap-mcp-osx-arm64
           - rid: win-x64
             os: windows-latest
-            artifact: ultimate-imap-mcp-win-x64.exe
+            artifact: awesome-imap-mcp-win-x64.exe
           - rid: win-arm64
             os: windows-latest
-            artifact: ultimate-imap-mcp-win-arm64.exe
+            artifact: awesome-imap-mcp-win-arm64.exe
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -58,10 +58,10 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: dashboard-spa
-          path: src/UltimateImapMcp.Dashboard/wwwroot/
+          path: src/AwesomeImapMcp.Dashboard/wwwroot/
       - name: Publish single-file binary
         run: >
-          dotnet publish src/UltimateImapMcp.McpServer
+          dotnet publish src/AwesomeImapMcp.McpServer
           -c Release
           -r ${{ matrix.rid }}
           -o publish/
@@ -75,9 +75,9 @@ jobs:
         shell: bash
         run: |
           if [[ "${{ matrix.rid }}" == win-* ]]; then
-            mv publish/UltimateImapMcp.McpServer.exe "publish/${{ matrix.artifact }}"
+            mv publish/AwesomeImapMcp.McpServer.exe "publish/${{ matrix.artifact }}"
           else
-            mv publish/UltimateImapMcp.McpServer "publish/${{ matrix.artifact }}"
+            mv publish/AwesomeImapMcp.McpServer "publish/${{ matrix.artifact }}"
             chmod +x "publish/${{ matrix.artifact }}"
           fi
       - uses: actions/upload-artifact@v4
@@ -124,7 +124,7 @@ jobs:
 
             Download the binary for your platform and run it directly:
             ```bash
-            chmod +x ultimate-imap-mcp-*
-            ./ultimate-imap-mcp-osx-arm64 --config ./config.json
+            chmod +x awesome-imap-mcp-*
+            ./awesome-imap-mcp-osx-arm64 --config ./config.json
             ```
           files: artifacts/*

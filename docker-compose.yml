@@ -7,7 +7,7 @@ services:
     ports:
       - "3847:3847"
     environment:
-      - UIMAP_CONFIG_PATH=/app/config.json
+      - AIMAP_CONFIG_PATH=/app/config.json
 
   dovecot:
     image: dovecot/dovecot:latest

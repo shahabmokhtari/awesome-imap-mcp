@@ -1,0 +1,92 @@
+using AwesomeImapMcp.Core.Configuration;
+using AwesomeImapMcp.Core.Encryption;
+using AwesomeImapMcp.ImapClient;
+using AwesomeImapMcp.ImapClient.Repositories;
+using AwesomeImapMcp.Queue.Models;
+
+namespace AwesomeImapMcp.Queue;
+
+public record SendEnqueueResult(string PendingId, string ConfirmMode, string Status, string? SendsAt, int? UndoWindowSeconds);
+
+public class QueueManager(QueueRepository repo, AccountRepository accountRepo,
+    CredentialEncryptor encryptor)
+{
+    public SendEnqueueResult EnqueueSend(string accountId, string payload)
+    {
+        var dbAccount = accountRepo.ResolveEnabledAccount(accountId)
+            ?? throw new InvalidOperationException($"Account '{accountId}' not found.");
+
+        var accountConfig = AccountConfigMapper.ToAccountConfig(dbAccount, encryptor);
+        var confirmMode = accountConfig.ConfirmMode ?? "implicit";
+        var undoSeconds = accountConfig.UndoWindowSeconds;
+
+        string? sendsAt = null;
+        bool requiresConfirm;
+        string status;
+
+        if (confirmMode == "explicit")
+        {
+            requiresConfirm = true;
+            status = "pending";
+        }
+        else
+        {
+            requiresConfirm = false;
+            sendsAt = DateTime.UtcNow.AddSeconds(undoSeconds).ToString("O");
+            status = "will_send_at";
+        }
+
+        var id = repo.Insert(new EnqueueRequest
+        {
+            AccountId = dbAccount.Id,
+            Operation = OperationType.Send,
+            Priority = OperationPriority.P0,
+            Payload = payload,
+            RequiresConfirm = requiresConfirm,
+            SendsAt = sendsAt
+        });
+
+        // For implicit confirm, auto-confirm immediately (worker checks sends_at)
+        if (!requiresConfirm)
+            repo.UpdateStatus(id, "confirmed");
+
+        return new SendEnqueueResult(id, confirmMode, status, sendsAt, undoSeconds);
+    }
+
+    public string EnqueueOperation(string accountId, OperationType operation, string payload)
+    {
+        // Send/Reply/Forward must go through EnqueueSend for proper undo window handling
+        if (operation is OperationType.Send or OperationType.Reply or OperationType.Forward)
+            throw new ArgumentException($"Use {nameof(EnqueueSend)} for {operation} operations.", nameof(operation));
+
+        // Resolve to canonical DB ID — also checks enabled state
+        var dbAccount = accountRepo.ResolveEnabledAccount(accountId)
+            ?? throw new InvalidOperationException($"Account '{accountId}' not found.");
+        var resolvedId = dbAccount.Id;
+
+        var priority = OperationPriority.P1;
+
+        var id = repo.Insert(new EnqueueRequest
+        {
+            AccountId = resolvedId,
+            Operation = operation,
+            Priority = priority,
+            Payload = payload
+        });
+
+        // P1/P2 operations auto-confirm (no undo window)
+        if (priority != OperationPriority.P0)
+            repo.UpdateStatus(id, "confirmed");
+
+        return id;
+    }
+
+    public bool Confirm(string pendingId) => repo.TryConfirm(pendingId);
+
+    public bool Cancel(string pendingId) => repo.Cancel(pendingId);
+
+    public QueuedOperation? GetOperation(string pendingId) => repo.GetById(pendingId);
+
+    public List<QueuedOperation> ListPending(string? accountId = null) =>
+        repo.GetAllPending(accountId);
+}

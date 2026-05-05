@@ -14,24 +14,24 @@
 
 | File | Action | Responsibility |
 |------|--------|---------------|
-| `src/UltimateImapMcp.Core/Configuration/AppConfig.cs` | Modify | Add `LogToolCalls`, `LogProtocol`, `LogDirMaxSizeMb` to ServerConfig |
-| `src/UltimateImapMcp.ImapClient/Repositories/MessageRepository.cs` | Modify | Add `GetCacheStats()` and `GetCacheStatsByAccount()` methods |
-| `src/UltimateImapMcp.Dashboard/CacheApi.cs` | Modify | Add `GET /api/cache/stats` endpoint |
-| `src/UltimateImapMcp.Dashboard/SettingsApi.cs` | Modify | Expose new server config fields in GET/PUT, add `logToolCalls`, `logProtocol`, `logDirMaxSizeMb` |
+| `src/AwesomeImapMcp.Core/Configuration/AppConfig.cs` | Modify | Add `LogToolCalls`, `LogProtocol`, `LogDirMaxSizeMb` to ServerConfig |
+| `src/AwesomeImapMcp.ImapClient/Repositories/MessageRepository.cs` | Modify | Add `GetCacheStats()` and `GetCacheStatsByAccount()` methods |
+| `src/AwesomeImapMcp.Dashboard/CacheApi.cs` | Modify | Add `GET /api/cache/stats` endpoint |
+| `src/AwesomeImapMcp.Dashboard/SettingsApi.cs` | Modify | Expose new server config fields in GET/PUT, add `logToolCalls`, `logProtocol`, `logDirMaxSizeMb` |
 | `dashboard/client/src/hooks/useApi.ts` | Modify | Add `useCacheStats()` hook |
 | `dashboard/client/src/pages/Settings.tsx` | Modify | Add Cache Statistics card with per-account breakdown |
-| `src/UltimateImapMcp.Core/Logging/FileLoggerProvider.cs` | Modify | Add log directory size enforcement on flush |
-| `src/UltimateImapMcp.McpServer/Tools/McpJsonDefaults.cs` | Modify | Add `LogToolCall` helper method |
-| `src/UltimateImapMcp.McpServer/McpProtocolLogger.cs` | Create | Wrapping Stream for stdio protocol logging |
-| `src/UltimateImapMcp.McpServer/Program.cs` | Modify | Wire protocol logger stream, pass config to tool logging |
+| `src/AwesomeImapMcp.Core/Logging/FileLoggerProvider.cs` | Modify | Add log directory size enforcement on flush |
+| `src/AwesomeImapMcp.McpServer/Tools/McpJsonDefaults.cs` | Modify | Add `LogToolCall` helper method |
+| `src/AwesomeImapMcp.McpServer/McpProtocolLogger.cs` | Create | Wrapping Stream for stdio protocol logging |
+| `src/AwesomeImapMcp.McpServer/Program.cs` | Modify | Wire protocol logger stream, pass config to tool logging |
 
 ---
 
 ### Task 1: Add Config Properties for New Features
 
 **Files:**
-- Modify: `src/UltimateImapMcp.Core/Configuration/AppConfig.cs:44-78`
-- Modify: `src/UltimateImapMcp.Dashboard/SettingsApi.cs`
+- Modify: `src/AwesomeImapMcp.Core/Configuration/AppConfig.cs:44-78`
+- Modify: `src/AwesomeImapMcp.Dashboard/SettingsApi.cs`
 
 - [ ] **Step 1: Add new ServerConfig properties**
 
@@ -90,7 +90,7 @@ Expected: 0 errors, 0 warnings
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/UltimateImapMcp.Core/Configuration/AppConfig.cs src/UltimateImapMcp.Dashboard/SettingsApi.cs
+git add src/AwesomeImapMcp.Core/Configuration/AppConfig.cs src/AwesomeImapMcp.Dashboard/SettingsApi.cs
 git commit -m "feat: add config properties for tool logging, protocol logging, and log dir size limit"
 ```
 
@@ -99,8 +99,8 @@ git commit -m "feat: add config properties for tool logging, protocol logging, a
 ### Task 2: Cache Statistics Backend
 
 **Files:**
-- Modify: `src/UltimateImapMcp.ImapClient/Repositories/MessageRepository.cs`
-- Modify: `src/UltimateImapMcp.Dashboard/CacheApi.cs`
+- Modify: `src/AwesomeImapMcp.ImapClient/Repositories/MessageRepository.cs`
+- Modify: `src/AwesomeImapMcp.Dashboard/CacheApi.cs`
 
 - [ ] **Step 1: Add cache stats record types to MessageRepository.cs**
 
@@ -177,7 +177,7 @@ public List<AccountCacheStatsRecord> GetCacheStatsByAccount(AccountRepository ac
 
 - [ ] **Step 4: Expose DbPath on AppDatabase if needed**
 
-Check `src/UltimateImapMcp.Core/Database/Database.cs`. If `_dbPath` is private, add:
+Check `src/AwesomeImapMcp.Core/Database/Database.cs`. If `_dbPath` is private, add:
 
 ```csharp
 public string DbPath => _dbPath;
@@ -229,9 +229,9 @@ Expected: 0 errors, all tests pass
 - [ ] **Step 7: Commit**
 
 ```bash
-git add src/UltimateImapMcp.ImapClient/Repositories/MessageRepository.cs \
-        src/UltimateImapMcp.Dashboard/CacheApi.cs \
-        src/UltimateImapMcp.Core/Database/Database.cs
+git add src/AwesomeImapMcp.ImapClient/Repositories/MessageRepository.cs \
+        src/AwesomeImapMcp.Dashboard/CacheApi.cs \
+        src/AwesomeImapMcp.Core/Database/Database.cs
 git commit -m "feat: add cache statistics API endpoint with per-account breakdown"
 ```
 
@@ -357,9 +357,9 @@ git commit -m "feat: add cache statistics card to dashboard settings page"
 ### Task 4: Ensure Bodies Are Always Cached When Fetched
 
 **Files:**
-- Modify: `src/UltimateImapMcp.Dashboard/MessagesApi.cs` (verify fetch-body caches)
-- Verify: `src/UltimateImapMcp.RestBackend/Imap/ImapSyncBackend.cs` (already calls UpdateBody)
-- Verify: `src/UltimateImapMcp.McpServer/Tools/MessageTools.cs` (already re-reads from DB)
+- Modify: `src/AwesomeImapMcp.Dashboard/MessagesApi.cs` (verify fetch-body caches)
+- Verify: `src/AwesomeImapMcp.RestBackend/Imap/ImapSyncBackend.cs` (already calls UpdateBody)
+- Verify: `src/AwesomeImapMcp.McpServer/Tools/MessageTools.cs` (already re-reads from DB)
 
 - [ ] **Step 1: Verify existing body caching paths**
 
@@ -378,7 +378,7 @@ No code changes needed — all paths already cache bodies through `ImapSyncBacke
 ### Task 5: MCP Tool-Level Logging
 
 **Files:**
-- Modify: `src/UltimateImapMcp.McpServer/Tools/McpJsonDefaults.cs`
+- Modify: `src/AwesomeImapMcp.McpServer/Tools/McpJsonDefaults.cs`
 - Modify: All tool classes (pattern change)
 
 - [ ] **Step 1: Add LogToolCall helper to McpJsonDefaults**
@@ -508,15 +508,15 @@ git commit -m "feat: add MCP tool-level call logging with configurable enable/di
 ### Task 6: MCP Protocol-Level Logging (Verbose)
 
 **Files:**
-- Create: `src/UltimateImapMcp.McpServer/McpProtocolLogger.cs`
-- Modify: `src/UltimateImapMcp.McpServer/Program.cs`
+- Create: `src/AwesomeImapMcp.McpServer/McpProtocolLogger.cs`
+- Modify: `src/AwesomeImapMcp.McpServer/Program.cs`
 
 - [ ] **Step 1: Create McpProtocolLogger stream wrapper**
 
 ```csharp
 using Microsoft.Extensions.Logging;
 
-namespace UltimateImapMcp.McpServer;
+namespace AwesomeImapMcp.McpServer;
 
 /// <summary>
 /// Wrapping stream that tees all read/write bytes to a logger.
@@ -606,7 +606,7 @@ In `Program.cs`, before `builder.Services.AddMcpServer(...)`, add:
 if (config.Server.LogProtocol)
 {
     var protocolLoggerFactory = LoggerFactory.Create(b =>
-        b.AddProvider(new UltimateImapMcp.Core.Logging.SqliteLoggerProvider(appDb)));
+        b.AddProvider(new AwesomeImapMcp.Core.Logging.SqliteLoggerProvider(appDb)));
     var protocolLogger = protocolLoggerFactory.CreateLogger("MCP.Protocol");
 
     var originalIn = Console.OpenStandardInput();
@@ -628,7 +628,7 @@ Expected: All pass
 - [ ] **Step 4: Commit**
 
 ```bash
-git add src/UltimateImapMcp.McpServer/McpProtocolLogger.cs src/UltimateImapMcp.McpServer/Program.cs
+git add src/AwesomeImapMcp.McpServer/McpProtocolLogger.cs src/AwesomeImapMcp.McpServer/Program.cs
 git commit -m "feat: add verbose MCP protocol-level logging via stdio stream wrapper"
 ```
 
@@ -637,7 +637,7 @@ git commit -m "feat: add verbose MCP protocol-level logging via stdio stream wra
 ### Task 7: Log File Rotation (Size Limit)
 
 **Files:**
-- Modify: `src/UltimateImapMcp.Core/Logging/FileLoggerProvider.cs`
+- Modify: `src/AwesomeImapMcp.Core/Logging/FileLoggerProvider.cs`
 
 - [ ] **Step 1: Add size enforcement to FileLoggerProvider**
 
@@ -731,7 +731,7 @@ Expected: All pass
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/UltimateImapMcp.Core/Logging/FileLoggerProvider.cs src/UltimateImapMcp.McpServer/Program.cs
+git add src/AwesomeImapMcp.Core/Logging/FileLoggerProvider.cs src/AwesomeImapMcp.McpServer/Program.cs
 git commit -m "feat: add log directory size enforcement with configurable limit (default 100MB)"
 ```
 

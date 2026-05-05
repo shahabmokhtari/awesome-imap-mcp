@@ -16,17 +16,17 @@
 
 ```bash
 dotnet build          # Build all projects
-dotnet test           # Run all 278+ tests
+dotnet test           # Run all 343+ tests
 cd dashboard/client && npm run build  # Build frontend
 ```
 
 ## Key Architecture
 
-- `src/UltimateImapMcp.McpServer/` — MCP server entry point + tools
-- `src/UltimateImapMcp.Dashboard/` — ASP.NET dashboard (REST + SignalR)
-- `src/UltimateImapMcp.ImapClient/` — IMAP sync, repositories
-- `src/UltimateImapMcp.Llm/` — LLM analysis (API, ACP pool)
-- `src/UltimateImapMcp.Core/` — Config, DB, coordination
+- `src/AwesomeImapMcp.McpServer/` — MCP server entry point + tools
+- `src/AwesomeImapMcp.Dashboard/` — ASP.NET dashboard (REST + SignalR)
+- `src/AwesomeImapMcp.ImapClient/` — IMAP sync, repositories
+- `src/AwesomeImapMcp.Llm/` — LLM analysis (API, ACP pool)
+- `src/AwesomeImapMcp.Core/` — Config, DB, coordination
 - `dashboard/client/` — React SPA (Vite + TailwindCSS)
 
 ## Conventions

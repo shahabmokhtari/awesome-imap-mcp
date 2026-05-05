@@ -15,12 +15,12 @@
 ### Task 1: HealthDatabase
 
 **Files:**
-- Create: `src/UltimateImapMcp.Core/Database/HealthDatabase.cs`
-- Test: `tests/UltimateImapMcp.Core.Tests/Database/HealthDatabaseTests.cs`
+- Create: `src/AwesomeImapMcp.Core/Database/HealthDatabase.cs`
+- Test: `tests/AwesomeImapMcp.Core.Tests/Database/HealthDatabaseTests.cs`
 
 - [ ] **Step 1: Write failing tests for HealthDatabase**
 
-Create `tests/UltimateImapMcp.Core.Tests/Database/HealthDatabaseTests.cs` with tests for:
+Create `tests/AwesomeImapMcp.Core.Tests/Database/HealthDatabaseTests.cs` with tests for:
 - `Upsert_and_read_heartbeat` — upsert one row, read all, verify fields
 - `Upsert_updates_existing_row` — upsert twice, verify single row with updated values
 - `PruneStale_removes_old_heartbeats` — insert stale + fresh rows, prune, verify only fresh remains
@@ -36,7 +36,7 @@ Run: `dotnet test --filter "HealthDatabaseTests" --nologo -v q`
 
 - [ ] **Step 3: Implement HealthDatabase**
 
-Create `src/UltimateImapMcp.Core/Database/HealthDatabase.cs`:
+Create `src/AwesomeImapMcp.Core/Database/HealthDatabase.cs`:
 
 - `HeartbeatRecord` — positional record with all table columns
 - `HealthDatabase` — sealed, `IDisposable`, follows `AppDatabase` pattern:
@@ -70,7 +70,7 @@ Run: `dotnet test --filter "HealthDatabaseTests" --nologo -v q`
 - [ ] **Step 5: Commit**
 
 ```
-git add src/UltimateImapMcp.Core/Database/HealthDatabase.cs tests/UltimateImapMcp.Core.Tests/Database/HealthDatabaseTests.cs
+git add src/AwesomeImapMcp.Core/Database/HealthDatabase.cs tests/AwesomeImapMcp.Core.Tests/Database/HealthDatabaseTests.cs
 git commit -m "feat: add HealthDatabase for multi-instance heartbeats"
 ```
 
@@ -79,7 +79,7 @@ git commit -m "feat: add HealthDatabase for multi-instance heartbeats"
 ### Task 2: Configuration — Heartbeat Settings
 
 **Files:**
-- Modify: `src/UltimateImapMcp.Core/Configuration/AppConfig.cs`
+- Modify: `src/AwesomeImapMcp.Core/Configuration/AppConfig.cs`
 
 - [ ] **Step 1: Add two properties to `ServerConfig` class** (after `LogDir`):
 
@@ -98,7 +98,7 @@ Run: `dotnet build --nologo -v q`
 - [ ] **Step 3: Commit**
 
 ```
-git add src/UltimateImapMcp.Core/Configuration/AppConfig.cs
+git add src/AwesomeImapMcp.Core/Configuration/AppConfig.cs
 git commit -m "feat: add heartbeat_interval and heartbeat_stale_after config"
 ```
 
@@ -107,13 +107,13 @@ git commit -m "feat: add heartbeat_interval and heartbeat_stale_after config"
 ### Task 3: IInstanceCoordinator Interface + InstanceHeartbeat Record
 
 **Files:**
-- Create: `src/UltimateImapMcp.Core/Coordination/IInstanceCoordinator.cs`
-- Create: `src/UltimateImapMcp.Core/Coordination/InstanceHeartbeat.cs`
+- Create: `src/AwesomeImapMcp.Core/Coordination/IInstanceCoordinator.cs`
+- Create: `src/AwesomeImapMcp.Core/Coordination/InstanceHeartbeat.cs`
 
 - [ ] **Step 1: Create IInstanceCoordinator**
 
 ```csharp
-namespace UltimateImapMcp.Core.Coordination;
+namespace AwesomeImapMcp.Core.Coordination;
 
 public interface IInstanceCoordinator
 {
@@ -127,7 +127,7 @@ public interface IInstanceCoordinator
 - [ ] **Step 2: Create InstanceHeartbeat record**
 
 ```csharp
-namespace UltimateImapMcp.Core.Coordination;
+namespace AwesomeImapMcp.Core.Coordination;
 
 public record InstanceHeartbeat(
     string InstanceId, int ProcessId, string Cwd, string Transport,
@@ -139,7 +139,7 @@ public record InstanceHeartbeat(
 - [ ] **Step 3: Build, commit**
 
 ```
-git add src/UltimateImapMcp.Core/Coordination/
+git add src/AwesomeImapMcp.Core/Coordination/
 git commit -m "feat: add IInstanceCoordinator interface and InstanceHeartbeat record"
 ```
 
@@ -148,14 +148,14 @@ git commit -m "feat: add IInstanceCoordinator interface and InstanceHeartbeat re
 ### Task 4: InstanceCoordinator BackgroundService
 
 **Files:**
-- Create: `src/UltimateImapMcp.Core/Coordination/InstanceCoordinator.cs`
-- Test: `tests/UltimateImapMcp.Core.Tests/Coordination/InstanceCoordinatorTests.cs`
+- Create: `src/AwesomeImapMcp.Core/Coordination/InstanceCoordinator.cs`
+- Test: `tests/AwesomeImapMcp.Core.Tests/Coordination/InstanceCoordinatorTests.cs`
 
-**IMPORTANT — Circular dependency avoidance:** `InstanceCoordinator` lives in `UltimateImapMcp.Core` but needs account count (from `AccountRepository` in `ImapClient`). To avoid a Core→ImapClient cycle, the coordinator accepts a `Func<int> accountCountProvider` delegate instead of `AccountRepository` directly. This delegate is wired in `Program.cs` (Task 5).
+**IMPORTANT — Circular dependency avoidance:** `InstanceCoordinator` lives in `AwesomeImapMcp.Core` but needs account count (from `AccountRepository` in `ImapClient`). To avoid a Core→ImapClient cycle, the coordinator accepts a `Func<int> accountCountProvider` delegate instead of `AccountRepository` directly. This delegate is wired in `Program.cs` (Task 5).
 
 - [ ] **Step 1: Write tests for leader election logic**
 
-Create `tests/UltimateImapMcp.Core.Tests/Coordination/InstanceCoordinatorTests.cs`.
+Create `tests/AwesomeImapMcp.Core.Tests/Coordination/InstanceCoordinatorTests.cs`.
 
 Test `ComputeLeaderId` (a static pure function on the class):
 - `ComputeLeader_dashboard_host_wins` — 2 instances, one is dashboard host → dashboard wins
@@ -172,7 +172,7 @@ Run: `dotnet test --filter "InstanceCoordinatorTests" --nologo -v q`
 
 - [ ] **Step 3: Implement InstanceCoordinator**
 
-Create `src/UltimateImapMcp.Core/Coordination/InstanceCoordinator.cs`:
+Create `src/AwesomeImapMcp.Core/Coordination/InstanceCoordinator.cs`:
 
 Constructor takes: `HealthDatabase`, `InstanceInfo`, `AppConfig`, `Func<int> accountCountProvider`, `IHostApplicationLifetime`, `ILogger<InstanceCoordinator>`
 
@@ -217,7 +217,7 @@ Run: `dotnet build --nologo -v q`
 - [ ] **Step 6: Commit**
 
 ```
-git add src/UltimateImapMcp.Core/Coordination/InstanceCoordinator.cs tests/UltimateImapMcp.Core.Tests/Coordination/InstanceCoordinatorTests.cs
+git add src/AwesomeImapMcp.Core/Coordination/InstanceCoordinator.cs tests/AwesomeImapMcp.Core.Tests/Coordination/InstanceCoordinatorTests.cs
 git commit -m "feat: add InstanceCoordinator with leader election"
 ```
 
@@ -226,7 +226,7 @@ git commit -m "feat: add InstanceCoordinator with leader election"
 ### Task 5: Register HealthDatabase + InstanceCoordinator in Program.cs
 
 **Files:**
-- Modify: `src/UltimateImapMcp.McpServer/Program.cs`
+- Modify: `src/AwesomeImapMcp.McpServer/Program.cs`
 
 - [ ] **Step 1: Add registrations after `var database = new AppDatabase(dbPath);` and `MigrationRunner.Migrate(database);`**
 
@@ -251,7 +251,7 @@ builder.Services.AddHostedService(sp => (InstanceCoordinator)sp.GetRequiredServi
 
 Add usings:
 ```csharp
-using UltimateImapMcp.Core.Coordination;
+using AwesomeImapMcp.Core.Coordination;
 ```
 
 Verify: `DashboardHost` registration (`AddDashboard`) comes AFTER this block — it needs `HealthDatabase` and `IInstanceCoordinator` to be registered. Check `Program.cs` to confirm ordering.
@@ -263,7 +263,7 @@ Run: `dotnet build --nologo -v q && dotnet test --nologo -v q`
 - [ ] **Step 3: Commit**
 
 ```
-git add src/UltimateImapMcp.McpServer/Program.cs
+git add src/AwesomeImapMcp.McpServer/Program.cs
 git commit -m "feat: register HealthDatabase and InstanceCoordinator in DI"
 ```
 
@@ -272,12 +272,12 @@ git commit -m "feat: register HealthDatabase and InstanceCoordinator in DI"
 ### Task 6: Add Leader Gates to 6 Periodic Services
 
 **Files:**
-- Modify: `src/UltimateImapMcp.ImapClient/SyncManager.cs`
-- Modify: `src/UltimateImapMcp.Queue/QueueWorker.cs`
-- Modify: `src/UltimateImapMcp.ImapClient/CacheEvictor.cs`
-- Modify: `src/UltimateImapMcp.Core/MetricsCollector.cs`
-- Modify: `src/UltimateImapMcp.Core/OAuth/OAuthTokenRefreshService.cs`
-- Modify: `src/UltimateImapMcp.RestBackend/Zoho/ZohoSyncService.cs`
+- Modify: `src/AwesomeImapMcp.ImapClient/SyncManager.cs`
+- Modify: `src/AwesomeImapMcp.Queue/QueueWorker.cs`
+- Modify: `src/AwesomeImapMcp.ImapClient/CacheEvictor.cs`
+- Modify: `src/AwesomeImapMcp.Core/MetricsCollector.cs`
+- Modify: `src/AwesomeImapMcp.Core/OAuth/OAuthTokenRefreshService.cs`
+- Modify: `src/AwesomeImapMcp.RestBackend/Zoho/ZohoSyncService.cs`
 
 - [ ] **Step 1: For each service, inject `IInstanceCoordinator` and add leader gate**
 
@@ -301,9 +301,9 @@ if (!coordinator.IsLeader)
 
 This avoids unnecessary wakeups and maintains each service's natural rhythm.
 
-Add `using UltimateImapMcp.Core.Coordination;` to each file.
+Add `using AwesomeImapMcp.Core.Coordination;` to each file.
 
-Note: All projects already reference `UltimateImapMcp.Core` (verified: ImapClient→Core, Queue→Core, Core has it, RestBackend→Core). `IInstanceCoordinator` is in Core.Coordination, so no new project references needed.
+Note: All projects already reference `AwesomeImapMcp.Core` (verified: ImapClient→Core, Queue→Core, Core has it, RestBackend→Core). `IInstanceCoordinator` is in Core.Coordination, so no new project references needed.
 
 - [ ] **Step 2: Build full solution**
 
@@ -316,7 +316,7 @@ Run: `dotnet test --nologo -v q`
 - [ ] **Step 4: Commit** (list all 6 files explicitly)
 
 ```
-git add src/UltimateImapMcp.ImapClient/SyncManager.cs src/UltimateImapMcp.Queue/QueueWorker.cs src/UltimateImapMcp.ImapClient/CacheEvictor.cs src/UltimateImapMcp.Core/MetricsCollector.cs src/UltimateImapMcp.Core/OAuth/OAuthTokenRefreshService.cs src/UltimateImapMcp.RestBackend/Zoho/ZohoSyncService.cs
+git add src/AwesomeImapMcp.ImapClient/SyncManager.cs src/AwesomeImapMcp.Queue/QueueWorker.cs src/AwesomeImapMcp.ImapClient/CacheEvictor.cs src/AwesomeImapMcp.Core/MetricsCollector.cs src/AwesomeImapMcp.Core/OAuth/OAuthTokenRefreshService.cs src/AwesomeImapMcp.RestBackend/Zoho/ZohoSyncService.cs
 git commit -m "feat: add leader gates to 6 periodic services"
 ```
 
@@ -325,8 +325,8 @@ git commit -m "feat: add leader gates to 6 periodic services"
 ### Task 7: Forward Services to Dashboard DI + Update ServerApi
 
 **Files:**
-- Modify: `src/UltimateImapMcp.Dashboard/DashboardHost.cs`
-- Modify: `src/UltimateImapMcp.Dashboard/ServerApi.cs`
+- Modify: `src/AwesomeImapMcp.Dashboard/DashboardHost.cs`
+- Modify: `src/AwesomeImapMcp.Dashboard/ServerApi.cs`
 
 - [ ] **Step 1: Forward HealthDatabase and IInstanceCoordinator in DashboardHost.StartDashboard**
 
@@ -334,8 +334,8 @@ Add after the existing `InstanceInfo` / `RootLifetime` forwarding lines:
 
 ```csharp
 // Multi-instance coordination
-builder.Services.AddSingleton(_rootServices.GetRequiredService<UltimateImapMcp.Core.Database.HealthDatabase>());
-builder.Services.AddSingleton(_rootServices.GetRequiredService<UltimateImapMcp.Core.Coordination.IInstanceCoordinator>());
+builder.Services.AddSingleton(_rootServices.GetRequiredService<AwesomeImapMcp.Core.Database.HealthDatabase>());
+builder.Services.AddSingleton(_rootServices.GetRequiredService<AwesomeImapMcp.Core.Coordination.IInstanceCoordinator>());
 ```
 
 - [ ] **Step 2: Rewrite ServerApi endpoints**
@@ -368,7 +368,7 @@ app.MapPost("/api/server/instances/{instanceId}/shutdown", async (
 });
 ```
 
-Add `using UltimateImapMcp.Core.Coordination;` to ServerApi.cs.
+Add `using AwesomeImapMcp.Core.Coordination;` to ServerApi.cs.
 
 - [ ] **Step 3: Build and test**
 
@@ -377,7 +377,7 @@ Run: `dotnet build --nologo -v q && dotnet test --nologo -v q`
 - [ ] **Step 4: Commit**
 
 ```
-git add src/UltimateImapMcp.Dashboard/DashboardHost.cs src/UltimateImapMcp.Dashboard/ServerApi.cs
+git add src/AwesomeImapMcp.Dashboard/DashboardHost.cs src/AwesomeImapMcp.Dashboard/ServerApi.cs
 git commit -m "feat: heartbeat-based instances endpoint and remote shutdown"
 ```
 
@@ -386,8 +386,8 @@ git commit -m "feat: heartbeat-based instances endpoint and remote shutdown"
 ### Task 8: Update LogsApi with live_only Filter
 
 **Files:**
-- Modify: `src/UltimateImapMcp.Dashboard/LogsApi.cs`
-- Modify: `src/UltimateImapMcp.Core/Repositories/LogsRepository.cs`
+- Modify: `src/AwesomeImapMcp.Dashboard/LogsApi.cs`
+- Modify: `src/AwesomeImapMcp.Core/Repositories/LogsRepository.cs`
 
 - [ ] **Step 1: Update LogsApi endpoint**
 
@@ -433,7 +433,7 @@ Run: `dotnet build --nologo -v q && dotnet test --nologo -v q`
 - [ ] **Step 4: Commit**
 
 ```
-git add src/UltimateImapMcp.Dashboard/LogsApi.cs src/UltimateImapMcp.Core/Repositories/LogsRepository.cs
+git add src/AwesomeImapMcp.Dashboard/LogsApi.cs src/AwesomeImapMcp.Core/Repositories/LogsRepository.cs
 git commit -m "feat: add live_only filter to logs API with parameterized IN clause"
 ```
 

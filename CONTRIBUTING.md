@@ -1,14 +1,14 @@
-# Contributing to Ultimate IMAP MCP
+# Contributing to Awesome IMAP MCP
 
 Thanks for your interest in contributing! This project is built with .NET 10 / C# 13 (server) and React + TypeScript (dashboard).
 
 ## Quick Start
 
 ```bash
-git clone https://github.com/shahabmokhtari/ultimate-imap-mcp.git
-cd ultimate-imap-mcp
+git clone https://github.com/shahabmokhtari/awesome-imap-mcp.git
+cd awesome-imap-mcp
 dotnet build
-dotnet test                                # 278+ tests
+dotnet test                                # 343+ tests
 cd dashboard/client && npm install && npm run build
 ```
 
@@ -36,12 +36,12 @@ cd dashboard/client && npm install && npm run build
 
 ## Architecture Layout
 
-- `src/UltimateImapMcp.McpServer/` — MCP server entry point + tool definitions
-- `src/UltimateImapMcp.Dashboard/` — ASP.NET dashboard (REST + SignalR)
-- `src/UltimateImapMcp.ImapClient/` — IMAP sync, repositories
-- `src/UltimateImapMcp.Llm/` — LLM analysis (API + ACP pool)
-- `src/UltimateImapMcp.Core/` — Config, DB, coordination
-- `src/UltimateImapMcp.Queue/` — Operation queue with priority tiers
+- `src/AwesomeImapMcp.McpServer/` — MCP server entry point + tool definitions
+- `src/AwesomeImapMcp.Dashboard/` — ASP.NET dashboard (REST + SignalR)
+- `src/AwesomeImapMcp.ImapClient/` — IMAP sync, repositories
+- `src/AwesomeImapMcp.Llm/` — LLM analysis (API + ACP pool)
+- `src/AwesomeImapMcp.Core/` — Config, DB, coordination
+- `src/AwesomeImapMcp.Queue/` — Operation queue with priority tiers
 - `dashboard/client/` — React SPA (Vite + TailwindCSS)
 - `tests/` — xUnit test projects mirroring the layout above
 - `docs/` — User and developer documentation
@@ -60,7 +60,7 @@ Open an issue with:
 - The version / commit
 - Provider (Gmail, Outlook, Yahoo, Zoho, etc.)
 - Steps to reproduce
-- Relevant logs from `~/.ultimate-imap-mcp/logs/` (redact account IDs and message contents)
+- Relevant logs from `~/.awesome-imap-mcp/logs/` (redact account IDs and message contents)
 
 For security issues, see [SECURITY.md](SECURITY.md).
 

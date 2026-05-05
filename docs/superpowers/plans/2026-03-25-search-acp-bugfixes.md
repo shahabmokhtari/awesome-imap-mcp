@@ -15,39 +15,39 @@
 ### Subsystem A: Enhanced Search
 | File | Responsibility |
 |------|---------------|
-| `src/UltimateImapMcp.ImapClient/Repositories/MessageRepository.cs` | Add `SearchAdvanced()` method with date/from/to/folder/subject/order filters |
-| `src/UltimateImapMcp.McpServer/Tools/SearchTools.cs` | Add new params to `SearchEmails`, add `serverSearch` flag |
-| `src/UltimateImapMcp.ImapClient/ImapSyncService.cs` | Add `ServerSearchAsync()` for live IMAP SEARCH |
-| `src/UltimateImapMcp.ImapClient/SyncManager.cs` | Expose `ServerSearchAsync()` through connection manager |
-| `tests/UltimateImapMcp.ImapClient.Tests/Repositories/MessageRepositoryTests.cs` | Tests for SearchAdvanced |
+| `src/AwesomeImapMcp.ImapClient/Repositories/MessageRepository.cs` | Add `SearchAdvanced()` method with date/from/to/folder/subject/order filters |
+| `src/AwesomeImapMcp.McpServer/Tools/SearchTools.cs` | Add new params to `SearchEmails`, add `serverSearch` flag |
+| `src/AwesomeImapMcp.ImapClient/ImapSyncService.cs` | Add `ServerSearchAsync()` for live IMAP SEARCH |
+| `src/AwesomeImapMcp.ImapClient/SyncManager.cs` | Expose `ServerSearchAsync()` through connection manager |
+| `tests/AwesomeImapMcp.ImapClient.Tests/Repositories/MessageRepositoryTests.cs` | Tests for SearchAdvanced |
 
 ### Subsystem B: ACP Client Pool
 | File | Responsibility |
 |------|---------------|
-| `src/UltimateImapMcp.Llm/Acp/IAcpClientPool.cs` | Interface: `SendPromptAsync(prompt, model?, ct)` returns string |
-| `src/UltimateImapMcp.Llm/Acp/AcpClientPool.cs` | Pool implementation: N clients, Channel-based queue, serialized requests |
-| `src/UltimateImapMcp.Llm/Acp/AcpProviderFactory.cs` | Creates provider-specific AcpClient (claude vs copilot command/args) |
-| `src/UltimateImapMcp.Llm/Acp/AcpClient.cs` | Existing — minor changes (add metrics recording, verbose logging) |
-| `src/UltimateImapMcp.Llm/Acp/AcpEmailAnalyzer.cs` | Rewrite to use `IAcpClientPool` instead of managing its own client |
-| `src/UltimateImapMcp.Core/Configuration/AppConfig.cs` | Expand `AcpConfig` with pool_size, provider-specific settings |
-| `src/UltimateImapMcp.Core/Telemetry.cs` | Add ACP histograms and counters |
-| `src/UltimateImapMcp.McpServer/Program.cs` | Register `IAcpClientPool` as singleton, wire DI |
-| `src/UltimateImapMcp.Dashboard/LlmApi.cs` | Use `IAcpClientPool` for test endpoint instead of one-off client |
-| `tests/UltimateImapMcp.Llm.Tests/Acp/AcpClientPoolTests.cs` | Pool behavior tests |
+| `src/AwesomeImapMcp.Llm/Acp/IAcpClientPool.cs` | Interface: `SendPromptAsync(prompt, model?, ct)` returns string |
+| `src/AwesomeImapMcp.Llm/Acp/AcpClientPool.cs` | Pool implementation: N clients, Channel-based queue, serialized requests |
+| `src/AwesomeImapMcp.Llm/Acp/AcpProviderFactory.cs` | Creates provider-specific AcpClient (claude vs copilot command/args) |
+| `src/AwesomeImapMcp.Llm/Acp/AcpClient.cs` | Existing — minor changes (add metrics recording, verbose logging) |
+| `src/AwesomeImapMcp.Llm/Acp/AcpEmailAnalyzer.cs` | Rewrite to use `IAcpClientPool` instead of managing its own client |
+| `src/AwesomeImapMcp.Core/Configuration/AppConfig.cs` | Expand `AcpConfig` with pool_size, provider-specific settings |
+| `src/AwesomeImapMcp.Core/Telemetry.cs` | Add ACP histograms and counters |
+| `src/AwesomeImapMcp.McpServer/Program.cs` | Register `IAcpClientPool` as singleton, wire DI |
+| `src/AwesomeImapMcp.Dashboard/LlmApi.cs` | Use `IAcpClientPool` for test endpoint instead of one-off client |
+| `tests/AwesomeImapMcp.Llm.Tests/Acp/AcpClientPoolTests.cs` | Pool behavior tests |
 
 ### Subsystem C: Bug Fixes
 | File | Responsibility |
 |------|---------------|
-| `src/UltimateImapMcp.McpServer/Tools/ReportTools.cs` | Fix `top_senders` — fall back to 0 days if no results with default window |
-| `src/UltimateImapMcp.ImapClient/Repositories/MessageRepository.cs` | Fix `GetTopSenders` to handle edge cases |
+| `src/AwesomeImapMcp.McpServer/Tools/ReportTools.cs` | Fix `top_senders` — fall back to 0 days if no results with default window |
+| `src/AwesomeImapMcp.ImapClient/Repositories/MessageRepository.cs` | Fix `GetTopSenders` to handle edge cases |
 
 ---
 
 ## Task 1: Enhanced Search — `SearchAdvanced` in MessageRepository
 
 **Files:**
-- Modify: `src/UltimateImapMcp.ImapClient/Repositories/MessageRepository.cs`
-- Test: `tests/UltimateImapMcp.ImapClient.Tests/Repositories/MessageRepositoryTests.cs`
+- Modify: `src/AwesomeImapMcp.ImapClient/Repositories/MessageRepository.cs`
+- Test: `tests/AwesomeImapMcp.ImapClient.Tests/Repositories/MessageRepositoryTests.cs`
 
 - [ ] **Step 1: Add `SearchAdvanced` method**
 
@@ -192,7 +192,7 @@ public void SearchAdvanced_BySubject_FiltersCorrectly()
 
 - [ ] **Step 3: Run tests, verify pass**
 
-Run: `dotnet test tests/UltimateImapMcp.ImapClient.Tests`
+Run: `dotnet test tests/AwesomeImapMcp.ImapClient.Tests`
 
 - [ ] **Step 4: Commit**
 
@@ -205,7 +205,7 @@ feat: add SearchAdvanced with date/from/to/subject/folder/order filtering
 ## Task 2: Enhanced Search — Update MCP SearchEmails Tool
 
 **Files:**
-- Modify: `src/UltimateImapMcp.McpServer/Tools/SearchTools.cs`
+- Modify: `src/AwesomeImapMcp.McpServer/Tools/SearchTools.cs`
 
 - [ ] **Step 1: Update SearchEmails with new parameters**
 
@@ -339,8 +339,8 @@ feat: add advanced search filters and server_search to SearchEmails MCP tool
 ## Task 3: Enhanced Search — Server-Side IMAP Search
 
 **Files:**
-- Modify: `src/UltimateImapMcp.ImapClient/ImapSyncService.cs`
-- Modify: `src/UltimateImapMcp.ImapClient/SyncManager.cs`
+- Modify: `src/AwesomeImapMcp.ImapClient/ImapSyncService.cs`
+- Modify: `src/AwesomeImapMcp.ImapClient/SyncManager.cs`
 
 - [ ] **Step 1: Add `ServerSearchAsync` to ImapSyncService**
 
@@ -471,8 +471,8 @@ feat: add server-side IMAP search with automatic caching of results
 ## Task 4: ACP Client Pool — Config and Telemetry
 
 **Files:**
-- Modify: `src/UltimateImapMcp.Core/Configuration/AppConfig.cs`
-- Modify: `src/UltimateImapMcp.Core/Telemetry.cs`
+- Modify: `src/AwesomeImapMcp.Core/Configuration/AppConfig.cs`
+- Modify: `src/AwesomeImapMcp.Core/Telemetry.cs`
 - Modify: `config.example.json`
 
 - [ ] **Step 1: Expand AcpConfig**
@@ -566,15 +566,15 @@ feat: add ACP pool config (provider, pool_size, per-provider command) and teleme
 ## Task 5: ACP Client Pool — Core Pool Implementation
 
 **Files:**
-- Create: `src/UltimateImapMcp.Llm/Acp/IAcpClientPool.cs`
-- Create: `src/UltimateImapMcp.Llm/Acp/AcpClientPool.cs`
-- Modify: `src/UltimateImapMcp.Llm/Acp/AcpClient.cs`
-- Test: `tests/UltimateImapMcp.Llm.Tests/Acp/AcpClientPoolTests.cs`
+- Create: `src/AwesomeImapMcp.Llm/Acp/IAcpClientPool.cs`
+- Create: `src/AwesomeImapMcp.Llm/Acp/AcpClientPool.cs`
+- Modify: `src/AwesomeImapMcp.Llm/Acp/AcpClient.cs`
+- Test: `tests/AwesomeImapMcp.Llm.Tests/Acp/AcpClientPoolTests.cs`
 
 - [ ] **Step 1: Create IAcpClientPool interface**
 
 ```csharp
-namespace UltimateImapMcp.Llm.Acp;
+namespace AwesomeImapMcp.Llm.Acp;
 
 /// <summary>
 /// Manages a pool of ACP agent processes. Requests are queued and dispatched
@@ -610,10 +610,10 @@ using System.Diagnostics;
 using System.Text;
 using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
-using UltimateImapMcp.Core;
-using UltimateImapMcp.Core.Configuration;
+using AwesomeImapMcp.Core;
+using AwesomeImapMcp.Core.Configuration;
 
-namespace UltimateImapMcp.Llm.Acp;
+namespace AwesomeImapMcp.Llm.Acp;
 
 public sealed class AcpClientPool : IAcpClientPool
 {
@@ -867,15 +867,15 @@ feat: add ACP client pool with queue-based request serialization and metrics
 ## Task 6: ACP Client Pool — Wire into DI and Consumers
 
 **Files:**
-- Modify: `src/UltimateImapMcp.Llm/Acp/AcpEmailAnalyzer.cs`
-- Modify: `src/UltimateImapMcp.McpServer/Program.cs`
-- Modify: `src/UltimateImapMcp.Dashboard/LlmApi.cs`
-- Modify: `src/UltimateImapMcp.Dashboard/DashboardHost.cs`
+- Modify: `src/AwesomeImapMcp.Llm/Acp/AcpEmailAnalyzer.cs`
+- Modify: `src/AwesomeImapMcp.McpServer/Program.cs`
+- Modify: `src/AwesomeImapMcp.Dashboard/LlmApi.cs`
+- Modify: `src/AwesomeImapMcp.Dashboard/DashboardHost.cs`
 
 - [ ] **Step 1: Rewrite AcpEmailAnalyzer to use IAcpClientPool**
 
 ```csharp
-namespace UltimateImapMcp.Llm.Acp;
+namespace AwesomeImapMcp.Llm.Acp;
 
 public class AcpEmailAnalyzer : IEmailAnalyzer
 {
@@ -1025,8 +1025,8 @@ feat: wire ACP pool into DI, email analyzer, and dashboard test endpoint
 ## Task 7: Bug Fixes — top_senders and MCP Tools
 
 **Files:**
-- Modify: `src/UltimateImapMcp.ImapClient/Repositories/MessageRepository.cs`
-- Modify: `src/UltimateImapMcp.McpServer/Tools/ReportTools.cs`
+- Modify: `src/AwesomeImapMcp.ImapClient/Repositories/MessageRepository.cs`
+- Modify: `src/AwesomeImapMcp.McpServer/Tools/ReportTools.cs`
 
 - [ ] **Step 1: Fix GetTopSenders — try without date filter if no results**
 

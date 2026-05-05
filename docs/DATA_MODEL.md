@@ -276,5 +276,5 @@ CREATE TABLE dashboard_sessions (
 - JSON fields use SQLite's built-in json functions for querying (e.g., `json_extract(flags, '$')`)
 - WAL mode enabled at database creation: `PRAGMA journal_mode=WAL;`
 - Foreign keys enabled: `PRAGMA foreign_keys=ON;`
-- Database file default location: `~/.ultimate-imap-mcp/cache.db`
+- Database file default location: `~/.awesome-imap-mcp/cache.db`
 - Encryption key for credentials derived from machine ID + user-provided passphrase (optional)

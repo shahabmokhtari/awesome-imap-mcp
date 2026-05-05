@@ -8,7 +8,7 @@
 
 **Tech Stack:** .NET 10, C#, MailKit/MimeKit, Microsoft.Data.Sqlite, ModelContextProtocol (official C# SDK v1.0), xUnit, System.Text.Json
 
-**Spec reference:** `docs/superpowers/specs/2026-03-18-ultimate-imap-mcp-design.md`
+**Spec reference:** `docs/superpowers/specs/2026-03-18-awesome-imap-mcp-design.md`
 **Schema reference:** `docs/DATA_MODEL.md`
 
 ---
@@ -19,8 +19,8 @@
 
 ```
 src/
-  UltimateImapMcp.Core/
-    UltimateImapMcp.Core.csproj
+  AwesomeImapMcp.Core/
+    AwesomeImapMcp.Core.csproj
     Configuration/
       AppConfig.cs                  # Top-level config model (ServerConfig, AccountConfig, CacheConfig, etc.)
       ConfigLoader.cs               # JSON loading, env var substitution, validation, defaults
@@ -38,8 +38,8 @@ src/
       ProviderProfile.cs            # ProviderProfile record type + SearchCapabilities flags
       ProviderProfileRegistry.cs    # Registry with auto-detection from hostname
 
-  UltimateImapMcp.ImapClient/
-    UltimateImapMcp.ImapClient.csproj
+  AwesomeImapMcp.ImapClient/
+    AwesomeImapMcp.ImapClient.csproj
     ImapConnectionManager.cs        # MailKit ImapClient wrapper, connect/auth (pooling + backoff deferred to Phase 3)
     FolderMapper.cs                 # Maps FolderRole to provider-specific IMAP paths
     MessageParser.cs                # Converts MailKit IMessageSummary → domain CachedMessage
@@ -51,8 +51,8 @@ src/
       MessageRepository.cs          # CRUD + FTS queries for messages table
       AttachmentRepository.cs       # CRUD for attachments table
 
-  UltimateImapMcp.McpServer/
-    UltimateImapMcp.McpServer.csproj
+  AwesomeImapMcp.McpServer/
+    AwesomeImapMcp.McpServer.csproj
     Program.cs                      # Entry point: Host builder, DI, MCP server with stdio
     Tools/
       AccountTools.cs               # list_accounts, get_account_status
@@ -65,8 +65,8 @@ src/
 
 ```
 tests/
-  UltimateImapMcp.Core.Tests/
-    UltimateImapMcp.Core.Tests.csproj
+  AwesomeImapMcp.Core.Tests/
+    AwesomeImapMcp.Core.Tests.csproj
     Configuration/
       ConfigLoaderTests.cs
     Database/
@@ -77,8 +77,8 @@ tests/
     Providers/
       ProviderProfileRegistryTests.cs
 
-  UltimateImapMcp.ImapClient.Tests/
-    UltimateImapMcp.ImapClient.Tests.csproj
+  AwesomeImapMcp.ImapClient.Tests/
+    AwesomeImapMcp.ImapClient.Tests.csproj
     FolderMapperTests.cs
     MessageParserTests.cs
     ThreadBuilderTests.cs
@@ -98,12 +98,12 @@ Create the .NET solution with all projects, references, and shared build configu
 
 **Files:**
 - Create: `Directory.Build.props`
-- Create: `UltimateImapMcp.sln`
-- Create: `src/UltimateImapMcp.Core/UltimateImapMcp.Core.csproj`
-- Create: `src/UltimateImapMcp.ImapClient/UltimateImapMcp.ImapClient.csproj`
-- Create: `src/UltimateImapMcp.McpServer/UltimateImapMcp.McpServer.csproj`
-- Create: `tests/UltimateImapMcp.Core.Tests/UltimateImapMcp.Core.Tests.csproj`
-- Create: `tests/UltimateImapMcp.ImapClient.Tests/UltimateImapMcp.ImapClient.Tests.csproj`
+- Create: `AwesomeImapMcp.sln`
+- Create: `src/AwesomeImapMcp.Core/AwesomeImapMcp.Core.csproj`
+- Create: `src/AwesomeImapMcp.ImapClient/AwesomeImapMcp.ImapClient.csproj`
+- Create: `src/AwesomeImapMcp.McpServer/AwesomeImapMcp.McpServer.csproj`
+- Create: `tests/AwesomeImapMcp.Core.Tests/AwesomeImapMcp.Core.Tests.csproj`
+- Create: `tests/AwesomeImapMcp.ImapClient.Tests/AwesomeImapMcp.ImapClient.Tests.csproj`
 
 - [ ] **Step 1: Create Directory.Build.props**
 
@@ -123,61 +123,61 @@ Create the .NET solution with all projects, references, and shared build configu
 - [ ] **Step 2: Create the solution and source projects**
 
 ```bash
-dotnet new sln -n UltimateImapMcp
+dotnet new sln -n AwesomeImapMcp
 
 # Source projects
-dotnet new classlib -n UltimateImapMcp.Core -o src/UltimateImapMcp.Core
-dotnet new classlib -n UltimateImapMcp.ImapClient -o src/UltimateImapMcp.ImapClient
-dotnet new console -n UltimateImapMcp.McpServer -o src/UltimateImapMcp.McpServer
+dotnet new classlib -n AwesomeImapMcp.Core -o src/AwesomeImapMcp.Core
+dotnet new classlib -n AwesomeImapMcp.ImapClient -o src/AwesomeImapMcp.ImapClient
+dotnet new console -n AwesomeImapMcp.McpServer -o src/AwesomeImapMcp.McpServer
 
 # Test projects
-dotnet new xunit -n UltimateImapMcp.Core.Tests -o tests/UltimateImapMcp.Core.Tests
-dotnet new xunit -n UltimateImapMcp.ImapClient.Tests -o tests/UltimateImapMcp.ImapClient.Tests
+dotnet new xunit -n AwesomeImapMcp.Core.Tests -o tests/AwesomeImapMcp.Core.Tests
+dotnet new xunit -n AwesomeImapMcp.ImapClient.Tests -o tests/AwesomeImapMcp.ImapClient.Tests
 
 # Add all to solution
-dotnet sln add src/UltimateImapMcp.Core
-dotnet sln add src/UltimateImapMcp.ImapClient
-dotnet sln add src/UltimateImapMcp.McpServer
-dotnet sln add tests/UltimateImapMcp.Core.Tests
-dotnet sln add tests/UltimateImapMcp.ImapClient.Tests
+dotnet sln add src/AwesomeImapMcp.Core
+dotnet sln add src/AwesomeImapMcp.ImapClient
+dotnet sln add src/AwesomeImapMcp.McpServer
+dotnet sln add tests/AwesomeImapMcp.Core.Tests
+dotnet sln add tests/AwesomeImapMcp.ImapClient.Tests
 ```
 
 - [ ] **Step 3: Add project references**
 
 ```bash
 # ImapClient depends on Core
-dotnet add src/UltimateImapMcp.ImapClient reference src/UltimateImapMcp.Core
+dotnet add src/AwesomeImapMcp.ImapClient reference src/AwesomeImapMcp.Core
 
 # McpServer depends on Core + ImapClient
-dotnet add src/UltimateImapMcp.McpServer reference src/UltimateImapMcp.Core
-dotnet add src/UltimateImapMcp.McpServer reference src/UltimateImapMcp.ImapClient
+dotnet add src/AwesomeImapMcp.McpServer reference src/AwesomeImapMcp.Core
+dotnet add src/AwesomeImapMcp.McpServer reference src/AwesomeImapMcp.ImapClient
 
 # Test projects reference their targets
-dotnet add tests/UltimateImapMcp.Core.Tests reference src/UltimateImapMcp.Core
-dotnet add tests/UltimateImapMcp.ImapClient.Tests reference src/UltimateImapMcp.Core
-dotnet add tests/UltimateImapMcp.ImapClient.Tests reference src/UltimateImapMcp.ImapClient
+dotnet add tests/AwesomeImapMcp.Core.Tests reference src/AwesomeImapMcp.Core
+dotnet add tests/AwesomeImapMcp.ImapClient.Tests reference src/AwesomeImapMcp.Core
+dotnet add tests/AwesomeImapMcp.ImapClient.Tests reference src/AwesomeImapMcp.ImapClient
 ```
 
 - [ ] **Step 4: Add NuGet packages**
 
 ```bash
 # Core
-dotnet add src/UltimateImapMcp.Core package Microsoft.Data.Sqlite
-dotnet add src/UltimateImapMcp.Core package System.Text.Json
+dotnet add src/AwesomeImapMcp.Core package Microsoft.Data.Sqlite
+dotnet add src/AwesomeImapMcp.Core package System.Text.Json
 
 # ImapClient
-dotnet add src/UltimateImapMcp.ImapClient package MailKit
+dotnet add src/AwesomeImapMcp.ImapClient package MailKit
 
 # McpServer
-dotnet add src/UltimateImapMcp.McpServer package ModelContextProtocol
-dotnet add src/UltimateImapMcp.McpServer package Microsoft.Extensions.Hosting
+dotnet add src/AwesomeImapMcp.McpServer package ModelContextProtocol
+dotnet add src/AwesomeImapMcp.McpServer package Microsoft.Extensions.Hosting
 ```
 
 - [ ] **Step 5: Delete auto-generated Class1.cs files, verify build**
 
 ```bash
-rm src/UltimateImapMcp.Core/Class1.cs
-rm src/UltimateImapMcp.ImapClient/Class1.cs
+rm src/AwesomeImapMcp.Core/Class1.cs
+rm src/AwesomeImapMcp.ImapClient/Class1.cs
 dotnet build
 ```
 
@@ -203,14 +203,14 @@ git commit -m "feat: scaffold .NET solution with Core, ImapClient, McpServer pro
 ### Task 2: Core Types and Enums
 
 **Files:**
-- Create: `src/UltimateImapMcp.Core/Types/Enums.cs`
-- Create: `src/UltimateImapMcp.Core/Providers/ProviderProfile.cs`
+- Create: `src/AwesomeImapMcp.Core/Types/Enums.cs`
+- Create: `src/AwesomeImapMcp.Core/Providers/ProviderProfile.cs`
 
 - [ ] **Step 1: Create enums**
 
 ```csharp
-// src/UltimateImapMcp.Core/Types/Enums.cs
-namespace UltimateImapMcp.Core.Types;
+// src/AwesomeImapMcp.Core/Types/Enums.cs
+namespace AwesomeImapMcp.Core.Types;
 
 public enum FolderRole
 {
@@ -254,10 +254,10 @@ public enum SearchCapabilities
 - [ ] **Step 2: Create ProviderProfile record**
 
 ```csharp
-// src/UltimateImapMcp.Core/Providers/ProviderProfile.cs
-namespace UltimateImapMcp.Core.Providers;
+// src/AwesomeImapMcp.Core/Providers/ProviderProfile.cs
+namespace AwesomeImapMcp.Core.Providers;
 
-using UltimateImapMcp.Core.Types;
+using AwesomeImapMcp.Core.Types;
 
 public record ProviderProfile
 {
@@ -291,17 +291,17 @@ git commit -m "feat(core): add type enums and ProviderProfile record"
 ### Task 3: Configuration
 
 **Files:**
-- Create: `src/UltimateImapMcp.Core/Configuration/AppConfig.cs`
-- Create: `src/UltimateImapMcp.Core/Configuration/ConfigLoader.cs`
-- Create: `tests/UltimateImapMcp.Core.Tests/Configuration/ConfigLoaderTests.cs`
+- Create: `src/AwesomeImapMcp.Core/Configuration/AppConfig.cs`
+- Create: `src/AwesomeImapMcp.Core/Configuration/ConfigLoader.cs`
+- Create: `tests/AwesomeImapMcp.Core.Tests/Configuration/ConfigLoaderTests.cs`
 
 - [ ] **Step 1: Write failing tests for ConfigLoader**
 
 ```csharp
-// tests/UltimateImapMcp.Core.Tests/Configuration/ConfigLoaderTests.cs
-using UltimateImapMcp.Core.Configuration;
+// tests/AwesomeImapMcp.Core.Tests/Configuration/ConfigLoaderTests.cs
+using AwesomeImapMcp.Core.Configuration;
 
-namespace UltimateImapMcp.Core.Tests.Configuration;
+namespace AwesomeImapMcp.Core.Tests.Configuration;
 
 public class ConfigLoaderTests
 {
@@ -426,7 +426,7 @@ public class ConfigLoaderTests
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-dotnet test tests/UltimateImapMcp.Core.Tests
+dotnet test tests/AwesomeImapMcp.Core.Tests
 ```
 
 Expected: FAIL — `ConfigLoader` class does not exist.
@@ -434,11 +434,11 @@ Expected: FAIL — `ConfigLoader` class does not exist.
 - [ ] **Step 3: Create AppConfig model classes**
 
 ```csharp
-// src/UltimateImapMcp.Core/Configuration/AppConfig.cs
+// src/AwesomeImapMcp.Core/Configuration/AppConfig.cs
 using System.Text.Json.Serialization;
-using UltimateImapMcp.Core.Types;
+using AwesomeImapMcp.Core.Types;
 
-namespace UltimateImapMcp.Core.Configuration;
+namespace AwesomeImapMcp.Core.Configuration;
 
 public class AppConfig
 {
@@ -545,7 +545,7 @@ public class FolderSyncConfig
 public class CacheConfig
 {
     [JsonPropertyName("db_path")]
-    public string DbPath { get; set; } = "~/.ultimate-imap-mcp/cache.db";
+    public string DbPath { get; set; } = "~/.awesome-imap-mcp/cache.db";
 
     [JsonPropertyName("max_size_mb")]
     public int MaxSizeMb { get; set; } = 500;
@@ -621,11 +621,11 @@ public class MetricsConfig
 - [ ] **Step 4: Create ConfigLoader**
 
 ```csharp
-// src/UltimateImapMcp.Core/Configuration/ConfigLoader.cs
+// src/AwesomeImapMcp.Core/Configuration/ConfigLoader.cs
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
-namespace UltimateImapMcp.Core.Configuration;
+namespace AwesomeImapMcp.Core.Configuration;
 
 public static partial class ConfigLoader
 {
@@ -677,7 +677,7 @@ public static partial class ConfigLoader
 - [ ] **Step 5: Run tests to verify they pass**
 
 ```bash
-dotnet test tests/UltimateImapMcp.Core.Tests
+dotnet test tests/AwesomeImapMcp.Core.Tests
 ```
 
 Expected: All 4 ConfigLoader tests pass.
@@ -696,18 +696,18 @@ git commit -m "feat(core): add configuration model and JSON config loader with e
 ### Task 4: Database and Migration Runner
 
 **Files:**
-- Create: `src/UltimateImapMcp.Core/Database/Database.cs`
-- Create: `src/UltimateImapMcp.Core/Database/MigrationRunner.cs`
-- Create: `tests/UltimateImapMcp.Core.Tests/Database/DatabaseTests.cs`
-- Create: `tests/UltimateImapMcp.Core.Tests/Database/MigrationRunnerTests.cs`
+- Create: `src/AwesomeImapMcp.Core/Database/Database.cs`
+- Create: `src/AwesomeImapMcp.Core/Database/MigrationRunner.cs`
+- Create: `tests/AwesomeImapMcp.Core.Tests/Database/DatabaseTests.cs`
+- Create: `tests/AwesomeImapMcp.Core.Tests/Database/MigrationRunnerTests.cs`
 
 - [ ] **Step 1: Write failing tests for Database**
 
 ```csharp
-// tests/UltimateImapMcp.Core.Tests/Database/DatabaseTests.cs
-using UltimateImapMcp.Core.Database;
+// tests/AwesomeImapMcp.Core.Tests/Database/DatabaseTests.cs
+using AwesomeImapMcp.Core.Database;
 
-namespace UltimateImapMcp.Core.Tests.Database;
+namespace AwesomeImapMcp.Core.Tests.Database;
 
 public class DatabaseTests : IDisposable
 {
@@ -771,11 +771,11 @@ public class DatabaseTests : IDisposable
 - [ ] **Step 2: Write failing tests for MigrationRunner**
 
 ```csharp
-// tests/UltimateImapMcp.Core.Tests/Database/MigrationRunnerTests.cs
+// tests/AwesomeImapMcp.Core.Tests/Database/MigrationRunnerTests.cs
 using Microsoft.Data.Sqlite;
-using UltimateImapMcp.Core.Database;
+using AwesomeImapMcp.Core.Database;
 
-namespace UltimateImapMcp.Core.Tests.Database;
+namespace AwesomeImapMcp.Core.Tests.Database;
 
 public class MigrationRunnerTests : IDisposable
 {
@@ -872,7 +872,7 @@ public class MigrationRunnerTests : IDisposable
 - [ ] **Step 3: Run tests to verify they fail**
 
 ```bash
-dotnet test tests/UltimateImapMcp.Core.Tests
+dotnet test tests/AwesomeImapMcp.Core.Tests
 ```
 
 Expected: FAIL — `AppDatabase` class does not exist.
@@ -880,10 +880,10 @@ Expected: FAIL — `AppDatabase` class does not exist.
 - [ ] **Step 4: Implement AppDatabase**
 
 ```csharp
-// src/UltimateImapMcp.Core/Database/Database.cs
+// src/AwesomeImapMcp.Core/Database/Database.cs
 using Microsoft.Data.Sqlite;
 
-namespace UltimateImapMcp.Core.Database;
+namespace AwesomeImapMcp.Core.Database;
 
 public sealed class AppDatabase : IDisposable
 {
@@ -962,11 +962,11 @@ public sealed class AppDatabase : IDisposable
 - [ ] **Step 5: Implement MigrationRunner**
 
 ```csharp
-// src/UltimateImapMcp.Core/Database/MigrationRunner.cs
+// src/AwesomeImapMcp.Core/Database/MigrationRunner.cs
 using System.Reflection;
 using Microsoft.Data.Sqlite;
 
-namespace UltimateImapMcp.Core.Database;
+namespace AwesomeImapMcp.Core.Database;
 
 public static class MigrationRunner
 {
@@ -1034,7 +1034,7 @@ public static class MigrationRunner
     private static List<(int Version, string Sql)> LoadMigrations()
     {
         var assembly = Assembly.GetExecutingAssembly();
-        var prefix = "UltimateImapMcp.Core.Database.Migrations.";
+        var prefix = "AwesomeImapMcp.Core.Database.Migrations.";
         var migrations = new List<(int Version, string Sql)>();
 
         foreach (var resourceName in assembly.GetManifestResourceNames()
@@ -1058,7 +1058,7 @@ public static class MigrationRunner
 - [ ] **Step 6: Run tests to verify they fail on missing migration**
 
 ```bash
-dotnet test tests/UltimateImapMcp.Core.Tests
+dotnet test tests/AwesomeImapMcp.Core.Tests
 ```
 
 Expected: Database tests pass, MigrationRunner tests fail on missing migration file (no tables created).
@@ -1068,12 +1068,12 @@ Expected: Database tests pass, MigrationRunner tests fail on missing migration f
 ### Task 5: Initial Migration
 
 **Files:**
-- Create: `src/UltimateImapMcp.Core/Database/Migrations/001_initial.sql`
-- Modify: `src/UltimateImapMcp.Core/UltimateImapMcp.Core.csproj` (embed migration as resource)
+- Create: `src/AwesomeImapMcp.Core/Database/Migrations/001_initial.sql`
+- Modify: `src/AwesomeImapMcp.Core/AwesomeImapMcp.Core.csproj` (embed migration as resource)
 
 - [ ] **Step 1: Add EmbeddedResource to csproj**
 
-Add this to `src/UltimateImapMcp.Core/UltimateImapMcp.Core.csproj` inside `<Project>`:
+Add this to `src/AwesomeImapMcp.Core/AwesomeImapMcp.Core.csproj` inside `<Project>`:
 
 ```xml
 <ItemGroup>
@@ -1086,7 +1086,7 @@ Add this to `src/UltimateImapMcp.Core/UltimateImapMcp.Core.csproj` inside `<Proj
 This contains all Phase 1 tables from DATA_MODEL.md: accounts, folders, messages, messages_fts (with triggers), attachments.
 
 ```sql
--- src/UltimateImapMcp.Core/Database/Migrations/001_initial.sql
+-- src/AwesomeImapMcp.Core/Database/Migrations/001_initial.sql
 -- Phase 1 tables: accounts, folders, messages, FTS, attachments
 
 CREATE TABLE accounts (
@@ -1207,7 +1207,7 @@ CREATE INDEX idx_attachments_message ON attachments(message_id);
 - [ ] **Step 3: Run all tests**
 
 ```bash
-dotnet test tests/UltimateImapMcp.Core.Tests
+dotnet test tests/AwesomeImapMcp.Core.Tests
 ```
 
 Expected: All Database and MigrationRunner tests pass.
@@ -1224,17 +1224,17 @@ git commit -m "feat(core): add SQLite database with WAL mode, migration runner, 
 ### Task 6: Encryption
 
 **Files:**
-- Create: `src/UltimateImapMcp.Core/Encryption/CredentialEncryptor.cs`
-- Create: `src/UltimateImapMcp.Core/Encryption/MachineId.cs`
-- Create: `tests/UltimateImapMcp.Core.Tests/Encryption/CredentialEncryptorTests.cs`
+- Create: `src/AwesomeImapMcp.Core/Encryption/CredentialEncryptor.cs`
+- Create: `src/AwesomeImapMcp.Core/Encryption/MachineId.cs`
+- Create: `tests/AwesomeImapMcp.Core.Tests/Encryption/CredentialEncryptorTests.cs`
 
 - [ ] **Step 1: Write failing tests**
 
 ```csharp
-// tests/UltimateImapMcp.Core.Tests/Encryption/CredentialEncryptorTests.cs
-using UltimateImapMcp.Core.Encryption;
+// tests/AwesomeImapMcp.Core.Tests/Encryption/CredentialEncryptorTests.cs
+using AwesomeImapMcp.Core.Encryption;
 
-namespace UltimateImapMcp.Core.Tests.Encryption;
+namespace AwesomeImapMcp.Core.Tests.Encryption;
 
 public class CredentialEncryptorTests
 {
@@ -1289,7 +1289,7 @@ public class CredentialEncryptorTests
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-dotnet test tests/UltimateImapMcp.Core.Tests
+dotnet test tests/AwesomeImapMcp.Core.Tests
 ```
 
 Expected: FAIL — `CredentialEncryptor` class does not exist.
@@ -1297,12 +1297,12 @@ Expected: FAIL — `CredentialEncryptor` class does not exist.
 - [ ] **Step 3: Implement MachineId**
 
 ```csharp
-// src/UltimateImapMcp.Core/Encryption/MachineId.cs
+// src/AwesomeImapMcp.Core/Encryption/MachineId.cs
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 
-namespace UltimateImapMcp.Core.Encryption;
+namespace AwesomeImapMcp.Core.Encryption;
 
 public static class MachineId
 {
@@ -1369,11 +1369,11 @@ public static class MachineId
 - [ ] **Step 4: Implement CredentialEncryptor**
 
 ```csharp
-// src/UltimateImapMcp.Core/Encryption/CredentialEncryptor.cs
+// src/AwesomeImapMcp.Core/Encryption/CredentialEncryptor.cs
 using System.Security.Cryptography;
 using System.Text;
 
-namespace UltimateImapMcp.Core.Encryption;
+namespace AwesomeImapMcp.Core.Encryption;
 
 public sealed class CredentialEncryptor
 {
@@ -1451,7 +1451,7 @@ public sealed class CredentialEncryptor
 - [ ] **Step 5: Run tests**
 
 ```bash
-dotnet test tests/UltimateImapMcp.Core.Tests
+dotnet test tests/AwesomeImapMcp.Core.Tests
 ```
 
 Expected: All encryption tests pass.
@@ -1468,17 +1468,17 @@ git commit -m "feat(core): add AES-256-GCM credential encryption with PBKDF2 key
 ### Task 7: Provider Profile Registry
 
 **Files:**
-- Create: `src/UltimateImapMcp.Core/Providers/ProviderProfileRegistry.cs`
-- Create: `tests/UltimateImapMcp.Core.Tests/Providers/ProviderProfileRegistryTests.cs`
+- Create: `src/AwesomeImapMcp.Core/Providers/ProviderProfileRegistry.cs`
+- Create: `tests/AwesomeImapMcp.Core.Tests/Providers/ProviderProfileRegistryTests.cs`
 
 - [ ] **Step 1: Write failing tests**
 
 ```csharp
-// tests/UltimateImapMcp.Core.Tests/Providers/ProviderProfileRegistryTests.cs
-using UltimateImapMcp.Core.Providers;
-using UltimateImapMcp.Core.Types;
+// tests/AwesomeImapMcp.Core.Tests/Providers/ProviderProfileRegistryTests.cs
+using AwesomeImapMcp.Core.Providers;
+using AwesomeImapMcp.Core.Types;
 
-namespace UltimateImapMcp.Core.Tests.Providers;
+namespace AwesomeImapMcp.Core.Tests.Providers;
 
 public class ProviderProfileRegistryTests
 {
@@ -1530,7 +1530,7 @@ public class ProviderProfileRegistryTests
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-dotnet test tests/UltimateImapMcp.Core.Tests
+dotnet test tests/AwesomeImapMcp.Core.Tests
 ```
 
 Expected: FAIL — `ProviderProfileRegistry` class does not exist.
@@ -1538,10 +1538,10 @@ Expected: FAIL — `ProviderProfileRegistry` class does not exist.
 - [ ] **Step 3: Implement ProviderProfileRegistry**
 
 ```csharp
-// src/UltimateImapMcp.Core/Providers/ProviderProfileRegistry.cs
-using UltimateImapMcp.Core.Types;
+// src/AwesomeImapMcp.Core/Providers/ProviderProfileRegistry.cs
+using AwesomeImapMcp.Core.Types;
 
-namespace UltimateImapMcp.Core.Providers;
+namespace AwesomeImapMcp.Core.Providers;
 
 public class ProviderProfileRegistry
 {
@@ -1689,7 +1689,7 @@ public class ProviderProfileRegistry
 - [ ] **Step 4: Run tests**
 
 ```bash
-dotnet test tests/UltimateImapMcp.Core.Tests
+dotnet test tests/AwesomeImapMcp.Core.Tests
 ```
 
 Expected: All provider tests pass.
@@ -1708,22 +1708,22 @@ git commit -m "feat(core): add provider profiles with auto-detection for Gmail, 
 ### Task 8: Repositories
 
 **Files:**
-- Create: `src/UltimateImapMcp.ImapClient/Repositories/AccountRepository.cs`
-- Create: `src/UltimateImapMcp.ImapClient/Repositories/FolderRepository.cs`
-- Create: `src/UltimateImapMcp.ImapClient/Repositories/MessageRepository.cs`
-- Create: `src/UltimateImapMcp.ImapClient/Repositories/AttachmentRepository.cs`
-- Create: `tests/UltimateImapMcp.ImapClient.Tests/Repositories/AccountRepositoryTests.cs`
-- Create: `tests/UltimateImapMcp.ImapClient.Tests/Repositories/FolderRepositoryTests.cs`
-- Create: `tests/UltimateImapMcp.ImapClient.Tests/Repositories/MessageRepositoryTests.cs`
+- Create: `src/AwesomeImapMcp.ImapClient/Repositories/AccountRepository.cs`
+- Create: `src/AwesomeImapMcp.ImapClient/Repositories/FolderRepository.cs`
+- Create: `src/AwesomeImapMcp.ImapClient/Repositories/MessageRepository.cs`
+- Create: `src/AwesomeImapMcp.ImapClient/Repositories/AttachmentRepository.cs`
+- Create: `tests/AwesomeImapMcp.ImapClient.Tests/Repositories/AccountRepositoryTests.cs`
+- Create: `tests/AwesomeImapMcp.ImapClient.Tests/Repositories/FolderRepositoryTests.cs`
+- Create: `tests/AwesomeImapMcp.ImapClient.Tests/Repositories/MessageRepositoryTests.cs`
 
 - [ ] **Step 1: Write failing tests for AccountRepository**
 
 ```csharp
-// tests/UltimateImapMcp.ImapClient.Tests/Repositories/AccountRepositoryTests.cs
-using UltimateImapMcp.Core.Database;
-using UltimateImapMcp.ImapClient.Repositories;
+// tests/AwesomeImapMcp.ImapClient.Tests/Repositories/AccountRepositoryTests.cs
+using AwesomeImapMcp.Core.Database;
+using AwesomeImapMcp.ImapClient.Repositories;
 
-namespace UltimateImapMcp.ImapClient.Tests.Repositories;
+namespace AwesomeImapMcp.ImapClient.Tests.Repositories;
 
 public class AccountRepositoryTests : IDisposable
 {
@@ -1785,11 +1785,11 @@ public class AccountRepositoryTests : IDisposable
 - [ ] **Step 2: Write failing tests for FolderRepository**
 
 ```csharp
-// tests/UltimateImapMcp.ImapClient.Tests/Repositories/FolderRepositoryTests.cs
-using UltimateImapMcp.Core.Database;
-using UltimateImapMcp.ImapClient.Repositories;
+// tests/AwesomeImapMcp.ImapClient.Tests/Repositories/FolderRepositoryTests.cs
+using AwesomeImapMcp.Core.Database;
+using AwesomeImapMcp.ImapClient.Repositories;
 
-namespace UltimateImapMcp.ImapClient.Tests.Repositories;
+namespace AwesomeImapMcp.ImapClient.Tests.Repositories;
 
 public class FolderRepositoryTests : IDisposable
 {
@@ -1863,11 +1863,11 @@ public class FolderRepositoryTests : IDisposable
 - [ ] **Step 3: Write failing tests for MessageRepository (including FTS)**
 
 ```csharp
-// tests/UltimateImapMcp.ImapClient.Tests/Repositories/MessageRepositoryTests.cs
-using UltimateImapMcp.Core.Database;
-using UltimateImapMcp.ImapClient.Repositories;
+// tests/AwesomeImapMcp.ImapClient.Tests/Repositories/MessageRepositoryTests.cs
+using AwesomeImapMcp.Core.Database;
+using AwesomeImapMcp.ImapClient.Repositories;
 
-namespace UltimateImapMcp.ImapClient.Tests.Repositories;
+namespace AwesomeImapMcp.ImapClient.Tests.Repositories;
 
 public class MessageRepositoryTests : IDisposable
 {
@@ -1975,7 +1975,7 @@ public class MessageRepositoryTests : IDisposable
 - [ ] **Step 3: Run tests to verify they fail**
 
 ```bash
-dotnet test tests/UltimateImapMcp.ImapClient.Tests
+dotnet test tests/AwesomeImapMcp.ImapClient.Tests
 ```
 
 Expected: FAIL — repository classes do not exist.
@@ -1983,10 +1983,10 @@ Expected: FAIL — repository classes do not exist.
 - [ ] **Step 4: Implement AccountRepository**
 
 ```csharp
-// src/UltimateImapMcp.ImapClient/Repositories/AccountRepository.cs
-using UltimateImapMcp.Core.Database;
+// src/AwesomeImapMcp.ImapClient/Repositories/AccountRepository.cs
+using AwesomeImapMcp.Core.Database;
 
-namespace UltimateImapMcp.ImapClient.Repositories;
+namespace AwesomeImapMcp.ImapClient.Repositories;
 
 public record AccountRecord(
     string Id, string Name, string ImapHost, int ImapPort,
@@ -2070,10 +2070,10 @@ public class AccountRepository(AppDatabase db)
 - [ ] **Step 5: Implement FolderRepository**
 
 ```csharp
-// src/UltimateImapMcp.ImapClient/Repositories/FolderRepository.cs
-using UltimateImapMcp.Core.Database;
+// src/AwesomeImapMcp.ImapClient/Repositories/FolderRepository.cs
+using AwesomeImapMcp.Core.Database;
 
-namespace UltimateImapMcp.ImapClient.Repositories;
+namespace AwesomeImapMcp.ImapClient.Repositories;
 
 public record FolderRecord(
     int Id, string AccountId, string Path, string? DisplayName,
@@ -2164,10 +2164,10 @@ public class FolderRepository(AppDatabase db)
 - [ ] **Step 6: Implement MessageRepository**
 
 ```csharp
-// src/UltimateImapMcp.ImapClient/Repositories/MessageRepository.cs
-using UltimateImapMcp.Core.Database;
+// src/AwesomeImapMcp.ImapClient/Repositories/MessageRepository.cs
+using AwesomeImapMcp.Core.Database;
 
-namespace UltimateImapMcp.ImapClient.Repositories;
+namespace AwesomeImapMcp.ImapClient.Repositories;
 
 public record MessageRecord(
     int Id, string AccountId, int FolderId, int Uid,
@@ -2344,10 +2344,10 @@ public class MessageRepository(AppDatabase db)
 - [ ] **Step 7: Implement AttachmentRepository**
 
 ```csharp
-// src/UltimateImapMcp.ImapClient/Repositories/AttachmentRepository.cs
-using UltimateImapMcp.Core.Database;
+// src/AwesomeImapMcp.ImapClient/Repositories/AttachmentRepository.cs
+using AwesomeImapMcp.Core.Database;
 
-namespace UltimateImapMcp.ImapClient.Repositories;
+namespace AwesomeImapMcp.ImapClient.Repositories;
 
 public record AttachmentRecord(
     int Id, int MessageId, string? Filename, string? ContentType,
@@ -2420,16 +2420,16 @@ git commit -m "feat(imap-client): add repositories for accounts, folders, messag
 ### Task 9: Thread Builder
 
 **Files:**
-- Create: `src/UltimateImapMcp.ImapClient/ThreadBuilder.cs`
-- Create: `tests/UltimateImapMcp.ImapClient.Tests/ThreadBuilderTests.cs`
+- Create: `src/AwesomeImapMcp.ImapClient/ThreadBuilder.cs`
+- Create: `tests/AwesomeImapMcp.ImapClient.Tests/ThreadBuilderTests.cs`
 
 - [ ] **Step 1: Write failing tests**
 
 ```csharp
-// tests/UltimateImapMcp.ImapClient.Tests/ThreadBuilderTests.cs
-using UltimateImapMcp.ImapClient;
+// tests/AwesomeImapMcp.ImapClient.Tests/ThreadBuilderTests.cs
+using AwesomeImapMcp.ImapClient;
 
-namespace UltimateImapMcp.ImapClient.Tests;
+namespace AwesomeImapMcp.ImapClient.Tests;
 
 public class ThreadBuilderTests
 {
@@ -2482,7 +2482,7 @@ public class ThreadBuilderTests
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-dotnet test tests/UltimateImapMcp.ImapClient.Tests
+dotnet test tests/AwesomeImapMcp.ImapClient.Tests
 ```
 
 Expected: FAIL — `ThreadBuilder` does not exist.
@@ -2490,11 +2490,11 @@ Expected: FAIL — `ThreadBuilder` does not exist.
 - [ ] **Step 3: Implement ThreadBuilder**
 
 ```csharp
-// src/UltimateImapMcp.ImapClient/ThreadBuilder.cs
+// src/AwesomeImapMcp.ImapClient/ThreadBuilder.cs
 using System.Security.Cryptography;
 using System.Text;
 
-namespace UltimateImapMcp.ImapClient;
+namespace AwesomeImapMcp.ImapClient;
 
 public static class ThreadBuilder
 {
@@ -2531,7 +2531,7 @@ public static class ThreadBuilder
 - [ ] **Step 4: Run tests**
 
 ```bash
-dotnet test tests/UltimateImapMcp.ImapClient.Tests
+dotnet test tests/AwesomeImapMcp.ImapClient.Tests
 ```
 
 Expected: All ThreadBuilder tests pass.
@@ -2548,20 +2548,20 @@ git commit -m "feat(imap-client): add thread ID computation from References/In-R
 ### Task 10: Folder Mapper and Message Parser
 
 **Files:**
-- Create: `src/UltimateImapMcp.ImapClient/FolderMapper.cs`
-- Create: `src/UltimateImapMcp.ImapClient/MessageParser.cs`
-- Create: `tests/UltimateImapMcp.ImapClient.Tests/FolderMapperTests.cs`
-- Create: `tests/UltimateImapMcp.ImapClient.Tests/MessageParserTests.cs`
+- Create: `src/AwesomeImapMcp.ImapClient/FolderMapper.cs`
+- Create: `src/AwesomeImapMcp.ImapClient/MessageParser.cs`
+- Create: `tests/AwesomeImapMcp.ImapClient.Tests/FolderMapperTests.cs`
+- Create: `tests/AwesomeImapMcp.ImapClient.Tests/MessageParserTests.cs`
 
 - [ ] **Step 1: Write failing tests for FolderMapper**
 
 ```csharp
-// tests/UltimateImapMcp.ImapClient.Tests/FolderMapperTests.cs
-using UltimateImapMcp.Core.Providers;
-using UltimateImapMcp.Core.Types;
-using UltimateImapMcp.ImapClient;
+// tests/AwesomeImapMcp.ImapClient.Tests/FolderMapperTests.cs
+using AwesomeImapMcp.Core.Providers;
+using AwesomeImapMcp.Core.Types;
+using AwesomeImapMcp.ImapClient;
 
-namespace UltimateImapMcp.ImapClient.Tests;
+namespace AwesomeImapMcp.ImapClient.Tests;
 
 public class FolderMapperTests
 {
@@ -2594,10 +2594,10 @@ public class FolderMapperTests
 - [ ] **Step 2: Write tests for MessageParser**
 
 ```csharp
-// tests/UltimateImapMcp.ImapClient.Tests/MessageParserTests.cs
-using UltimateImapMcp.ImapClient;
+// tests/AwesomeImapMcp.ImapClient.Tests/MessageParserTests.cs
+using AwesomeImapMcp.ImapClient;
 
-namespace UltimateImapMcp.ImapClient.Tests;
+namespace AwesomeImapMcp.ImapClient.Tests;
 
 public class MessageParserTests
 {
@@ -2646,7 +2646,7 @@ public class MessageParserTests
 - [ ] **Step 3: Run tests to verify they fail**
 
 ```bash
-dotnet test tests/UltimateImapMcp.ImapClient.Tests
+dotnet test tests/AwesomeImapMcp.ImapClient.Tests
 ```
 
 Expected: FAIL.
@@ -2654,11 +2654,11 @@ Expected: FAIL.
 - [ ] **Step 4: Implement FolderMapper**
 
 ```csharp
-// src/UltimateImapMcp.ImapClient/FolderMapper.cs
-using UltimateImapMcp.Core.Providers;
-using UltimateImapMcp.Core.Types;
+// src/AwesomeImapMcp.ImapClient/FolderMapper.cs
+using AwesomeImapMcp.Core.Providers;
+using AwesomeImapMcp.Core.Types;
 
-namespace UltimateImapMcp.ImapClient;
+namespace AwesomeImapMcp.ImapClient;
 
 public class FolderMapper(ProviderProfile profile)
 {
@@ -2684,10 +2684,10 @@ public class FolderMapper(ProviderProfile profile)
 - [ ] **Step 5: Implement MessageParser**
 
 ```csharp
-// src/UltimateImapMcp.ImapClient/MessageParser.cs
+// src/AwesomeImapMcp.ImapClient/MessageParser.cs
 using System.Text.RegularExpressions;
 
-namespace UltimateImapMcp.ImapClient;
+namespace AwesomeImapMcp.ImapClient;
 
 public static partial class MessageParser
 {
@@ -2725,7 +2725,7 @@ public static partial class MessageParser
 - [ ] **Step 6: Run tests**
 
 ```bash
-dotnet test tests/UltimateImapMcp.ImapClient.Tests
+dotnet test tests/AwesomeImapMcp.ImapClient.Tests
 ```
 
 Expected: All tests pass.
@@ -2744,22 +2744,22 @@ git commit -m "feat(imap-client): add FolderMapper and MessageParser for IMAP da
 ### Task 11: IMAP Connection Manager
 
 **Files:**
-- Create: `src/UltimateImapMcp.ImapClient/ImapConnectionManager.cs`
+- Create: `src/AwesomeImapMcp.ImapClient/ImapConnectionManager.cs`
 
 This wraps MailKit's `ImapClient` with connection pooling and reconnection. No unit tests for this task — it requires a real IMAP server (integration tests in later phases). We verify it compiles and wires up correctly.
 
 - [ ] **Step 1: Implement ImapConnectionManager**
 
 ```csharp
-// src/UltimateImapMcp.ImapClient/ImapConnectionManager.cs
+// src/AwesomeImapMcp.ImapClient/ImapConnectionManager.cs
 using MailKit.Net.Imap;
 using MailKit.Security;
-using UltimateImapMcp.Core.Configuration;
-using UltimateImapMcp.Core.Encryption;
+using AwesomeImapMcp.Core.Configuration;
+using AwesomeImapMcp.Core.Encryption;
 
 using ImapClientLib = MailKit.Net.Imap.ImapClient;
 
-namespace UltimateImapMcp.ImapClient;
+namespace AwesomeImapMcp.ImapClient;
 
 /// <summary>
 /// Wraps MailKit ImapClient with connect/auth logic.
@@ -2845,22 +2845,22 @@ git commit -m "feat(imap-client): add ImapConnectionManager wrapping MailKit wit
 ### Task 12: IMAP Sync Service
 
 **Files:**
-- Create: `src/UltimateImapMcp.ImapClient/ImapSyncService.cs`
+- Create: `src/AwesomeImapMcp.ImapClient/ImapSyncService.cs`
 
 Initial sync service that connects to IMAP, lists folders, fetches headers, and populates the cache. No unit tests — requires real IMAP server. Verified by compilation and integration test in Task 16.
 
 - [ ] **Step 1: Implement ImapSyncService**
 
 ```csharp
-// src/UltimateImapMcp.ImapClient/ImapSyncService.cs
+// src/AwesomeImapMcp.ImapClient/ImapSyncService.cs
 using System.Text.Json;
 using MailKit;
 using MailKit.Net.Imap;
-using UltimateImapMcp.ImapClient.Repositories;
+using AwesomeImapMcp.ImapClient.Repositories;
 
 using ImapClientLib = MailKit.Net.Imap.ImapClient;
 
-namespace UltimateImapMcp.ImapClient;
+namespace AwesomeImapMcp.ImapClient;
 
 public class ImapSyncService(
     FolderRepository folderRepo,
@@ -3045,22 +3045,22 @@ git commit -m "feat(imap-client): add ImapSyncService for incremental folder and
 ### Task 13: MCP Server Entry Point
 
 **Files:**
-- Create: `src/UltimateImapMcp.McpServer/Program.cs`
+- Create: `src/AwesomeImapMcp.McpServer/Program.cs`
 
 - [ ] **Step 1: Implement Program.cs**
 
 ```csharp
-// src/UltimateImapMcp.McpServer/Program.cs
+// src/AwesomeImapMcp.McpServer/Program.cs
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
-using UltimateImapMcp.Core.Configuration;
-using UltimateImapMcp.Core.Database;
-using UltimateImapMcp.Core.Encryption;
-using UltimateImapMcp.Core.Providers;
-using UltimateImapMcp.ImapClient;
-using UltimateImapMcp.ImapClient.Repositories;
+using AwesomeImapMcp.Core.Configuration;
+using AwesomeImapMcp.Core.Database;
+using AwesomeImapMcp.Core.Encryption;
+using AwesomeImapMcp.Core.Providers;
+using AwesomeImapMcp.ImapClient;
+using AwesomeImapMcp.ImapClient.Repositories;
 
 var builder = Host.CreateApplicationBuilder(args);
 
@@ -3075,7 +3075,7 @@ var configPath = args.FirstOrDefault(a => a.StartsWith("--config="))?.Split('=',
     ?? args.SkipWhile(a => a != "--config").Skip(1).FirstOrDefault()
     ?? Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-        ".ultimate-imap-mcp", "config.json");
+        ".awesome-imap-mcp", "config.json");
 
 AppConfig config;
 if (File.Exists(configPath))
@@ -3092,7 +3092,7 @@ var dbPath = ConfigLoader.ResolveDbPath(config.Cache.DbPath);
 var database = new AppDatabase(dbPath);
 MigrationRunner.Migrate(database);
 
-var passphrase = Environment.GetEnvironmentVariable("UIMAP_PASSPHRASE");
+var passphrase = Environment.GetEnvironmentVariable("AIMAP_PASSPHRASE");
 var encryptor = passphrase != null
     ? new CredentialEncryptor(passphrase)
     : CredentialEncryptor.FromMachineId();
@@ -3111,7 +3111,7 @@ builder.Services.AddSingleton<AttachmentRepository>();
 // MCP Server
 builder.Services.AddMcpServer(options =>
 {
-    options.ServerInfo = new() { Name = "ultimate-imap-mcp", Version = "0.1.0" };
+    options.ServerInfo = new() { Name = "awesome-imap-mcp", Version = "0.1.0" };
 })
 .WithStdioServerTransport()
 .WithToolsFromAssembly();
@@ -3139,19 +3139,19 @@ git commit -m "feat(mcp-server): add entry point with DI wiring, config loading,
 ### Task 14: Account and Folder MCP Tools
 
 **Files:**
-- Create: `src/UltimateImapMcp.McpServer/Tools/AccountTools.cs`
-- Create: `src/UltimateImapMcp.McpServer/Tools/FolderTools.cs`
+- Create: `src/AwesomeImapMcp.McpServer/Tools/AccountTools.cs`
+- Create: `src/AwesomeImapMcp.McpServer/Tools/FolderTools.cs`
 
 - [ ] **Step 1: Implement AccountTools**
 
 ```csharp
-// src/UltimateImapMcp.McpServer/Tools/AccountTools.cs
+// src/AwesomeImapMcp.McpServer/Tools/AccountTools.cs
 using System.ComponentModel;
 using System.Text.Json;
 using ModelContextProtocol.Server;
-using UltimateImapMcp.ImapClient.Repositories;
+using AwesomeImapMcp.ImapClient.Repositories;
 
-namespace UltimateImapMcp.McpServer.Tools;
+namespace AwesomeImapMcp.McpServer.Tools;
 
 [McpServerToolType]
 public class AccountTools(AccountRepository accountRepo)
@@ -3197,13 +3197,13 @@ public class AccountTools(AccountRepository accountRepo)
 - [ ] **Step 2: Implement FolderTools**
 
 ```csharp
-// src/UltimateImapMcp.McpServer/Tools/FolderTools.cs
+// src/AwesomeImapMcp.McpServer/Tools/FolderTools.cs
 using System.ComponentModel;
 using System.Text.Json;
 using ModelContextProtocol.Server;
-using UltimateImapMcp.ImapClient.Repositories;
+using AwesomeImapMcp.ImapClient.Repositories;
 
-namespace UltimateImapMcp.McpServer.Tools;
+namespace AwesomeImapMcp.McpServer.Tools;
 
 [McpServerToolType]
 public class FolderTools(FolderRepository folderRepo, MessageRepository messageRepo)
@@ -3272,19 +3272,19 @@ git commit -m "feat(mcp-server): add account and folder MCP tools"
 ### Task 15: Search and Message MCP Tools
 
 **Files:**
-- Create: `src/UltimateImapMcp.McpServer/Tools/SearchTools.cs`
-- Create: `src/UltimateImapMcp.McpServer/Tools/MessageTools.cs`
+- Create: `src/AwesomeImapMcp.McpServer/Tools/SearchTools.cs`
+- Create: `src/AwesomeImapMcp.McpServer/Tools/MessageTools.cs`
 
 - [ ] **Step 1: Implement SearchTools**
 
 ```csharp
-// src/UltimateImapMcp.McpServer/Tools/SearchTools.cs
+// src/AwesomeImapMcp.McpServer/Tools/SearchTools.cs
 using System.ComponentModel;
 using System.Text.Json;
 using ModelContextProtocol.Server;
-using UltimateImapMcp.ImapClient.Repositories;
+using AwesomeImapMcp.ImapClient.Repositories;
 
-namespace UltimateImapMcp.McpServer.Tools;
+namespace AwesomeImapMcp.McpServer.Tools;
 
 [McpServerToolType]
 public class SearchTools(MessageRepository messageRepo)
@@ -3349,13 +3349,13 @@ public class SearchTools(MessageRepository messageRepo)
 - [ ] **Step 2: Implement MessageTools**
 
 ```csharp
-// src/UltimateImapMcp.McpServer/Tools/MessageTools.cs
+// src/AwesomeImapMcp.McpServer/Tools/MessageTools.cs
 using System.ComponentModel;
 using System.Text.Json;
 using ModelContextProtocol.Server;
-using UltimateImapMcp.ImapClient.Repositories;
+using AwesomeImapMcp.ImapClient.Repositories;
 
-namespace UltimateImapMcp.McpServer.Tools;
+namespace AwesomeImapMcp.McpServer.Tools;
 
 [McpServerToolType]
 public class MessageTools(MessageRepository messageRepo, AttachmentRepository attachmentRepo)
@@ -3512,7 +3512,7 @@ git commit -m "feat(mcp-server): add search_emails, get_message, and get_thread 
     }
   ],
   "cache": {
-    "db_path": "~/.ultimate-imap-mcp/cache.db",
+    "db_path": "~/.awesome-imap-mcp/cache.db",
     "max_size_mb": 500,
     "default_window_days": 0,
     "max_body_age_days": 0,
@@ -3554,7 +3554,7 @@ Expected: All tests pass.
 - [ ] **Step 3: Run the MCP server briefly to verify it starts**
 
 ```bash
-timeout 3 dotnet run --project src/UltimateImapMcp.McpServer 2>/dev/null || true
+timeout 3 dotnet run --project src/AwesomeImapMcp.McpServer 2>/dev/null || true
 ```
 
 Expected: Server starts without errors (exits due to timeout, or exits cleanly if no stdin).

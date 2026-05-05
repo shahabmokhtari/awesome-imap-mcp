@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "ultimate-imap-mcp": {
+    "awesome-imap-mcp": {
       "type": "sse",
       "url": "http://localhost:3846/sse"
     }

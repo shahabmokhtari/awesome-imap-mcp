@@ -19,7 +19,7 @@
 ## Project Structure
 
 ```
-ultimate-imap-mcp/
+awesome-imap-mcp/
   docs/                          # project documentation
   packages/
     core/                        # shared types, config, db, encryption
@@ -215,7 +215,7 @@ Deliverable: Full mailbox intelligence and mass email management.
 ### Phase 7: Polish + Distribution (week 13+)
 
 Tasks:
-- [ ] npm package publishing (`npx ultimate-imap-mcp` and `npx ultimate-imap-mcp setup`)
+- [ ] npm package publishing (`npx awesome-imap-mcp` and `npx awesome-imap-mcp setup`)
 - [ ] Interactive setup wizard (like marlinjai/email-mcp)
 - [ ] Docker image with multi-arch support
 - [ ] Documentation: README, setup guides per provider, MCP tool reference

@@ -4,11 +4,11 @@
 
 **Goal:** Add send, reply, forward, delete, move, mark, flag, and label operations — all routed through an SQLite-backed operation queue with priority tiers, retry logic, configurable confirm/undo, and dead-letter handling.
 
-**Architecture:** New `UltimateImapMcp.Queue` class library sits between ImapClient and McpServer. Queue operations are persisted in SQLite (`operation_queue` table), processed by a `QueueWorker` BackgroundService with priority-based flush cycles. SMTP via MailKit for sends. Each operation type has a dedicated executor behind `IOperationExecutor`.
+**Architecture:** New `AwesomeImapMcp.Queue` class library sits between ImapClient and McpServer. Queue operations are persisted in SQLite (`operation_queue` table), processed by a `QueueWorker` BackgroundService with priority-based flush cycles. SMTP via MailKit for sends. Each operation type has a dedicated executor behind `IOperationExecutor`.
 
 **Tech Stack:** .NET 10, MailKit (SMTP), Microsoft.Data.Sqlite, xUnit
 
-**Spec reference:** `docs/superpowers/specs/2026-03-18-ultimate-imap-mcp-design.md` — Queue Package section
+**Spec reference:** `docs/superpowers/specs/2026-03-18-awesome-imap-mcp-design.md` — Queue Package section
 **Schema reference:** `docs/DATA_MODEL.md` — operation_queue table
 
 **Dependencies:** Phase 1 complete (Core, ImapClient, McpServer all built, 57 tests passing)
@@ -17,12 +17,12 @@
 
 ## File Structure
 
-### New Project: UltimateImapMcp.Queue
+### New Project: AwesomeImapMcp.Queue
 
 ```
 src/
-  UltimateImapMcp.Queue/
-    UltimateImapMcp.Queue.csproj           # References Core + ImapClient
+  AwesomeImapMcp.Queue/
+    AwesomeImapMcp.Queue.csproj           # References Core + ImapClient
     Models/
       Operation.cs                          # Operation record, OperationType enum, OperationStatus enum
     QueueRepository.cs                      # CRUD for operation_queue table
@@ -36,8 +36,8 @@ src/
       FlagExecutor.cs                       # IMAP STORE +/-FLAGS
 
 tests/
-  UltimateImapMcp.Queue.Tests/
-    UltimateImapMcp.Queue.Tests.csproj
+  AwesomeImapMcp.Queue.Tests/
+    AwesomeImapMcp.Queue.Tests.csproj
     QueueRepositoryTests.cs
     QueueManagerTests.cs
     QueueWorkerTests.cs
@@ -47,12 +47,12 @@ tests/
 
 ```
 src/
-  UltimateImapMcp.Core/
+  AwesomeImapMcp.Core/
     Database/Migrations/
       002_operation_queue.sql               # operation_queue table + sends_at column
-  UltimateImapMcp.ImapClient/
+  AwesomeImapMcp.ImapClient/
     SmtpConnectionManager.cs                # NEW: MailKit SMTP wrapper
-  UltimateImapMcp.McpServer/
+  AwesomeImapMcp.McpServer/
     Program.cs                              # Add Queue DI registrations + QueueWorker
     Tools/
       ComposeTools.cs                       # NEW: send_email, reply_to, forward
@@ -67,45 +67,45 @@ src/
 ### Task 1: Queue Project Scaffold
 
 **Files:**
-- Create: `src/UltimateImapMcp.Queue/UltimateImapMcp.Queue.csproj`
-- Create: `tests/UltimateImapMcp.Queue.Tests/UltimateImapMcp.Queue.Tests.csproj`
-- Modify: `UltimateImapMcp.slnx` (add projects)
+- Create: `src/AwesomeImapMcp.Queue/AwesomeImapMcp.Queue.csproj`
+- Create: `tests/AwesomeImapMcp.Queue.Tests/AwesomeImapMcp.Queue.Tests.csproj`
+- Modify: `AwesomeImapMcp.slnx` (add projects)
 
 - [ ] **Step 1: Create Queue project and test project**
 
 ```bash
-cd ultimate-imap-mcp
-dotnet new classlib -n UltimateImapMcp.Queue -o src/UltimateImapMcp.Queue
-dotnet new xunit -n UltimateImapMcp.Queue.Tests -o tests/UltimateImapMcp.Queue.Tests
-dotnet sln add src/UltimateImapMcp.Queue tests/UltimateImapMcp.Queue.Tests
+cd awesome-imap-mcp
+dotnet new classlib -n AwesomeImapMcp.Queue -o src/AwesomeImapMcp.Queue
+dotnet new xunit -n AwesomeImapMcp.Queue.Tests -o tests/AwesomeImapMcp.Queue.Tests
+dotnet sln add src/AwesomeImapMcp.Queue tests/AwesomeImapMcp.Queue.Tests
 ```
 
 - [ ] **Step 2: Add project references**
 
 ```bash
 # Queue depends on Core + ImapClient
-dotnet add src/UltimateImapMcp.Queue reference src/UltimateImapMcp.Core
-dotnet add src/UltimateImapMcp.Queue reference src/UltimateImapMcp.ImapClient
+dotnet add src/AwesomeImapMcp.Queue reference src/AwesomeImapMcp.Core
+dotnet add src/AwesomeImapMcp.Queue reference src/AwesomeImapMcp.ImapClient
 
 # McpServer depends on Queue
-dotnet add src/UltimateImapMcp.McpServer reference src/UltimateImapMcp.Queue
+dotnet add src/AwesomeImapMcp.McpServer reference src/AwesomeImapMcp.Queue
 
 # Queue tests reference Queue + Core
-dotnet add tests/UltimateImapMcp.Queue.Tests reference src/UltimateImapMcp.Queue
-dotnet add tests/UltimateImapMcp.Queue.Tests reference src/UltimateImapMcp.Core
-dotnet add tests/UltimateImapMcp.Queue.Tests reference src/UltimateImapMcp.ImapClient
+dotnet add tests/AwesomeImapMcp.Queue.Tests reference src/AwesomeImapMcp.Queue
+dotnet add tests/AwesomeImapMcp.Queue.Tests reference src/AwesomeImapMcp.Core
+dotnet add tests/AwesomeImapMcp.Queue.Tests reference src/AwesomeImapMcp.ImapClient
 ```
 
 - [ ] **Step 3: Add Microsoft.Extensions.Hosting to Queue (for BackgroundService)**
 
 ```bash
-dotnet add src/UltimateImapMcp.Queue package Microsoft.Extensions.Hosting
+dotnet add src/AwesomeImapMcp.Queue package Microsoft.Extensions.Hosting
 ```
 
 - [ ] **Step 4: Delete Class1.cs, verify build**
 
 ```bash
-rm src/UltimateImapMcp.Queue/Class1.cs
+rm src/AwesomeImapMcp.Queue/Class1.cs
 dotnet build
 ```
 
@@ -120,14 +120,14 @@ git add -A && git commit -m "feat: add Queue project scaffold with references"
 ### Task 2: Queue Models + Migration
 
 **Files:**
-- Create: `src/UltimateImapMcp.Queue/Models/Operation.cs`
-- Create: `src/UltimateImapMcp.Core/Database/Migrations/002_operation_queue.sql`
+- Create: `src/AwesomeImapMcp.Queue/Models/Operation.cs`
+- Create: `src/AwesomeImapMcp.Core/Database/Migrations/002_operation_queue.sql`
 
 - [ ] **Step 1: Create Operation models**
 
 ```csharp
-// src/UltimateImapMcp.Queue/Models/Operation.cs
-namespace UltimateImapMcp.Queue.Models;
+// src/AwesomeImapMcp.Queue/Models/Operation.cs
+namespace AwesomeImapMcp.Queue.Models;
 
 public enum OperationType
 {
@@ -186,7 +186,7 @@ public record EnqueueRequest
 - [ ] **Step 2: Create 002_operation_queue.sql migration**
 
 ```sql
--- src/UltimateImapMcp.Core/Database/Migrations/002_operation_queue.sql
+-- src/AwesomeImapMcp.Core/Database/Migrations/002_operation_queue.sql
 CREATE TABLE IF NOT EXISTS operation_queue (
     id              TEXT PRIMARY KEY,
     account_id      TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
@@ -226,18 +226,18 @@ git add -A && git commit -m "feat(queue): add operation models and queue migrati
 ### Task 3: Queue Repository
 
 **Files:**
-- Create: `src/UltimateImapMcp.Queue/QueueRepository.cs`
-- Create: `tests/UltimateImapMcp.Queue.Tests/QueueRepositoryTests.cs`
+- Create: `src/AwesomeImapMcp.Queue/QueueRepository.cs`
+- Create: `tests/AwesomeImapMcp.Queue.Tests/QueueRepositoryTests.cs`
 
 - [ ] **Step 1: Write failing tests**
 
 ```csharp
-// tests/UltimateImapMcp.Queue.Tests/QueueRepositoryTests.cs
-using UltimateImapMcp.Core.Database;
-using UltimateImapMcp.Queue;
-using UltimateImapMcp.Queue.Models;
+// tests/AwesomeImapMcp.Queue.Tests/QueueRepositoryTests.cs
+using AwesomeImapMcp.Core.Database;
+using AwesomeImapMcp.Queue;
+using AwesomeImapMcp.Queue.Models;
 
-namespace UltimateImapMcp.Queue.Tests;
+namespace AwesomeImapMcp.Queue.Tests;
 
 public class QueueRepositoryTests : IDisposable
 {
@@ -372,17 +372,17 @@ public class QueueRepositoryTests : IDisposable
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-dotnet test tests/UltimateImapMcp.Queue.Tests
+dotnet test tests/AwesomeImapMcp.Queue.Tests
 ```
 
 - [ ] **Step 3: Implement QueueRepository**
 
 ```csharp
-// src/UltimateImapMcp.Queue/QueueRepository.cs
-using UltimateImapMcp.Core.Database;
-using UltimateImapMcp.Queue.Models;
+// src/AwesomeImapMcp.Queue/QueueRepository.cs
+using AwesomeImapMcp.Core.Database;
+using AwesomeImapMcp.Queue.Models;
 
-namespace UltimateImapMcp.Queue;
+namespace AwesomeImapMcp.Queue;
 
 public class QueueRepository(AppDatabase db)
 {
@@ -565,21 +565,21 @@ git add -A && git commit -m "feat(queue): add QueueRepository with CRUD, cancel,
 ### Task 4: QueueManager
 
 **Files:**
-- Create: `src/UltimateImapMcp.Queue/QueueManager.cs`
-- Create: `tests/UltimateImapMcp.Queue.Tests/QueueManagerTests.cs`
+- Create: `src/AwesomeImapMcp.Queue/QueueManager.cs`
+- Create: `tests/AwesomeImapMcp.Queue.Tests/QueueManagerTests.cs`
 
 The QueueManager is the public API for enqueueing operations. It wraps QueueRepository and handles the confirm mode logic (implicit vs explicit).
 
 - [ ] **Step 1: Write failing tests**
 
 ```csharp
-// tests/UltimateImapMcp.Queue.Tests/QueueManagerTests.cs
-using UltimateImapMcp.Core.Configuration;
-using UltimateImapMcp.Core.Database;
-using UltimateImapMcp.Queue;
-using UltimateImapMcp.Queue.Models;
+// tests/AwesomeImapMcp.Queue.Tests/QueueManagerTests.cs
+using AwesomeImapMcp.Core.Configuration;
+using AwesomeImapMcp.Core.Database;
+using AwesomeImapMcp.Queue;
+using AwesomeImapMcp.Queue.Models;
 
-namespace UltimateImapMcp.Queue.Tests;
+namespace AwesomeImapMcp.Queue.Tests;
 
 public class QueueManagerTests : IDisposable
 {
@@ -684,11 +684,11 @@ public class QueueManagerTests : IDisposable
 - [ ] **Step 2: Implement QueueManager**
 
 ```csharp
-// src/UltimateImapMcp.Queue/QueueManager.cs
-using UltimateImapMcp.Core.Configuration;
-using UltimateImapMcp.Queue.Models;
+// src/AwesomeImapMcp.Queue/QueueManager.cs
+using AwesomeImapMcp.Core.Configuration;
+using AwesomeImapMcp.Queue.Models;
 
-namespace UltimateImapMcp.Queue;
+namespace AwesomeImapMcp.Queue;
 
 public record SendEnqueueResult(string PendingId, string ConfirmMode, string Status, string? SendsAt, int? UndoWindowSeconds);
 
@@ -793,22 +793,22 @@ git add -A && git commit -m "feat(queue): add QueueManager with enqueue, confirm
 ### Task 5: Operation Executors
 
 **Files:**
-- Create: `src/UltimateImapMcp.Queue/Executors/IOperationExecutor.cs`
-- Create: `src/UltimateImapMcp.Queue/Executors/SendExecutor.cs`
-- Create: `src/UltimateImapMcp.Queue/Executors/DeleteExecutor.cs`
-- Create: `src/UltimateImapMcp.Queue/Executors/MoveExecutor.cs`
-- Create: `src/UltimateImapMcp.Queue/Executors/FlagExecutor.cs`
-- Create: `src/UltimateImapMcp.ImapClient/SmtpConnectionManager.cs`
+- Create: `src/AwesomeImapMcp.Queue/Executors/IOperationExecutor.cs`
+- Create: `src/AwesomeImapMcp.Queue/Executors/SendExecutor.cs`
+- Create: `src/AwesomeImapMcp.Queue/Executors/DeleteExecutor.cs`
+- Create: `src/AwesomeImapMcp.Queue/Executors/MoveExecutor.cs`
+- Create: `src/AwesomeImapMcp.Queue/Executors/FlagExecutor.cs`
+- Create: `src/AwesomeImapMcp.ImapClient/SmtpConnectionManager.cs`
 
 No unit tests for executors (they require real IMAP/SMTP). Verify compilation.
 
 - [ ] **Step 1: Create IOperationExecutor interface**
 
 ```csharp
-// src/UltimateImapMcp.Queue/Executors/IOperationExecutor.cs
-using UltimateImapMcp.Queue.Models;
+// src/AwesomeImapMcp.Queue/Executors/IOperationExecutor.cs
+using AwesomeImapMcp.Queue.Models;
 
-namespace UltimateImapMcp.Queue.Executors;
+namespace AwesomeImapMcp.Queue.Executors;
 
 public interface IOperationExecutor
 {
@@ -820,13 +820,13 @@ public interface IOperationExecutor
 - [ ] **Step 2: Create SmtpConnectionManager**
 
 ```csharp
-// src/UltimateImapMcp.ImapClient/SmtpConnectionManager.cs
+// src/AwesomeImapMcp.ImapClient/SmtpConnectionManager.cs
 using MailKit.Net.Smtp;
 using MailKit.Security;
 using MimeKit;
-using UltimateImapMcp.Core.Configuration;
+using AwesomeImapMcp.Core.Configuration;
 
-namespace UltimateImapMcp.ImapClient;
+namespace AwesomeImapMcp.ImapClient;
 
 public sealed class SmtpConnectionManager : IDisposable
 {
@@ -873,14 +873,14 @@ public sealed class SmtpConnectionManager : IDisposable
 Uses `SmtpConnectionManager` to send a `MimeMessage` built from the operation payload JSON. Payload schema: `{ "to": "email", "cc": "email", "subject": "text", "body": "text", "in_reply_to": "msg-id", "references": "msg-ids" }`.
 
 ```csharp
-// src/UltimateImapMcp.Queue/Executors/SendExecutor.cs
+// src/AwesomeImapMcp.Queue/Executors/SendExecutor.cs
 using System.Text.Json;
 using MimeKit;
-using UltimateImapMcp.Core.Configuration;
-using UltimateImapMcp.ImapClient;
-using UltimateImapMcp.Queue.Models;
+using AwesomeImapMcp.Core.Configuration;
+using AwesomeImapMcp.ImapClient;
+using AwesomeImapMcp.Queue.Models;
 
-namespace UltimateImapMcp.Queue.Executors;
+namespace AwesomeImapMcp.Queue.Executors;
 
 public class SendExecutor(AppConfig config) : IOperationExecutor
 {
@@ -920,16 +920,16 @@ public class SendExecutor(AppConfig config) : IOperationExecutor
 - [ ] **Step 4: Create DeleteExecutor**
 
 ```csharp
-// src/UltimateImapMcp.Queue/Executors/DeleteExecutor.cs
+// src/AwesomeImapMcp.Queue/Executors/DeleteExecutor.cs
 using System.Text.Json;
 using MailKit;
-using UltimateImapMcp.Core.Configuration;
-using UltimateImapMcp.ImapClient;
-using UltimateImapMcp.Queue.Models;
+using AwesomeImapMcp.Core.Configuration;
+using AwesomeImapMcp.ImapClient;
+using AwesomeImapMcp.Queue.Models;
 
 using ImapClientLib = MailKit.Net.Imap.ImapClient;
 
-namespace UltimateImapMcp.Queue.Executors;
+namespace AwesomeImapMcp.Queue.Executors;
 
 public class DeleteExecutor(AppConfig config) : IOperationExecutor
 {
@@ -960,16 +960,16 @@ public class DeleteExecutor(AppConfig config) : IOperationExecutor
 - [ ] **Step 5: Create MoveExecutor**
 
 ```csharp
-// src/UltimateImapMcp.Queue/Executors/MoveExecutor.cs
+// src/AwesomeImapMcp.Queue/Executors/MoveExecutor.cs
 using System.Text.Json;
 using MailKit;
-using UltimateImapMcp.Core.Configuration;
-using UltimateImapMcp.ImapClient;
-using UltimateImapMcp.Queue.Models;
+using AwesomeImapMcp.Core.Configuration;
+using AwesomeImapMcp.ImapClient;
+using AwesomeImapMcp.Queue.Models;
 
 using ImapClientLib = MailKit.Net.Imap.ImapClient;
 
-namespace UltimateImapMcp.Queue.Executors;
+namespace AwesomeImapMcp.Queue.Executors;
 
 public class MoveExecutor(AppConfig config) : IOperationExecutor
 {
@@ -1001,16 +1001,16 @@ public class MoveExecutor(AppConfig config) : IOperationExecutor
 - [ ] **Step 6: Create FlagExecutor** (handles mark_read, mark_unread, flag, unflag)
 
 ```csharp
-// src/UltimateImapMcp.Queue/Executors/FlagExecutor.cs
+// src/AwesomeImapMcp.Queue/Executors/FlagExecutor.cs
 using System.Text.Json;
 using MailKit;
-using UltimateImapMcp.Core.Configuration;
-using UltimateImapMcp.ImapClient;
-using UltimateImapMcp.Queue.Models;
+using AwesomeImapMcp.Core.Configuration;
+using AwesomeImapMcp.ImapClient;
+using AwesomeImapMcp.Queue.Models;
 
 using ImapClientLib = MailKit.Net.Imap.ImapClient;
 
-namespace UltimateImapMcp.Queue.Executors;
+namespace AwesomeImapMcp.Queue.Executors;
 
 public class FlagExecutor(AppConfig config) : IOperationExecutor
 {
@@ -1066,22 +1066,22 @@ git add -A && git commit -m "feat(queue): add operation executors for send, dele
 ### Task 6: QueueWorker BackgroundService
 
 **Files:**
-- Create: `src/UltimateImapMcp.Queue/QueueWorker.cs`
-- Create: `tests/UltimateImapMcp.Queue.Tests/QueueWorkerTests.cs`
+- Create: `src/AwesomeImapMcp.Queue/QueueWorker.cs`
+- Create: `tests/AwesomeImapMcp.Queue.Tests/QueueWorkerTests.cs`
 
 The QueueWorker runs a flush loop: P0 every 2s, P1 every 30s, P2 every 5min. For each flush, it picks up confirmed operations and dispatches them to the appropriate executor.
 
 - [ ] **Step 1: Write failing tests**
 
 ```csharp
-// tests/UltimateImapMcp.Queue.Tests/QueueWorkerTests.cs
-using UltimateImapMcp.Core.Configuration;
-using UltimateImapMcp.Core.Database;
-using UltimateImapMcp.Queue;
-using UltimateImapMcp.Queue.Executors;
-using UltimateImapMcp.Queue.Models;
+// tests/AwesomeImapMcp.Queue.Tests/QueueWorkerTests.cs
+using AwesomeImapMcp.Core.Configuration;
+using AwesomeImapMcp.Core.Database;
+using AwesomeImapMcp.Queue;
+using AwesomeImapMcp.Queue.Executors;
+using AwesomeImapMcp.Queue.Models;
 
-namespace UltimateImapMcp.Queue.Tests;
+namespace AwesomeImapMcp.Queue.Tests;
 
 public class FakeExecutor : IOperationExecutor
 {
@@ -1182,14 +1182,14 @@ public class QueueWorkerTests : IDisposable
 - [ ] **Step 2: Implement QueueWorker**
 
 ```csharp
-// src/UltimateImapMcp.Queue/QueueWorker.cs
+// src/AwesomeImapMcp.Queue/QueueWorker.cs
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using UltimateImapMcp.Core.Configuration;
-using UltimateImapMcp.Queue.Executors;
-using UltimateImapMcp.Queue.Models;
+using AwesomeImapMcp.Core.Configuration;
+using AwesomeImapMcp.Queue.Executors;
+using AwesomeImapMcp.Queue.Models;
 
-namespace UltimateImapMcp.Queue;
+namespace AwesomeImapMcp.Queue;
 
 public class QueueWorker(
     QueueRepository repo,
@@ -1296,20 +1296,20 @@ git add -A && git commit -m "feat(queue): add QueueWorker BackgroundService with
 ### Task 7: Write MCP Tools
 
 **Files:**
-- Create: `src/UltimateImapMcp.McpServer/Tools/ComposeTools.cs`
-- Create: `src/UltimateImapMcp.McpServer/Tools/OrganizeTools.cs`
-- Create: `src/UltimateImapMcp.McpServer/Tools/QueueTools.cs`
+- Create: `src/AwesomeImapMcp.McpServer/Tools/ComposeTools.cs`
+- Create: `src/AwesomeImapMcp.McpServer/Tools/OrganizeTools.cs`
+- Create: `src/AwesomeImapMcp.McpServer/Tools/QueueTools.cs`
 
 - [ ] **Step 1: Create ComposeTools** (send_email, reply_to, forward)
 
 ```csharp
-// src/UltimateImapMcp.McpServer/Tools/ComposeTools.cs
+// src/AwesomeImapMcp.McpServer/Tools/ComposeTools.cs
 using System.ComponentModel;
 using System.Text.Json;
 using ModelContextProtocol.Server;
-using UltimateImapMcp.Queue;
+using AwesomeImapMcp.Queue;
 
-namespace UltimateImapMcp.McpServer.Tools;
+namespace AwesomeImapMcp.McpServer.Tools;
 
 [McpServerToolType]
 public class ComposeTools(QueueManager queueManager)
@@ -1358,14 +1358,14 @@ public class ComposeTools(QueueManager queueManager)
 - [ ] **Step 2: Create OrganizeTools** (delete, move, mark, flag, label)
 
 ```csharp
-// src/UltimateImapMcp.McpServer/Tools/OrganizeTools.cs
+// src/AwesomeImapMcp.McpServer/Tools/OrganizeTools.cs
 using System.ComponentModel;
 using System.Text.Json;
 using ModelContextProtocol.Server;
-using UltimateImapMcp.Queue;
-using UltimateImapMcp.Queue.Models;
+using AwesomeImapMcp.Queue;
+using AwesomeImapMcp.Queue.Models;
 
-namespace UltimateImapMcp.McpServer.Tools;
+namespace AwesomeImapMcp.McpServer.Tools;
 
 [McpServerToolType]
 public class OrganizeTools(QueueManager queueManager)
@@ -1458,13 +1458,13 @@ public class OrganizeTools(QueueManager queueManager)
 - [ ] **Step 3: Create QueueTools** (confirm, cancel, list)
 
 ```csharp
-// src/UltimateImapMcp.McpServer/Tools/QueueTools.cs
+// src/AwesomeImapMcp.McpServer/Tools/QueueTools.cs
 using System.ComponentModel;
 using System.Text.Json;
 using ModelContextProtocol.Server;
-using UltimateImapMcp.Queue;
+using AwesomeImapMcp.Queue;
 
-namespace UltimateImapMcp.McpServer.Tools;
+namespace AwesomeImapMcp.McpServer.Tools;
 
 [McpServerToolType]
 public class QueueTools(QueueManager queueManager)
@@ -1527,7 +1527,7 @@ git add -A && git commit -m "feat(mcp-server): add compose, organize, and queue 
 ### Task 8: Wire Queue into Program.cs
 
 **Files:**
-- Modify: `src/UltimateImapMcp.McpServer/Program.cs`
+- Modify: `src/AwesomeImapMcp.McpServer/Program.cs`
 
 - [ ] **Step 1: Add Queue DI registrations to Program.cs**
 
