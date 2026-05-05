@@ -1,0 +1,18 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/AwesomeImapMcp.Core/AwesomeImapMcp.Core.csproj" />
+    <Project Path="src/AwesomeImapMcp.Dashboard/AwesomeImapMcp.Dashboard.csproj" />
+    <Project Path="src/AwesomeImapMcp.ImapClient/AwesomeImapMcp.ImapClient.csproj" />
+    <Project Path="src/AwesomeImapMcp.Llm/AwesomeImapMcp.Llm.csproj" />
+    <Project Path="src/AwesomeImapMcp.McpServer/AwesomeImapMcp.McpServer.csproj" />
+    <Project Path="src/AwesomeImapMcp.Queue/AwesomeImapMcp.Queue.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/AwesomeImapMcp.Core.Tests/AwesomeImapMcp.Core.Tests.csproj" />
+    <Project Path="tests/AwesomeImapMcp.Dashboard.Tests/AwesomeImapMcp.Dashboard.Tests.csproj" />
+    <Project Path="tests/AwesomeImapMcp.ImapClient.Tests/AwesomeImapMcp.ImapClient.Tests.csproj" />
+    <Project Path="tests/AwesomeImapMcp.Llm.Tests/AwesomeImapMcp.Llm.Tests.csproj" />
+    <Project Path="tests/AwesomeImapMcp.McpServer.Tests/AwesomeImapMcp.McpServer.Tests.csproj" />
+    <Project Path="tests/AwesomeImapMcp.Queue.Tests/AwesomeImapMcp.Queue.Tests.csproj" />
+  </Folder>
+</Solution>

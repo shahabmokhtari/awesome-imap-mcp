@@ -12,7 +12,7 @@ WORKDIR /src
 COPY *.slnx Directory.Build.props ./
 COPY src/ src/
 RUN dotnet restore
-RUN dotnet publish src/UltimateImapMcp.McpServer -c Release -o /app/publish
+RUN dotnet publish src/AwesomeImapMcp.McpServer -c Release -o /app/publish
 
 # Stage 3: Runtime
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
@@ -20,4 +20,4 @@ WORKDIR /app
 COPY --from=build /app/publish .
 COPY --from=frontend /app/dashboard/client/dist ./wwwroot/
 EXPOSE 3846 3847
-ENTRYPOINT ["./UltimateImapMcp.McpServer"]
+ENTRYPOINT ["./AwesomeImapMcp.McpServer"]

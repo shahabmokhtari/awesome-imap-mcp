@@ -1,4 +1,4 @@
-# ultimate-imap-mcp
+# awesome-imap-mcp
 
 ## Tool Usage Guide
 

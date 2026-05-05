@@ -1,0 +1,66 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>awesome-imap-mcp</ToolCommandName>
+    <PackageId>awesome-imap-mcp</PackageId>
+    <Version>0.1.0</Version>
+    <Description>Batteries-included MCP server for email with local cache, operation queue, web dashboard, and LLM analysis</Description>
+    <Authors>Shahab Mokhtari</Authors>
+    <PackageProjectUrl>https://github.com/shahabmokhtari/awesome-imap-mcp</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/shahabmokhtari/awesome-imap-mcp</RepositoryUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+
+    <!-- Single-file publish settings (activated via dotnet publish -p:PublishSingleFile=true) -->
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AwesomeImapMcp.Core\AwesomeImapMcp.Core.csproj" />
+    <ProjectReference Include="..\AwesomeImapMcp.Dashboard\AwesomeImapMcp.Dashboard.csproj" />
+    <ProjectReference Include="..\AwesomeImapMcp.ImapClient\AwesomeImapMcp.ImapClient.csproj" />
+    <ProjectReference Include="..\AwesomeImapMcp.Queue\AwesomeImapMcp.Queue.csproj" />
+    <ProjectReference Include="..\AwesomeImapMcp.Llm\AwesomeImapMcp.Llm.csproj" />
+    <ProjectReference Include="..\AwesomeImapMcp.RestBackend\AwesomeImapMcp.RestBackend.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="ModelContextProtocol" Version="1.1.0" />
+    <PackageReference Include="ModelContextProtocol.AspNetCore" Version="1.1.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="../../README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+
+  <!-- Copy dashboard SPA from the Dashboard project's wwwroot into our output -->
+  <Target Name="CopyDashboardWwwroot" AfterTargets="Build"
+          Condition="Exists('$(MSBuildThisFileDirectory)../AwesomeImapMcp.Dashboard/wwwroot')">
+    <ItemGroup>
+      <DashboardFiles Include="$(MSBuildThisFileDirectory)../AwesomeImapMcp.Dashboard/wwwroot/**/*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(DashboardFiles)"
+          DestinationFolder="$(OutputPath)/wwwroot/%(RecursiveDir)"
+          SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="CopyDashboardWwwrootPublish" AfterTargets="Publish"
+          Condition="Exists('$(MSBuildThisFileDirectory)../AwesomeImapMcp.Dashboard/wwwroot')">
+    <ItemGroup>
+      <DashboardFilesPublish Include="$(MSBuildThisFileDirectory)../AwesomeImapMcp.Dashboard/wwwroot/**/*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(DashboardFilesPublish)"
+          DestinationFolder="$(PublishDir)/wwwroot/%(RecursiveDir)"
+          SkipUnchangedFiles="true" />
+  </Target>
+
+</Project>

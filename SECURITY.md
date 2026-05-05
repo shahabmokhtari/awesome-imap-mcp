@@ -2,9 +2,9 @@
 
 ## Reporting a Vulnerability
 
-If you discover a security vulnerability in Ultimate IMAP MCP, please **do not** open a public issue. Instead, report it privately:
+If you discover a security vulnerability in Awesome IMAP MCP, please **do not** open a public issue. Instead, report it privately:
 
-- **GitHub Security Advisories:** https://github.com/shahabmokhtari/ultimate-imap-mcp/security/advisories/new
+- **GitHub Security Advisories:** https://github.com/shahabmokhtari/awesome-imap-mcp/security/advisories/new
 - **Email:** Open a private security advisory via GitHub (preferred) so we can coordinate a fix before public disclosure.
 
 Please include:
@@ -22,11 +22,11 @@ This project is in active development. Security fixes are applied to the latest 
 
 ## Sensitive Data Handling
 
-Ultimate IMAP MCP processes email content, account credentials, and OAuth tokens. The following protections are in place:
+Awesome IMAP MCP processes email content, account credentials, and OAuth tokens. The following protections are in place:
 
-- **OAuth tokens:** Stored encrypted in `~/.ultimate-imap-mcp/accounts.json` (configurable). Never committed to the repo.
+- **OAuth tokens:** Stored encrypted in `~/.awesome-imap-mcp/accounts.json` (configurable). Never committed to the repo.
 - **App passwords:** Resolved from environment variables (e.g. `${ACCOUNT_PERSONAL_PASSWORD}`) — never written to disk.
-- **Email cache:** Stored in local SQLite (`~/.ultimate-imap-mcp/cache.db`) with WAL mode. Never transmitted off-device unless you explicitly configure an OTLP exporter or external LLM provider.
+- **Email cache:** Stored in local SQLite (`~/.awesome-imap-mcp/cache.db`) with WAL mode. Never transmitted off-device unless you explicitly configure an OTLP exporter or external LLM provider.
 - **HTML email rendering:** Sanitized with DOMPurify; remote resources blocked by default; plain-text view is the default.
 - **No telemetry by default:** No outbound calls except to your configured IMAP servers, OAuth providers (Google/Microsoft/Yahoo), and any LLM provider you enable.
 
@@ -38,7 +38,7 @@ Ultimate IMAP MCP processes email content, account credentials, and OAuth tokens
 ## Best Practices for Users
 
 - Use **OAuth** (PKCE flow, no client secret) over app passwords where possible.
-- Set restrictive permissions on `~/.ultimate-imap-mcp/` (`chmod 700`).
+- Set restrictive permissions on `~/.awesome-imap-mcp/` (`chmod 700`).
 - Run the dashboard on `localhost` unless you've configured `dashboard_auth`.
 - Review `accounts.json` permissions periodically.
 - When sharing logs for bug reports, redact account IDs and message UIDs.
