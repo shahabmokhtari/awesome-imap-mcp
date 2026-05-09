@@ -51,6 +51,14 @@ public class AccountEntry
     [JsonPropertyName("enabled")]
     public bool Enabled { get; set; } = true;
 
+    /// <summary>
+    /// True when the OAuth refresh token was revoked or expired permanently (e.g. provider
+    /// returned invalid_grant). Sync stops for this account until the user re-authenticates.
+    /// Cleared on successful OAuth re-authorization.
+    /// </summary>
+    [JsonPropertyName("requires_reauth")]
+    public bool RequiresReauth { get; set; } = false;
+
     [JsonPropertyName("created_at")]
     public string CreatedAt { get; set; } = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss");
 
