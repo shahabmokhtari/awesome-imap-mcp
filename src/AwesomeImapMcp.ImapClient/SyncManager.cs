@@ -258,6 +258,17 @@ public class SyncManager(
                 // Shutting down
                 break;
             }
+            catch (OAuthRefreshTokenRevokedException ex)
+            {
+                // Permanent OAuth failure — stop the IDLE loop immediately. The user
+                // must re-authenticate before sync can resume for this account; retrying
+                // every 5s would just spam the OAuth provider with the revoked token.
+                logger.LogError(ex,
+                    "OAuth refresh token for account {Account} is revoked. Stopping IDLE listener for {Folder} until user re-authenticates.",
+                    accountId, folderPath);
+                accountRepo.SetRequiresReauth(accountId, true);
+                break;
+            }
             catch (Exception ex)
             {
                 if (ct.IsCancellationRequested) break; // shutting down, don't reconnect
@@ -316,6 +327,15 @@ public class SyncManager(
             catch (OperationCanceledException) when (_paused)
             {
                 logger.LogDebug("Initial sync cancelled by pause for {Account}", accountId);
+            }
+            catch (OAuthRefreshTokenRevokedException ex)
+            {
+                logger.LogError(ex,
+                    "OAuth refresh token for account {Account} is revoked. Stopping polling loop until user re-authenticates.",
+                    accountId);
+                accountRepo.SetRequiresReauth(accountId, true);
+                _isSyncing = false;
+                return;
             }
             catch (Exception ex)
             {
@@ -382,6 +402,14 @@ public class SyncManager(
             {
                 // Sync was cancelled by pause — not an error, loop will wait
                 logger.LogDebug("Sync cancelled by pause for {Account}", accountId);
+            }
+            catch (OAuthRefreshTokenRevokedException ex)
+            {
+                logger.LogError(ex,
+                    "OAuth refresh token for account {Account} is revoked. Stopping polling loop until user re-authenticates.",
+                    accountId);
+                accountRepo.SetRequiresReauth(accountId, true);
+                break;
             }
             catch (Exception ex)
             {

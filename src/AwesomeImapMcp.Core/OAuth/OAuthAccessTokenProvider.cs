@@ -121,6 +121,12 @@ public sealed class OAuthAccessTokenProvider(
             logger.LogWarning(ex, "Transient network error refreshing OAuth token for account {AccountId} — caller will retry", accountId);
             return null;
         }
+        catch (OAuthRefreshTokenRevokedException)
+        {
+            // Permanent failure — re-throw directly so callers (e.g. SyncManager) can
+            // detect it and stop retrying, rather than having it wrapped in InvalidOperationException.
+            throw;
+        }
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to refresh OAuth token for account {AccountId}", accountId);

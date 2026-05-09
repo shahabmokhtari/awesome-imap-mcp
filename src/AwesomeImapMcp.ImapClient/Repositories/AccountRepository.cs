@@ -9,7 +9,8 @@ public record AccountRecord(
     string Provider, string? ConfigJson,
     string CreatedAt, string UpdatedAt,
     string BackendType = "imap",
-    bool Enabled = true);
+    bool Enabled = true,
+    bool RequiresReauth = false);
 
 public class AccountRepository(AccountsStore store)
 {
@@ -124,6 +125,22 @@ public class AccountRepository(AccountsStore store)
         });
     }
 
+    /// <summary>
+    /// Marks an account as needing OAuth re-authentication. Set to true after a permanent
+    /// OAuth refresh-token failure (e.g. invalid_grant) so the dashboard can prompt the
+    /// user. Cleared by the OAuth callback handler on successful re-authorization.
+    /// </summary>
+    public void SetRequiresReauth(string id, bool requiresReauth)
+    {
+        store.Write(data =>
+        {
+            var entry = data.Accounts.Find(a => a.Id == id);
+            if (entry is null) return;
+            entry.RequiresReauth = requiresReauth;
+            entry.UpdatedAt = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss");
+        });
+    }
+
     private static AccountRecord ToRecord(AccountEntry e) => new(
         Id: e.Id,
         Name: e.Name,
@@ -140,6 +157,7 @@ public class AccountRepository(AccountsStore store)
         CreatedAt: e.CreatedAt,
         UpdatedAt: e.UpdatedAt,
         BackendType: e.BackendType,
-        Enabled: e.Enabled
+        Enabled: e.Enabled,
+        RequiresReauth: e.RequiresReauth
     );
 }

@@ -130,6 +130,7 @@ public class OAuthTokenService(IHttpClientFactory httpClientFactory)
 
         if (!response.IsSuccessStatusCode)
         {
+            ThrowIfPermanentOAuthError(response.StatusCode, json);
             throw new InvalidOperationException(
                 $"Token refresh failed ({response.StatusCode}): {json}");
         }
@@ -170,12 +171,47 @@ public class OAuthTokenService(IHttpClientFactory httpClientFactory)
 
         if (!response.IsSuccessStatusCode)
         {
+            ThrowIfPermanentOAuthError(response.StatusCode, json);
             throw new InvalidOperationException(
                 $"Scoped token refresh failed ({response.StatusCode}): {json}");
         }
 
         return JsonSerializer.Deserialize<OAuthTokenResponse>(json)
             ?? throw new InvalidOperationException("Failed to deserialize token response.");
+    }
+
+    /// <summary>
+    /// If the HTTP status code indicates a permanent OAuth client error (4xx, excluding 429
+    /// which is a transient rate-limit), throws <see cref="OAuthRefreshTokenRevokedException"/>.
+    /// </summary>
+    private static void ThrowIfPermanentOAuthError(System.Net.HttpStatusCode statusCode, string responseBody)
+    {
+        var status = (int)statusCode;
+        // 4xx errors (except 429 Too Many Requests) are permanent — retrying will not help.
+        if (status is >= 400 and < 500 and not 429)
+        {
+            var oauthError = TryParseOAuthError(responseBody) ?? statusCode.ToString();
+            throw new OAuthRefreshTokenRevokedException(oauthError, responseBody);
+        }
+    }
+
+    /// <summary>
+    /// Attempts to parse the "error" field from an OAuth error response JSON body.
+    /// Returns null if the body is not valid JSON or does not contain an "error" field.
+    /// </summary>
+    private static string? TryParseOAuthError(string json)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.TryGetProperty("error", out var errorProp))
+                return errorProp.GetString();
+        }
+        catch (JsonException)
+        {
+            // Response body is not JSON — treat as unknown error
+        }
+        return null;
     }
 
     private static string Base64UrlEncode(byte[] data) =>
