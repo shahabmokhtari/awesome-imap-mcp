@@ -160,10 +160,11 @@ public class AttachmentTools(
         "Fetches the full message from the server and extracts the specific attachment.")]
     public async Task<string> DownloadAttachment(
         [Description("Attachment ID (database primary key)")] int attachmentId,
-        [Description("Path where the file should be saved (directory or full path)")] string savePath)
+        [Description("Path where the file should be saved (directory or full path)")] string savePath,
+        [Description("Replace the file if it already exists (default: false)")] bool overwrite = false)
     {
         return await McpJsonDefaults.LogToolCallAsync(logger, "download_attachment",
-            new Dictionary<string, object?> { ["attachmentId"] = attachmentId, ["savePath"] = savePath },
+            new Dictionary<string, object?> { ["attachmentId"] = attachmentId, ["savePath"] = savePath, ["overwrite"] = overwrite },
             async () =>
             {
                 try
@@ -194,23 +195,11 @@ public class AttachmentTools(
                     if (folder is null)
                         return McpJsonDefaults.Error($"Folder not found for message (folderId={msg.FolderId}).");
 
-                    // Resolve save path — if it's a directory, append the sanitized filename
-                    var resolvedPath = savePath;
-                    if (Directory.Exists(savePath) || savePath.EndsWith(Path.DirectorySeparatorChar) || savePath.EndsWith(Path.AltDirectorySeparatorChar))
-                    {
-                        // Sanitize filename to prevent path traversal from untrusted email data
-                        var rawFilename = attachment.Filename ?? $"attachment_{attachmentId}";
-                        var filename = Path.GetFileName(rawFilename);
-                        if (string.IsNullOrWhiteSpace(filename))
-                            filename = $"attachment_{attachmentId}";
-                        resolvedPath = Path.Combine(savePath, filename);
-                    }
-
-                    // Verify resolved path is within the intended directory
-                    var fullResolved = Path.GetFullPath(resolvedPath);
-                    var fullSaveDir = Path.GetFullPath(Directory.Exists(savePath) ? savePath : Path.GetDirectoryName(savePath) ?? savePath);
-                    if (!fullResolved.StartsWith(fullSaveDir, StringComparison.Ordinal))
-                        return McpJsonDefaults.Error("Resolved path is outside the target directory.");
+                    var (checkedPath, pathError) = AttachmentSavePath.Resolve(
+                        savePath, attachment.Filename, attachmentId, overwrite);
+                    if (pathError is not null)
+                        return McpJsonDefaults.Error(pathError);
+                    var resolvedPath = checkedPath!;
 
                     // Ensure directory exists
                     var dir = Path.GetDirectoryName(resolvedPath);
