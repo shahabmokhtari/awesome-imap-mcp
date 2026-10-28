@@ -2,7 +2,7 @@
   "mcpServers": {
     "awesome-imap-mcp": {
       "type": "sse",
-      "url": "http://localhost:3846/sse"
+      "url": "http://127.0.0.1:3846/sse"
     }
   }
 }
