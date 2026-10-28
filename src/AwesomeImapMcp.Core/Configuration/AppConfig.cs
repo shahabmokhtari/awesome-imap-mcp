@@ -52,6 +52,14 @@ public class ServerConfig
     [JsonPropertyName("dashboard_port")]
     public int DashboardPort { get; set; } = 3847;
 
+    /// <summary>
+    /// Interface the MCP HTTP endpoint and the dashboard listen on. Defaults to
+    /// loopback. The MCP endpoint has no authentication, so binding it to
+    /// "0.0.0.0" or a LAN address lets anyone on that network operate the mailbox.
+    /// </summary>
+    [JsonPropertyName("bind_address")]
+    public string BindAddress { get; set; } = "localhost";
+
     [JsonPropertyName("dashboard_enabled")]
     public bool DashboardEnabled { get; set; } = false;
 

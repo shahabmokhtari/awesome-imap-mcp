@@ -3,6 +3,7 @@
     "transport": "stdio",
     "http_port": 3846,
     "dashboard_port": 3847,
+    "bind_address": "localhost",
     "dashboard_enabled": false,
     "dashboard_auth": null,
     "dashboard_auto_open": false
