@@ -557,7 +557,7 @@ public static class AnalyticsApi
                 flaggedCmd.CommandText = $"""
                     SELECT COUNT(*) FROM messages m
                     WHERE m.deleted_at IS NULL
-                      AND m.flags LIKE '%\\Flagged%'
+                      AND m.flags LIKE '%\Flagged%'
                       {accountFilter};
                     """;
                 if (!string.IsNullOrEmpty(accountId))
@@ -569,7 +569,7 @@ public static class AnalyticsApi
                 unreadCmd.CommandText = $"""
                     SELECT COUNT(*) FROM messages m
                     WHERE m.deleted_at IS NULL
-                      AND (m.flags IS NULL OR m.flags NOT LIKE '%\\Seen%')
+                      AND (m.flags IS NULL OR m.flags NOT LIKE '%\Seen%')
                       {accountFilter};
                     """;
                 if (!string.IsNullOrEmpty(accountId))
