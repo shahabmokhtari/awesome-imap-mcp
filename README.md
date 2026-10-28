@@ -6,6 +6,20 @@ Unlike every other email MCP server out there, this one has a **local cache**, a
 
 Built with **.NET 10** and **MailKit** for maximum performance and cross-platform support.
 
+![Messages view: an email open beside the inbox, with AI-assigned labels on every message](docs/images/dashboard-message-detail.png)
+
+<sub>All screenshots use an invented demo mailbox — fictional people and companies on reserved `example` domains.</sub>
+
+## See It in Action
+
+Point an agent like Claude at your inbox and ask it to triage. It searches the local cache, reads bodies, labels and files messages through the undoable queue, and hands back something like this:
+
+<p align="center"><img src="docs/images/sample-triage-report.png" alt="A sample triage report: one phishing attempt caught, five messages that need a reply with suggested next steps, and unsubscribe recommendations" width="820"></p>
+
+> *"Triage everything that arrived since yesterday. Label it, move the promos out, and tell me what actually needs me."*
+
+Everything the agent changed is in the operation queue, and every write can be undone.
+
 ## Why This Exists
 
 Every existing IMAP MCP server hits the IMAP server on every single tool call. No caching, no queuing, no UI, no intelligence. This project fixes all of that.
@@ -30,6 +44,8 @@ Every existing IMAP MCP server hits the IMAP server on every single tool call. N
 - **Per-account connection throttling** - configurable max IMAP connections per account (default 5)
 - **Token budget awareness** - configurable response sizes so you don't blow context windows
 - **Email security** - DOMPurify HTML sanitization, script stripping, remote resource blocking, default plain text view
+- **Secure by default** - listens on loopback only, rejects DNS-rebinding requests, verifies installer checksums, and refuses to let an attachment overwrite an existing file unless asked (see [Security](#security))
+- **Readable bodies** - when a sender ships a placeholder plain-text part ("undefined", "your client does not support HTML", an invisible preview-text pad), the HTML part is converted instead, so agents see the real content
 - **Full observability** - metrics, logs, and tracing (OpenTelemetry export optional)
 - **HTTP+SSE transport** - run as stdio (default) or HTTP server for remote MCP clients, or both
 - **Multi-instance support** - leader election via heartbeat coordination; primary/secondary proxy architecture
@@ -50,6 +66,8 @@ Download a self-contained binary for your platform — no .NET SDK required.
 curl -fsSL https://raw.githubusercontent.com/shahabmokhtari/awesome-imap-mcp/main/install.sh | bash
 ```
 
+The installer verifies the download against the release's `SHA256SUMS` before installing and refuses a binary that doesn't match.
+
 Or download manually from the [releases page](https://github.com/shahabmokhtari/awesome-imap-mcp/releases):
 
 | Platform | Binary |
@@ -62,7 +80,8 @@ Or download manually from the [releases page](https://github.com/shahabmokhtari/
 | Windows arm64 | `awesome-imap-mcp-win-arm64.exe` |
 
 ```bash
-# After downloading, make it executable and run
+# Verify the download against the published checksums, then make it executable and run
+shasum -a 256 -c SHA256SUMS --ignore-missing
 chmod +x awesome-imap-mcp-*
 ./awesome-imap-mcp-osx-arm64 --config ./config.json
 ```
@@ -158,8 +177,10 @@ dotnet run --project src/AwesomeImapMcp.McpServer -- --config ./config.example.j
 #### 5. Run with Docker
 
 ```bash
-docker run -v ./config.json:/app/config.json -v imap-cache:/data -p 3847:3847 awesome-imap-mcp
+docker run -v ./config.json:/app/config.json -v imap-cache:/data -p 127.0.0.1:3847:3847 awesome-imap-mcp
 ```
+
+Inside a container, loopback isn't reachable from the host, so set `"bind_address": "0.0.0.0"` in the container's config and publish the port to `127.0.0.1` on the host as shown — that keeps it off your network. Set a dashboard PIN before publishing it anywhere wider.
 
 ---
 
@@ -228,7 +249,9 @@ Add to `~/.codeium/windsurf/mcp_config.json`:
 awesome-imap-mcp --transport http --port 3846
 ```
 
-Connect your client to `http://localhost:3846/sse`.
+Connect your client to `http://127.0.0.1:3846/sse`.
+
+The HTTP transport listens on loopback (`127.0.0.1` and `::1`) only, so other machines on your network can't reach it. It has no authentication of its own — see [Network exposure](#network-exposure) before changing that.
 
 ---
 
@@ -282,7 +305,7 @@ CLI arguments take precedence over values in the config file. You can also set t
 | `list_attachments` | List all attachments for a specific message |
 | `search_attachments` | Search attachments across all messages with filters (filename, content type, date, size) |
 | `get_attachment_info` | Get detailed information about a specific attachment |
-| `download_attachment` | Download an attachment from the IMAP server and save to disk |
+| `download_attachment` | Download an attachment from the IMAP server and save to disk. Refuses to replace an existing file unless `overwrite: true` |
 
 ### Folders
 | Tool | Description |
@@ -357,6 +380,17 @@ On first launch (no accounts configured), the dashboard shows a guided setup wiz
 2. **Add Account** — select your provider, sign in with OAuth or enter an app password
 3. **Done** — server starts syncing immediately
 
+### Screenshots
+
+| | |
+|---|---|
+| ![Messages: inbox with AI labels and attachment indicators](docs/images/dashboard-messages.png) | ![Analytics: volume over 13 months, account breakdown, label distribution](docs/images/dashboard-analytics.png) |
+| **Messages** — every account and folder, with AI-assigned labels | **Analytics** — volume trends, unread and flagged counts, label mix |
+| ![Queue: a pending send with Cancel and Confirm, plus completed label, move, flag and delete operations](docs/images/dashboard-queue.png) | ![Tools: running category_breakdown from the dashboard and viewing its JSON response](docs/images/dashboard-tools.png) |
+| **Queue** — every write is queued; sends wait in an undo window | **Tools** — run any of the 44 MCP tools by hand |
+
+<p align="center"><img src="docs/images/dashboard-setup.png" alt="Setup wizard, step one: set an optional dashboard PIN" width="640"><br><b>Setup wizard</b> — PIN, account, done</p>
+
 ### Dashboard Pages
 
 - **Overview** — account count, sync status, queue summary, system stats
@@ -375,7 +409,7 @@ On first launch (no accounts configured), the dashboard shows a guided setup wiz
   - Body-cached indicator
   - Keyboard navigation
 - **Analytics** — visual mailbox insights and bulk cleanup tools:
-  - Summary cards (total messages, accounts, attachments, storage)
+  - Summary cards (total messages, unique senders, unread, flagged, with attachments, months of history)
   - Per-month volume chart (CSS bar chart with auto-scroll to most recent, hover dates)
   - Account breakdown (messages per account)
   - Label distribution (counts and percentages)
@@ -396,6 +430,8 @@ On first launch (no accounts configured), the dashboard shows a guided setup wiz
 | `null` (default) | Open access — no authentication required |
 | `"pin"` | PIN protected — set a PIN on first access, required for all API calls |
 
+Without a PIN, anyone who can reach the dashboard port can use it — fine on the default loopback binding, not fine on a network. Set a PIN before changing `bind_address`.
+
 ---
 
 ## Configuration
@@ -414,6 +450,7 @@ See [`config.example.json`](config.example.json) for a full example.
     "transport": "stdio",
     "http_port": 3846,
     "dashboard_port": 3847,
+    "bind_address": "localhost",
     "dashboard_enabled": false,
     "dashboard_auth": null,
     "dashboard_auto_open": false,
@@ -428,11 +465,19 @@ See [`config.example.json`](config.example.json) for a full example.
 | `transport` | `"stdio"` | MCP transport mode: `"stdio"`, `"http"`, or `"both"` |
 | `http_port` | `3846` | Port for HTTP+SSE MCP transport (overridable via `--port`) |
 | `dashboard_port` | `3847` | Port for the web dashboard (overridable via `--dashboard-port`) |
+| `bind_address` | `"localhost"` | Interface the HTTP transport and dashboard listen on. `"localhost"` binds `127.0.0.1` and `::1`; `"0.0.0.0"` or a specific IP exposes them to the network — see [Network exposure](#network-exposure) |
 | `dashboard_enabled` | `false` | Enable the web dashboard |
 | `dashboard_auth` | `null` | Dashboard auth mode: `"pin"` (requires PIN) or `null` (open access) |
 | `dashboard_auto_open` | `false` | Automatically open dashboard in browser on first launch |
 | `log_level` | `"Information"` | Minimum log level: `Trace`, `Debug`, `Information`, `Warning`, `Error`, `Critical` |
 | `log_file` | `null` | Path to a log file (in addition to stderr) |
+| `log_protocol` | `false` | Record raw MCP stdio traffic to the log directory. ⚠️ This captures **everything** — message bodies and any password passed to `add_account_imap`. Debugging only |
+
+#### Network exposure
+
+The MCP HTTP transport executes mail operations — read, send, delete — and **has no authentication**. By default it only accepts connections from this machine, and rejects any request whose `Host` header isn't `localhost`, `127.0.0.1` or `[::1]`, which blocks DNS-rebinding attacks from web pages you visit.
+
+Setting `bind_address` to `"0.0.0.0"` or a LAN address lets **anyone on that network** operate your mailbox. The server logs a warning at startup when you do. Only do it on a network you control, and prefer an SSH tunnel or a reverse proxy that adds authentication.
 
 ### Accounts
 
@@ -773,6 +818,7 @@ Once the plugin is installed, Claude Code can use the skills automatically:
 
 - [Design Specification](docs/superpowers/specs/2026-03-18-awesome-imap-mcp-design.md) - full system design, architecture, and implementation plan
 - [Data Model](docs/DATA_MODEL.md) - SQLite schema and indexes
+- [Security Policy](SECURITY.md) - reporting vulnerabilities, threat model, data handling
 
 ## Migrating from `ultimate-imap-mcp`
 
@@ -789,6 +835,16 @@ This project was renamed from `ultimate-imap-mcp` to `awesome-imap-mcp`. If you 
 5. **Update MCP client configs** to point at the new command name.
 
 The old GitHub URL `github.com/shahabmokhtari/ultimate-imap-mcp` redirects to the new one, but it's worth updating any pinned references.
+
+## Security
+
+- **Network:** loopback-only by default, with Host-header filtering against DNS rebinding. Opting into wider access is explicit and logged — see [Network exposure](#network-exposure).
+- **Credentials:** account passwords and OAuth tokens are stored in `accounts.json` encrypted with AES-256-GCM. The key is derived (PBKDF2, 100,000 iterations) from `AIMAP_PASSPHRASE` if set, otherwise from this machine's ID — set a passphrase if the data directory could be copied elsewhere.
+- **Untrusted mail:** HTML is sanitized with DOMPurify and rendered in a sandboxed iframe with no access to the dashboard. Remote images are blocked by default.
+- **Agent safety:** writes go through the operation queue and can be undone; sends wait in an undo window or require confirmation. `download_attachment` refuses to replace existing files unless `overwrite: true`, so a prompt-injected email can't overwrite your shell profile.
+- **Supply chain:** release binaries ship with `SHA256SUMS`, which the installer enforces. CI fails on any known-vulnerable NuGet package, and runs with a read-only token.
+
+Report vulnerabilities privately — see [SECURITY.md](SECURITY.md).
 
 ## License
 

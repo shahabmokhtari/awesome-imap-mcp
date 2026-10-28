@@ -8,7 +8,7 @@ Thanks for your interest in contributing! This project is built with .NET 10 / C
 git clone https://github.com/shahabmokhtari/awesome-imap-mcp.git
 cd awesome-imap-mcp
 dotnet build
-dotnet test                                # 343+ tests
+dotnet test                                # 390+ tests
 cd dashboard/client && npm install && npm run build
 ```
 
