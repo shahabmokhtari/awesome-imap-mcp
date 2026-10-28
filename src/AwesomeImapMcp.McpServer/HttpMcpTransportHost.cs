@@ -92,7 +92,11 @@ public sealed class HttpMcpTransportHost : BackgroundService
     private async Task StartHttpServer(int port, CancellationToken stoppingToken)
     {
         var builder = WebApplication.CreateBuilder();
-        builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
+        builder.WebHost.ConfigureKestrel(o =>
+            ListenAddress.Configure(o, _config.Server.BindAddress, port, _logger, "MCP HTTP transport",
+                "It has no authentication: anyone who can reach this port can read, send and delete mail."));
+
+        ListenAddress.AddHostFiltering(builder.Services, _config.Server.BindAddress);
 
         // Share singleton services from the root host
         builder.Services.AddSingleton(_config);
@@ -141,6 +145,7 @@ public sealed class HttpMcpTransportHost : BackgroundService
 
         var app = builder.Build();
         _webApp = app;
+        ListenAddress.UseHostFiltering(app, _config.Server.BindAddress);
 
         // Tool API endpoint — always available for multi-instance proxy
         app.MapToolsApi();
@@ -155,12 +160,12 @@ public sealed class HttpMcpTransportHost : BackgroundService
 
         if (!_hasStartedOnce)
         {
-            _logger.LogInformation("MCP HTTP transport starting on http://0.0.0.0:{Port}", port);
+            _logger.LogInformation("MCP HTTP transport starting on {Address}:{Port}", _config.Server.BindAddress, port);
             _hasStartedOnce = true;
         }
         else
         {
-            _logger.LogDebug("MCP HTTP transport reconnecting on http://0.0.0.0:{Port}", port);
+            _logger.LogDebug("MCP HTTP transport reconnecting on {Address}:{Port}", _config.Server.BindAddress, port);
         }
 
         // We're now serving — clear proxy (we are primary)

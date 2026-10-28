@@ -96,7 +96,11 @@ public sealed class DashboardHost : BackgroundService
         {
             ContentRootPath = AppContext.BaseDirectory,
         });
-        builder.WebHost.UseUrls($"http://localhost:{port}");
+        builder.WebHost.ConfigureKestrel(o =>
+            ListenAddress.Configure(o, _config.Server.BindAddress, port, _logger, "Dashboard",
+                string.IsNullOrEmpty(_config.Server.DashboardPinHash)
+                    ? "No dashboard PIN is set, so it is open to anyone who can reach it."
+                    : "It is protected by the dashboard PIN, sent over plain HTTP."));
 
         if (!Directory.Exists(builder.Environment.WebRootPath))
         {
@@ -168,10 +172,12 @@ public sealed class DashboardHost : BackgroundService
         builder.Services.AddSingleton<DashboardAuthRepository>();
         builder.Services.AddHostedService<DashboardHubRelay>();
 
+        ListenAddress.AddHostFiltering(builder.Services, _config.Server.BindAddress);
         var app = builder.Build();
         _webApp = app;
 
         // Middleware pipeline
+        ListenAddress.UseHostFiltering(app, _config.Server.BindAddress);
         app.UsePinAuth();
 
         // Disable browser caching for all responses
