@@ -97,6 +97,29 @@ CREATE INDEX idx_messages_has_attachments ON messages(has_attachments) WHERE has
 CREATE INDEX idx_messages_unread ON messages(account_id, folder_id) WHERE flags NOT LIKE '%\\Seen%';
 ```
 
+### message_folders (Folder Membership)
+
+A message is stored once per account and linked to every folder it appears in. **This junction — not `messages.folder_id` — is the source of truth for which folder a message is in.**
+
+```sql
+CREATE TABLE message_folders (
+    message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+    folder_id  INTEGER NOT NULL REFERENCES folders(id) ON DELETE CASCADE,
+    uid        INTEGER NOT NULL,   -- UID of the message *in this folder*
+    PRIMARY KEY (message_id, folder_id)
+);
+CREATE INDEX idx_message_folders_folder ON message_folders(folder_id, uid DESC);
+```
+
+> ⚠️ `messages.folder_id` records the folder a message was **first seen in** and is never rewritten. Moving a message updates only `message_folders` (the old link is removed and a new one added with the destination UID). Querying `messages.folder_id` therefore over-counts a folder by every message ever moved out of it, and makes a successful move look like it failed.
+>
+> To ask "what is in this folder?":
+> ```sql
+> SELECT m.* FROM messages m
+>   JOIN message_folders mf ON mf.message_id = m.id AND mf.folder_id = $folderId
+>  WHERE m.deleted_at IS NULL;
+> ```
+
 ### messages_fts (Full-Text Search)
 
 FTS5 virtual table for fast text search over subject and body.
