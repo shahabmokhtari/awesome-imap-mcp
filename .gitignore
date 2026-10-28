@@ -29,9 +29,31 @@ dashboard/client/dist/
 *.db-shm
 *.db-wal
 
-# Config (may contain credentials)
+# Config and runtime data (may contain credentials or mail content)
 config.json
 !config.example.json
+accounts.json
+*.json.bak*
+*.bak-*
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+secrets*.json
+logs/
+*.log
+*.sqlite
+*.sqlite3
+*.eml
+*.mbox
+
+# Generated mail reports — built from real messages, never commit
+email-report*.html
+email-report*.md
+email-analytics*
 
 # OS
 .DS_Store
