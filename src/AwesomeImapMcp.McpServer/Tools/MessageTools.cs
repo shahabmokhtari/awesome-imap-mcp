@@ -197,22 +197,10 @@ public class MessageTools(
 
     /// <summary>
     /// Returns the best available body text for a message.
-    /// If body_text is available, returns it with format "text".
-    /// If only body_html is available, converts it to plain text and returns with format "html_converted".
-    /// If neither is available, returns (null, null).
+    /// A non-null body_text is not trusted on its own — many senders ship a stub
+    /// plain part while the real content sits in body_html. See
+    /// <see cref="MessageBodySelector"/> for how the two are weighed.
     /// </summary>
     private static (string? Body, string? Format) ResolveBody(MessageRecord msg)
-    {
-        if (msg.BodyText is not null)
-            return (msg.BodyText, "text");
-
-        if (msg.BodyHtml is not null)
-        {
-            var converted = HtmlTextExtractor.Convert(msg.BodyHtml);
-            if (converted is not null)
-                return (converted, "html_converted");
-        }
-
-        return (null, null);
-    }
+        => MessageBodySelector.Select(msg.BodyText, msg.BodyHtml);
 }
