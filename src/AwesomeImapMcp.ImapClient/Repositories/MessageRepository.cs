@@ -153,7 +153,7 @@ public class MessageRepository(AppDatabase db)
         // Primary lookup via junction table (handles deduplicated messages)
         using var cmd = conn.CreateCommand();
         cmd.CommandText = """
-            SELECT m.* FROM messages m
+            SELECT m.*, mf.folder_id AS link_folder_id, mf.uid AS link_uid FROM messages m
             JOIN message_folders mf ON mf.message_id = m.id
             WHERE m.account_id = $a AND mf.folder_id = $f AND mf.uid = $u
             LIMIT 1;
@@ -198,7 +198,7 @@ public class MessageRepository(AppDatabase db)
     {
         using var conn = db.GetReadConnection();
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT * FROM messages WHERE id = $id;";
+        cmd.CommandText = $"SELECT m.*{AnyLinkColumns} FROM messages m WHERE m.id = $id;";
         cmd.Parameters.AddWithValue("$id", id);
         using var reader = cmd.ExecuteReader();
         return reader.Read() ? ReadRecord(reader) : null;
@@ -215,7 +215,7 @@ public class MessageRepository(AppDatabase db)
         if (folderId != null) where += " AND m.id IN (SELECT message_id FROM message_folders WHERE folder_id = $folderId)";
 
         cmd.CommandText = $"""
-            SELECT m.* FROM messages m
+            SELECT m.*{(folderId != null ? FolderLinkColumns : AnyLinkColumns)} FROM messages m
             JOIN messages_fts ON messages_fts.rowid = m.id
             {where}
             ORDER BY m.date_epoch DESC
@@ -264,7 +264,8 @@ public class MessageRepository(AppDatabase db)
 
         var join = useFts ? "JOIN messages_fts ON messages_fts.rowid = m.id" : "";
 
-        cmd.CommandText = $"SELECT m.* FROM messages m {join} {where} {orderClause} LIMIT $limit OFFSET $offset;";
+        var linkColumns = filter.FolderId is not null ? FolderLinkColumns : AnyLinkColumns;
+        cmd.CommandText = $"SELECT m.*{linkColumns} FROM messages m {join} {where} {orderClause} LIMIT $limit OFFSET $offset;";
 
         if (useFts) cmd.Parameters.AddWithValue("$query", SanitizeFtsQuery(filter.Query!));
         if (filter.AccountId is not null) cmd.Parameters.AddWithValue("$accountId", filter.AccountId);
@@ -289,7 +290,7 @@ public class MessageRepository(AppDatabase db)
     {
         using var conn = db.GetReadConnection();
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT * FROM messages WHERE thread_id = $threadId ORDER BY date_epoch;";
+        cmd.CommandText = $"SELECT m.*{AnyLinkColumns} FROM messages m WHERE m.thread_id = $threadId ORDER BY m.date_epoch;";
         cmd.Parameters.AddWithValue("$threadId", threadId);
         using var reader = cmd.ExecuteReader();
         var list = new List<MessageRecord>();
@@ -441,7 +442,7 @@ public class MessageRepository(AppDatabase db)
         using var conn = db.GetReadConnection();
         using var cmd = conn.CreateCommand();
         cmd.CommandText = """
-            SELECT m.* FROM messages m
+            SELECT m.*, mf.folder_id AS link_folder_id, mf.uid AS link_uid FROM messages m
             JOIN message_folders mf ON mf.message_id = m.id
             WHERE mf.folder_id = $f AND m.account_id = $a AND m.deleted_at IS NULL
             ORDER BY m.date_epoch DESC LIMIT $limit OFFSET $offset;
@@ -744,13 +745,18 @@ public class MessageRepository(AppDatabase db)
         if (folderId is not null)
             return GetByUid(accountId, folderId.Value, uid.Value);
 
-        foreach (var folder in folderRepo.GetByAccount(accountId))
-        {
-            var msg = GetByUid(accountId, folder.Id, uid.Value);
-            if (msg is not null) return msg;
-        }
-
-        return null;
+        // UIDs are only unique within a folder, so without a folderId the same uid
+        // can name different messages in different folders. Refuse to guess.
+        var matches = folderRepo.GetByAccount(accountId)
+            .Select(f => (Folder: f, Message: GetByUid(accountId, f.Id, uid.Value)))
+            .Where(x => x.Message is not null)
+            .ToList();
+        if (matches.Select(x => x.Message!.Id).Distinct().Count() > 1)
+            throw new InvalidOperationException(
+                $"UID {uid} exists in several folders as different messages: " +
+                string.Join(", ", matches.Select(x => $"{x.Folder.Path} (folderId {x.Folder.Id})")) +
+                ". Pass folderId, or use messageId.");
+        return matches.FirstOrDefault().Message;
     }
 
     /// <summary>Find a message by RFC Message-ID header within an account.</summary>
@@ -905,11 +911,43 @@ public class MessageRepository(AppDatabase db)
         return $"\"{escaped}\"";
     }
 
+    // A message deduplicated across folders has one messages row but a
+    // message_folders link per folder, each with that folder's own UID. The
+    // row's folder_id/uid are only where it was first seen, and that pair names
+    // a different message (or nothing) in any other folder. So queries report a
+    // folder link instead: the queried folder's link when scoped to a folder,
+    // otherwise an existing link, preferring the origin one.
+
+    /// <summary>Projects the link of the folder bound to <c>$folderId</c>.</summary>
+    private const string FolderLinkColumns = """
+        , $folderId AS link_folder_id,
+          (SELECT lf.uid FROM message_folders lf WHERE lf.message_id = m.id AND lf.folder_id = $folderId) AS link_uid
+        """;
+
+    /// <summary>Projects one existing link, preferring the origin folder's.</summary>
+    private const string AnyLinkColumns = """
+        , (SELECT lf.folder_id FROM message_folders lf WHERE lf.message_id = m.id
+             ORDER BY lf.folder_id = m.folder_id DESC, lf.folder_id LIMIT 1) AS link_folder_id,
+          (SELECT lf.uid FROM message_folders lf WHERE lf.message_id = m.id
+             ORDER BY lf.folder_id = m.folder_id DESC, lf.folder_id LIMIT 1) AS link_uid
+        """;
+
+    private static int LinkOrOrigin(Microsoft.Data.Sqlite.SqliteDataReader r, string linkColumn, string originColumn)
+        => (int)LinkOrOriginInt64(r, linkColumn, originColumn);
+
+    private static long LinkOrOriginInt64(Microsoft.Data.Sqlite.SqliteDataReader r, string linkColumn, string originColumn)
+    {
+        for (var i = 0; i < r.FieldCount; i++)
+            if (r.GetName(i) == linkColumn && !r.IsDBNull(i))
+                return r.GetInt64(i);
+        return r.GetInt64(r.GetOrdinal(originColumn));
+    }
+
     private static MessageRecord ReadRecord(Microsoft.Data.Sqlite.SqliteDataReader r) => new(
         Id: r.GetInt32(r.GetOrdinal("id")),
         AccountId: r.GetString(r.GetOrdinal("account_id")),
-        FolderId: r.GetInt32(r.GetOrdinal("folder_id")),
-        Uid: r.GetInt64(r.GetOrdinal("uid")),
+        FolderId: LinkOrOrigin(r, "link_folder_id", "folder_id"),
+        Uid: LinkOrOriginInt64(r, "link_uid", "uid"),
         MessageId: r.IsDBNull(r.GetOrdinal("message_id")) ? null : r.GetString(r.GetOrdinal("message_id")),
         InReplyTo: r.IsDBNull(r.GetOrdinal("in_reply_to")) ? null : r.GetString(r.GetOrdinal("in_reply_to")),
         ReferencesHdr: r.IsDBNull(r.GetOrdinal("references_hdr")) ? null : r.GetString(r.GetOrdinal("references_hdr")),

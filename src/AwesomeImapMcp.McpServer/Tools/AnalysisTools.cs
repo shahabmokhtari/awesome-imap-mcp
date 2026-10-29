@@ -55,7 +55,8 @@ public class AnalysisTools(
                             {
                                 await using var backend = backendFactory.CreateSyncBackend(msg.AccountId);
                                 await backend.FetchMessageBodyAsync(msg.AccountId, folder.Path, msg.Uid).ConfigureAwait(false);
-                                msg = messageRepo.GetById(msg.Id) ?? msg;
+                                // Keep the folder link we resolved: GetById alone reports the origin folder's.
+                                msg = messageRepo.GetById(msg.Id) is { } fresh ? fresh with { FolderId = msg.FolderId, Uid = msg.Uid } : msg;
                             }
                         }
                         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -174,7 +175,8 @@ public class AnalysisTools(
                             {
                                 await using var backend = backendFactory.CreateSyncBackend(msg.AccountId);
                                 await backend.FetchMessageBodyAsync(msg.AccountId, folder.Path, msg.Uid).ConfigureAwait(false);
-                                msg = messageRepo.GetById(msg.Id) ?? msg;
+                                // Keep the folder link we resolved: GetById alone reports the origin folder's.
+                                msg = messageRepo.GetById(msg.Id) is { } fresh ? fresh with { FolderId = msg.FolderId, Uid = msg.Uid } : msg;
                             }
                             catch (Exception ex) when (ex is not OperationCanceledException)
                             {
