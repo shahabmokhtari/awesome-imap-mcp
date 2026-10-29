@@ -524,17 +524,46 @@ export function useFetchBody() {
   })
 }
 
+export interface ClearCacheResult {
+  deleted: number
+  resync: boolean
+  message: string
+}
+
+export interface ClearFolderCacheResult extends ClearCacheResult {
+  removedFromFolder: number
+}
+
+export interface ResetCacheDbResult {
+  stopping: boolean
+  message: string
+}
+
+/** Refetch everything that reads cached mail after a cache clear. */
+function invalidateCachedMail(qc: ReturnType<typeof useQueryClient>) {
+  for (const key of ['messages', 'messages-search', 'message', 'folders', 'sync-status', 'cache-stats']) {
+    qc.invalidateQueries({ queryKey: [key] })
+  }
+}
+
+/** Clears all cached mail in place; the server keeps running and re-syncs in the background. */
 export function useClearCache() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: () => apiFetch<{ deleted: number }>('/api/cache', { method: 'DELETE' }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['messages'] })
-      qc.invalidateQueries({ queryKey: ['folders'] })
-      qc.invalidateQueries({ queryKey: ['sync-status'] })
-    },
+    mutationFn: () => apiFetch<ClearCacheResult>('/api/cache', { method: 'DELETE' }),
+    onSuccess: () => invalidateCachedMail(qc),
     onError: (error) => {
       console.error('[useClearCache] failed:', error)
+    },
+  })
+}
+
+/** Deletes the whole cache database and stops the server, which must then be restarted. */
+export function useResetCacheDatabase() {
+  return useMutation({
+    mutationFn: () => apiFetch<ResetCacheDbResult>('/api/cache?mode=reset-db', { method: 'DELETE' }),
+    onError: (error) => {
+      console.error('[useResetCacheDatabase] failed:', error)
     },
   })
 }
@@ -543,12 +572,8 @@ export function useClearAccountCache() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (accountId: string) =>
-      apiFetch<{ deleted: number }>(`/api/cache/${encodeURIComponent(accountId)}`, { method: 'DELETE' }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['messages'] })
-      qc.invalidateQueries({ queryKey: ['folders'] })
-      qc.invalidateQueries({ queryKey: ['sync-status'] })
-    },
+      apiFetch<ClearCacheResult>(`/api/cache/${encodeURIComponent(accountId)}`, { method: 'DELETE' }),
+    onSuccess: () => invalidateCachedMail(qc),
     onError: (error) => {
       console.error('[useClearAccountCache] failed:', error)
     },
@@ -559,14 +584,10 @@ export function useClearFolderCache() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (params: { accountId: string; folderId: number }) =>
-      apiFetch<{ deleted: number }>(
+      apiFetch<ClearFolderCacheResult>(
         `/api/cache/${encodeURIComponent(params.accountId)}/${params.folderId}`,
         { method: 'DELETE' }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['messages'] })
-      qc.invalidateQueries({ queryKey: ['folders'] })
-      qc.invalidateQueries({ queryKey: ['sync-status'] })
-    },
+    onSuccess: () => invalidateCachedMail(qc),
     onError: (error) => {
       console.error('[useClearFolderCache] failed:', error)
     },

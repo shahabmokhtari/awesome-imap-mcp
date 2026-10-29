@@ -1258,7 +1258,11 @@ export default function Messages() {
                   {accountId && effectiveFolderId != null && (
                     <button
                       onClick={() => {
-                        if (window.confirm('Clear cached messages for this folder?'))
+                        if (window.confirm(
+                          'Clear cached messages for this folder?\n\n' +
+                          'Messages that are also in another folder stay cached there; the rest are removed with their attachment records and LLM analysis. ' +
+                          'Labels, pending queued writes and mail on the server are not touched. The folder is re-synced in the background.',
+                        ))
                           clearFolderCache.mutate({ accountId, folderId: effectiveFolderId })
                       }}
                       disabled={clearFolderCache.isPending}

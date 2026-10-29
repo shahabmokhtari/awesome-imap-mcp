@@ -1,4 +1,5 @@
 using AwesomeImapMcp.Core.Database;
+using Microsoft.Data.Sqlite;
 
 namespace AwesomeImapMcp.ImapClient.Repositories;
 
@@ -27,6 +28,14 @@ public record TopSenderRecord(string FromEmail, int MessageCount, long TotalSize
 
 /// <summary>Overall cache statistics.</summary>
 public record CacheStatsRecord(int TotalMessages, int BodiesFetched, long DbSizeBytes, long DbFreeSpaceBytes);
+
+/// <summary>
+/// Result of a cache clear. <see cref="MessagesDeleted"/> counts message rows removed from the
+/// cache; <see cref="FolderLinksRemoved"/> counts message-to-folder links removed (for a folder
+/// clear, the number of messages taken out of that folder, some of which survive because
+/// they are still cached in another folder).
+/// </summary>
+public record CacheClearResult(int MessagesDeleted, int FolderLinksRemoved);
 
 /// <summary>Per-account cache statistics.</summary>
 public record AccountCacheStatsRecord(
@@ -612,66 +621,207 @@ public class MessageRepository(AppDatabase db)
         });
     }
 
-    public int DeleteAll()
-    {
-        return db.ExecuteWrite(conn =>
-        {
-            using var unlinkCmd = conn.CreateCommand();
-            unlinkCmd.CommandText = "DELETE FROM message_folders;";
-            unlinkCmd.ExecuteNonQuery();
+    // ------------------------------------------------------------------
+    // Cache clearing
+    //
+    // Every scope removes the cached messages together with the rows that
+    // hang off them (message_folders links, attachments, llm_analysis) in a
+    // single transaction. Foreign keys are off on this database, so nothing
+    // cascades on its own. The FTS index is kept in step by the
+    // messages_fts_delete trigger, or emptied in bulk for a full clear.
+    // Nothing outside the mail cache is touched: operation_queue, llm_usage,
+    // llm_rules, sync_log, dashboard_sessions and the folders themselves
+    // (with their per-folder sync settings) all survive.
+    // ------------------------------------------------------------------
 
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = "DELETE FROM messages;";
-            return cmd.ExecuteNonQuery();
-        });
+    /// <summary>
+    /// Deletes every cached message. When <paramref name="resetSyncState"/> is true the
+    /// stored sync cursors of every folder are reset so the next sync starts over.
+    /// </summary>
+    public CacheClearResult ClearAll(bool resetSyncState = true)
+    {
+        return db.ExecuteWrite(conn => InTransaction(conn, tx =>
+        {
+            var links = Exec(conn, tx, "DELETE FROM message_folders;");
+            Exec(conn, tx, "DELETE FROM llm_analysis;");
+            Exec(conn, tx, "DELETE FROM attachments;");
+
+            // The per-row FTS delete trigger re-tokenizes every message body, which makes
+            // a whole-table delete very slow on a large cache. Drop it for this one
+            // statement, empty the index in bulk, then restore the trigger exactly as the
+            // schema defined it. All of this is inside the transaction, so a failure
+            // rolls back to the original trigger.
+            string? triggerSql;
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.Transaction = tx;
+                cmd.CommandText = "SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = 'messages_fts_delete';";
+                triggerSql = cmd.ExecuteScalar() as string;
+            }
+            if (triggerSql is not null)
+                Exec(conn, tx, "DROP TRIGGER messages_fts_delete;");
+
+            var deleted = Exec(conn, tx, "DELETE FROM messages;");
+            Exec(conn, tx, "INSERT INTO messages_fts(messages_fts) VALUES('delete-all');");
+
+            if (triggerSql is not null)
+                Exec(conn, tx, triggerSql + ";");
+
+            if (resetSyncState)
+                Exec(conn, tx, "UPDATE folders SET last_synced_uid = 0, oldest_synced_uid = 0, sync_cursor = NULL;");
+
+            return new CacheClearResult(deleted, links);
+        }));
     }
 
-    public int DeleteByAccount(string accountId)
+    /// <summary>
+    /// Deletes every cached message of one account. When <paramref name="resetSyncState"/>
+    /// is true the account's folder sync cursors are reset.
+    /// </summary>
+    public CacheClearResult ClearAccount(string accountId, bool resetSyncState = true)
     {
-        return db.ExecuteWrite(conn =>
+        return db.ExecuteWrite(conn => InTransaction(conn, tx =>
         {
-            // Delete message_folders entries for this account's messages
-            using var unlinkCmd = conn.CreateCommand();
-            unlinkCmd.CommandText = """
-                DELETE FROM message_folders WHERE message_id IN
-                (SELECT id FROM messages WHERE account_id = $a);
-                """;
-            unlinkCmd.Parameters.AddWithValue("$a", accountId);
-            unlinkCmd.ExecuteNonQuery();
+            const string accountMessages = "SELECT id FROM messages WHERE account_id = $a";
+            var p = new Dictionary<string, object> { ["$a"] = accountId };
 
-            // Delete the messages themselves
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = "DELETE FROM messages WHERE account_id = $a;";
-            cmd.Parameters.AddWithValue("$a", accountId);
-            return cmd.ExecuteNonQuery();
-        });
+            // Links of this account's messages, plus any dangling links left in its folders.
+            var links = Exec(conn, tx, $"""
+                DELETE FROM message_folders
+                WHERE message_id IN ({accountMessages})
+                   OR folder_id IN (SELECT id FROM folders WHERE account_id = $a);
+                """, p);
+            Exec(conn, tx, $"DELETE FROM llm_analysis WHERE message_id IN ({accountMessages});", p);
+            Exec(conn, tx, $"DELETE FROM attachments WHERE message_id IN ({accountMessages});", p);
+            var deleted = Exec(conn, tx, "DELETE FROM messages WHERE account_id = $a;", p);
+
+            if (resetSyncState)
+            {
+                Exec(conn, tx, """
+                    UPDATE folders SET last_synced_uid = 0, oldest_synced_uid = 0, sync_cursor = NULL
+                    WHERE account_id = $a;
+                    """, p);
+            }
+
+            return new CacheClearResult(deleted, links);
+        }));
     }
 
-    public int DeleteByFolder(string accountId, int folderId)
+    /// <summary>
+    /// Removes one folder from the cache. Messages are deduplicated across folders, so a
+    /// message that is still linked to another folder only loses its link to this one;
+    /// the message row (and its attachments and analysis) is deleted only when no folder
+    /// links remain. Messages with no links at all whose origin folder is this one are
+    /// deleted too, since startup repair would otherwise re-link them here.
+    /// When <paramref name="resetSyncState"/> is true the folder's sync cursor is reset.
+    /// Does nothing if the folder does not belong to the account.
+    /// </summary>
+    public CacheClearResult ClearFolder(string accountId, int folderId, bool resetSyncState = true)
     {
-        return db.ExecuteWrite(conn =>
+        return db.ExecuteWrite(conn => InTransaction(conn, tx =>
         {
-            // Remove folder links
-            using var unlinkCmd = conn.CreateCommand();
-            unlinkCmd.CommandText = """
-                DELETE FROM message_folders WHERE folder_id = $f
-                AND message_id IN (SELECT id FROM messages WHERE account_id = $a);
-                """;
-            unlinkCmd.Parameters.AddWithValue("$a", accountId);
-            unlinkCmd.Parameters.AddWithValue("$f", folderId);
-            var unlinked = unlinkCmd.ExecuteNonQuery();
+            var p = new Dictionary<string, object> { ["$a"] = accountId, ["$f"] = folderId };
 
-            // Delete orphaned messages (not linked to any folder)
-            using var cleanupCmd = conn.CreateCommand();
-            cleanupCmd.CommandText = """
-                DELETE FROM messages WHERE account_id = $a
-                AND id NOT IN (SELECT message_id FROM message_folders);
-                """;
-            cleanupCmd.Parameters.AddWithValue("$a", accountId);
-            cleanupCmd.ExecuteNonQuery();
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.Transaction = tx;
+                cmd.CommandText = "SELECT COUNT(*) FROM folders WHERE id = $f AND account_id = $a;";
+                cmd.Parameters.AddWithValue("$a", accountId);
+                cmd.Parameters.AddWithValue("$f", folderId);
+                if (Convert.ToInt64(cmd.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture) == 0)
+                    return new CacheClearResult(0, 0);
+            }
 
-            return unlinked;
-        });
+            Exec(conn, tx, "CREATE TEMP TABLE IF NOT EXISTS cache_clear_candidates (id INTEGER PRIMARY KEY);");
+            Exec(conn, tx, "DELETE FROM temp.cache_clear_candidates;");
+
+            // Candidates: every message linked to this folder, plus unlinked messages that
+            // originated here. Collected before unlinking, so the "no links left" check
+            // below only considers messages this clear actually touched.
+            Exec(conn, tx, """
+                INSERT OR IGNORE INTO temp.cache_clear_candidates (id)
+                SELECT mf.message_id FROM message_folders mf
+                JOIN messages m ON m.id = mf.message_id
+                WHERE mf.folder_id = $f AND m.account_id = $a;
+                """, p);
+            Exec(conn, tx, """
+                INSERT OR IGNORE INTO temp.cache_clear_candidates (id)
+                SELECT m.id FROM messages m
+                WHERE m.account_id = $a AND m.folder_id = $f
+                  AND NOT EXISTS (SELECT 1 FROM message_folders mf WHERE mf.message_id = m.id);
+                """, p);
+
+            // Remove every link into this folder (verified above to belong to the account).
+            var links = Exec(conn, tx, "DELETE FROM message_folders WHERE folder_id = $f;", p);
+
+            // Messages still linked to another folder survive.
+            Exec(conn, tx, """
+                DELETE FROM temp.cache_clear_candidates
+                WHERE id IN (SELECT message_id FROM message_folders);
+                """);
+
+            Exec(conn, tx, "DELETE FROM llm_analysis WHERE message_id IN (SELECT id FROM temp.cache_clear_candidates);");
+            Exec(conn, tx, "DELETE FROM attachments WHERE message_id IN (SELECT id FROM temp.cache_clear_candidates);");
+            var deleted = Exec(conn, tx, "DELETE FROM messages WHERE id IN (SELECT id FROM temp.cache_clear_candidates);");
+            Exec(conn, tx, "DELETE FROM temp.cache_clear_candidates;");
+
+            if (resetSyncState)
+            {
+                Exec(conn, tx, """
+                    UPDATE folders SET last_synced_uid = 0, oldest_synced_uid = 0, sync_cursor = NULL
+                    WHERE id = $f AND account_id = $a;
+                    """, p);
+            }
+
+            return new CacheClearResult(deleted, links);
+        }));
+    }
+
+    /// <summary>Deletes every cached message and its dependent rows. Returns the number of messages deleted.</summary>
+    public int DeleteAll() => ClearAll(resetSyncState: false).MessagesDeleted;
+
+    /// <summary>Deletes an account's cached messages and their dependent rows. Returns the number of messages deleted.</summary>
+    public int DeleteByAccount(string accountId) => ClearAccount(accountId, resetSyncState: false).MessagesDeleted;
+
+    /// <summary>
+    /// Removes a folder from the cache (see <see cref="ClearFolder"/>).
+    /// Returns the number of messages removed from the folder.
+    /// </summary>
+    public int DeleteByFolder(string accountId, int folderId) =>
+        ClearFolder(accountId, folderId, resetSyncState: false).FolderLinksRemoved;
+
+    private static T InTransaction<T>(SqliteConnection conn, Func<SqliteTransaction, T> work)
+    {
+        using var tx = conn.BeginTransaction();
+        try
+        {
+            var result = work(tx);
+            tx.Commit();
+            return result;
+        }
+        catch
+        {
+            tx.Rollback();
+            throw;
+        }
+    }
+
+    private static int Exec(SqliteConnection conn, SqliteTransaction tx, string sql,
+        IReadOnlyDictionary<string, object>? parameters = null)
+    {
+        using var cmd = conn.CreateCommand();
+        cmd.Transaction = tx;
+        cmd.CommandText = sql;
+        if (parameters is not null)
+        {
+            foreach (var (name, value) in parameters)
+            {
+                // Bind only the parameters this statement uses.
+                if (sql.Contains(name, StringComparison.Ordinal))
+                    cmd.Parameters.AddWithValue(name, value);
+            }
+        }
+        return cmd.ExecuteNonQuery();
     }
 
     /// <summary>
