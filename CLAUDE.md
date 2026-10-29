@@ -16,7 +16,7 @@
 
 ```bash
 dotnet build          # Build all projects
-dotnet test           # Run all 390+ tests
+dotnet test           # Run all 430+ tests
 cd dashboard/client && npm run build  # Build frontend
 ```
 
