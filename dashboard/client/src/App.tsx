@@ -124,13 +124,14 @@ function SetupGuard() {
 
   const pinIsSet = authStatus?.hasPinSet === true
 
-  // If accounts request failed with 401 (stale token), clear token and reset auth state
+  // A 401 on the accounts request means the stored token is stale: drop it.
+  // The PIN login below is shown for any accounts error, so no state change
+  // is needed here, only the localStorage cleanup.
+  const tokenRejected = pinIsSet && authed && !!accountsError
+    && 'status' in accountsError && (accountsError as { status: number }).status === 401
   useEffect(() => {
-    if (pinIsSet && accountsError && authed && 'status' in accountsError && (accountsError as { status: number }).status === 401) {
-      localStorage.removeItem('dashboard_token')
-      setAuthed(false)
-    }
-  }, [pinIsSet, accountsError, authed])
+    if (tokenRejected) localStorage.removeItem('dashboard_token')
+  }, [tokenRejected])
 
   // Show loading only briefly while checking auth status
   if (authLoading) {

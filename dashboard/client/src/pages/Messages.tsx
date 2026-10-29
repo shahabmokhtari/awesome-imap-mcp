@@ -329,12 +329,15 @@ function MessageView({
   const [showHeaders, setShowHeaders] = useState(false)
   const [actionStatus, setActionStatus] = useState<string | null>(null)
 
-  useEffect(() => {
+  // Reset per-message view state when another message is opened
+  const [shownUid, setShownUid] = useState(uid)
+  if (uid !== shownUid) {
+    setShownUid(uid)
     setAllowRemoteImages(false)
     setShowHtml(false)
     setShowHeaders(false)
     setActionStatus(null)
-  }, [uid])
+  }
 
   // Listen for link clicks from the sandboxed email iframe
   useEffect(() => {
@@ -698,8 +701,12 @@ function SearchResults({
   const [searchPage, setSearchPage] = useState(0)
   const [showSearchBulkDialog, setShowSearchBulkDialog] = useState<'delete' | 'trash' | 'archive' | null>(null)
 
-  // Reset page when query changes
-  useEffect(() => { setSearchPage(0) }, [query, accountId])
+  // Reset page when the query or account changes
+  const [pagedSearch, setPagedSearch] = useState({ query, accountId })
+  if (query !== pagedSearch.query || accountId !== pagedSearch.accountId) {
+    setPagedSearch({ query, accountId })
+    setSearchPage(0)
+  }
 
   const { data: results, isLoading, error } = useSearchMessages(accountId, query, pageSize, searchPage * pageSize)
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useSettings, useUpdateSettings, useAuthStatus, useChangePin, useSetupPin, useLlmModels, useTestLlm, useServerInfo, useShutdownServer, useInstances, useShutdownInstance, useAccounts, useClearCache, useClearAccountCache, useCacheStats, type InstanceHeartbeat } from '../hooks/useApi'
 
@@ -49,14 +49,17 @@ function SectionCard({
     return true
   })
 
-  const [form, setForm] = useState<Record<string, unknown>>({})
+  const [form, setForm] = useState<Record<string, unknown>>(() => ({ ...values }))
   const [dirty, setDirty] = useState(false)
 
-  // Reset form when upstream data changes
-  useEffect(() => {
+  // Reset form when upstream data changes. Done during render (not in an
+  // effect) so the stale form is never painted for a frame.
+  const [syncedValues, setSyncedValues] = useState(values)
+  if (values !== syncedValues) {
+    setSyncedValues(values)
     setForm({ ...values })
     setDirty(false)
-  }, [values])
+  }
 
   const handleChange = useCallback((key: string, value: unknown) => {
     setForm(prev => {
@@ -573,15 +576,19 @@ function LlmSectionCard({
   const [providerKeys, setProviderKeys] = useState<Record<string, string>>({ ...providerApiKeys })
   const [keysDirty, setKeysDirty] = useState(false)
 
-  // Sync provider from upstream when settings are reloaded
-  useEffect(() => {
+  // Sync provider and keys from upstream when settings are reloaded
+  const [syncedProvider, setSyncedProvider] = useState(values.provider)
+  if (values.provider !== syncedProvider) {
+    setSyncedProvider(values.provider)
     setCurrentProvider(values.provider as string | undefined)
-  }, [values.provider])
+  }
 
-  useEffect(() => {
+  const [syncedKeys, setSyncedKeys] = useState(values.providerApiKeys)
+  if (values.providerApiKeys !== syncedKeys) {
+    setSyncedKeys(values.providerApiKeys)
     setProviderKeys({ ...(values.providerApiKeys ?? {}) as Record<string, string> })
     setKeysDirty(false)
-  }, [values.providerApiKeys])
+  }
 
   const handleFormChange = useCallback((form: Record<string, unknown>) => {
     const provider = form.provider as string | undefined
@@ -743,21 +750,26 @@ function AnalysisPromptsCard({ settings, onSave, saving }: {
   saving: boolean
 }) {
   const llm = settings.llm as Record<string, unknown> | undefined
-  if (!llm?.enabled) return null
 
-  const savedPrompts = (llm?.analysisPrompts ?? {}) as Record<string, string>
-  const [prompts, setPrompts] = useState<Record<string, string>>({ ...savedPrompts })
+  // All hooks run before the early return below: toggling llm.enabled must not
+  // change the number of hooks React sees between renders.
+  const savedPrompts = llm?.analysisPrompts
+  const [prompts, setPrompts] = useState<Record<string, string>>(() => ({ ...(savedPrompts ?? {}) as Record<string, string> }))
   const [dirty, setDirty] = useState(false)
 
-  useEffect(() => {
-    setPrompts({ ...(llm?.analysisPrompts ?? {}) as Record<string, string> })
+  const [syncedPrompts, setSyncedPrompts] = useState(savedPrompts)
+  if (savedPrompts !== syncedPrompts) {
+    setSyncedPrompts(savedPrompts)
+    setPrompts({ ...(savedPrompts ?? {}) as Record<string, string> })
     setDirty(false)
-  }, [llm?.analysisPrompts])
+  }
 
   const handleChange = useCallback((type: string, value: string) => {
     setPrompts(prev => ({ ...prev, [type]: value }))
     setDirty(true)
   }, [])
+
+  if (!llm?.enabled) return null
 
   const handleSave = () => {
     onSave('llm', { analysisPrompts: prompts })
@@ -970,11 +982,13 @@ function LabelsCard({ settings, onSave, saving }: {
   const [form, setForm] = useState({ name: '', description: '', category: '' })
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
+  const [syncedLabels, setSyncedLabels] = useState({ allowCliEdits: labelsData?.allowCliEdits, items: labelsData?.items })
+  if (labelsData?.allowCliEdits !== syncedLabels.allowCliEdits || labelsData?.items !== syncedLabels.items) {
+    setSyncedLabels({ allowCliEdits: labelsData?.allowCliEdits, items: labelsData?.items })
     setAllowCliEdits(labelsData?.allowCliEdits ?? true)
     setItems(labelsData?.items ?? [])
     setDirty(false)
-  }, [labelsData?.allowCliEdits, labelsData?.items])
+  }
 
   const validateName = (name: string, excludeIdx?: number): string | null => {
     if (!name.trim()) return 'Name is required'
