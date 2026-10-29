@@ -44,6 +44,8 @@ public class SyncManager(
     private readonly ConcurrentDictionary<string, bool> _hasPendingMessages = new();
     private Action<string, object>? _onSyncEvent;
     private volatile bool _paused;
+    private readonly object _pauseLock = new();
+    private int _pauseGeneration;
     private volatile bool _isSyncing;
     private CancellationTokenSource _pauseCts = new();
 
@@ -576,18 +578,45 @@ public class SyncManager(
     /// </summary>
     public void StopSync()
     {
-        _paused = true;
-        _pauseCts.Cancel();
+        lock (_pauseLock)
+        {
+            _pauseGeneration++;
+            _paused = true;
+            _pauseCts.Cancel();
+        }
         logger.LogInformation("Sync stopped");
     }
 
     /// <summary>Start/resume sync with a fresh cancellation token.</summary>
     public void StartSync()
     {
-        _pauseCts.Dispose();
-        _pauseCts = new CancellationTokenSource();
-        _paused = false;
+        lock (_pauseLock)
+        {
+            _pauseCts.Dispose();
+            _pauseCts = new CancellationTokenSource();
+            _paused = false;
+        }
         logger.LogInformation("Sync started");
+    }
+
+    /// <summary>Incremented by every <see cref="StopSync"/>.</summary>
+    public int PauseGeneration { get { lock (_pauseLock) return _pauseGeneration; } }
+
+    /// <summary>
+    /// Resumes sync after an internal pause, unless someone else (the user) paused it
+    /// again since <paramref name="generation"/> was read. Returns whether it resumed.
+    /// </summary>
+    public bool ResumeIfNotPausedSince(int generation)
+    {
+        lock (_pauseLock)
+        {
+            if (_pauseGeneration != generation) return false;
+            _pauseCts.Dispose();
+            _pauseCts = new CancellationTokenSource();
+            _paused = false;
+        }
+        logger.LogInformation("Sync started");
+        return true;
     }
 
     /// <summary>

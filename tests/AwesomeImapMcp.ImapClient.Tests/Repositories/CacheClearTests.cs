@@ -321,6 +321,51 @@ public class CacheClearTests : IDisposable
 
     private long Count(string table) => Scalar($"SELECT COUNT(*) FROM {table};");
 
+    // ---------------------------------------------------------------
+    // Review follow-ups
+    // ---------------------------------------------------------------
+
+    [Fact]
+    public void ClearAll_EmptiesTheSearchIndex()
+    {
+        // SearchFts joins messages, so stale index rows never show in results;
+        // check the index itself.
+        Seed("acct-a", _aInbox, 1, "fts", "Quarterly planning notes");
+        Assert.True(Count("messages_fts_docsize") > 0);
+
+        _messageRepo.ClearAll();
+
+        Assert.Equal(0, Count("messages_fts_docsize"));
+    }
+
+    [Fact]
+    public void LinkToFolder_AfterAClearDeletedTheRow_LeavesNoDanglingLink()
+    {
+        // The race: a sync inserts a message, a clear deletes it, then the sync
+        // links the id it read before the clear committed.
+        var staleId = Seed("acct-a", _aInbox, 77, "race");
+        _messageRepo.ClearAccount("acct-a");
+
+        _messageRepo.LinkToFolder(staleId, _aInbox, 77);
+
+        Assert.Equal(0, Scalar($"SELECT COUNT(*) FROM message_folders WHERE folder_id = {_aInbox} AND uid = 77;"));
+        // The next sync can cache it again and it shows in its folder.
+        var freshId = Seed("acct-a", _aInbox, 77, "race");
+        Assert.Equal(freshId, Assert.Single(_messageRepo.GetByFolder("acct-a", _aInbox)).Id);
+    }
+
+    [Fact]
+    public void LinkToFolder_ReplacesAnExistingDanglingLinkForTheSameSlot()
+    {
+        // A dangling link left by older code holds (folder, uid) via the unique index.
+        Sql($"INSERT INTO message_folders (message_id, folder_id, uid) VALUES (999999, {_aInbox}, 88);");
+        var id = Seed("acct-a", _aArchive, 5, "moved-in");
+
+        _messageRepo.LinkToFolder(id, _aInbox, 88);
+
+        Assert.Equal(id, _messageRepo.GetByUid("acct-a", _aInbox, 88)!.Id);
+    }
+
     public void Dispose()
     {
         _db.Dispose();

@@ -35,8 +35,10 @@ public static class CacheApi
             {
                 // Cancel any in-flight sync so it is not half-way through a folder while the
                 // cache is emptied. Remember whether the user had paused sync, and keep it paused.
+                // If the user pauses sync while the clear runs, that pause wins.
                 var wasPaused = syncManager.IsPaused;
                 syncManager.StopSync();
+                var ourPause = syncManager.PauseGeneration;
 
                 CacheClearResult result;
                 try
@@ -45,7 +47,7 @@ public static class CacheApi
                 }
                 finally
                 {
-                    if (!wasPaused) syncManager.StartSync();
+                    if (!wasPaused) syncManager.ResumeIfNotPausedSince(ourPause);
                 }
 
                 logger.LogInformation("Cache cleared: {Deleted} cached messages deleted", result.MessagesDeleted);
@@ -233,12 +235,33 @@ public static class CacheApi
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to delete the cache database");
-            return Results.Json(new { error = $"Cache reset failed: {ex.Message}" }, statusCode: 500);
+            // DeleteDatabaseFiles closes the write connection before deleting, so a
+            // failure part-way (e.g. another process holds the file on Windows) still
+            // leaves this process unable to write. Stop rather than limp on.
+            logger.LogError(ex, "Failed to delete the cache database; stopping the server");
+            StopRootAfterResponse(rootLifetime, logger);
+            return Results.Json(new
+            {
+                error = $"Cache reset failed: {ex.Message}. The server is stopping because its database " +
+                        "connection was closed; restart it (some cache files may remain)."
+            }, statusCode: 500);
         }
 
-        // The write connection is now closed, so the process cannot keep working.
-        // Stop the root host (not just the dashboard web app), after the response is sent.
+        StopRootAfterResponse(rootLifetime, logger);
+
+        return Results.Ok(new
+        {
+            stopping = true,
+            message = "Cache database deleted. The server is stopping and must be restarted; the database is recreated on the next start.",
+        });
+    }
+
+    /// <summary>
+    /// Stops the root host (the whole process, not just the dashboard web app) shortly
+    /// after the current response has been sent.
+    /// </summary>
+    private static void StopRootAfterResponse(RootLifetime rootLifetime, ILogger logger)
+    {
         _ = Task.Run(async () =>
         {
             try
@@ -250,12 +273,6 @@ public static class CacheApi
             {
                 logger.LogError(ex, "Error stopping the server after cache reset");
             }
-        });
-
-        return Results.Ok(new
-        {
-            stopping = true,
-            message = "Cache database deleted. The server is stopping and must be restarted; the database is recreated on the next start.",
         });
     }
 

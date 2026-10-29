@@ -747,7 +747,7 @@ public class MessageRepository(AppDatabase db)
             Exec(conn, tx, """
                 INSERT OR IGNORE INTO temp.cache_clear_candidates (id)
                 SELECT m.id FROM messages m
-                WHERE m.account_id = $a AND m.folder_id = $f
+                WHERE m.account_id = $a AND m.folder_id = $f AND m.deleted_at IS NULL
                   AND NOT EXISTS (SELECT 1 FROM message_folders mf WHERE mf.message_id = m.id);
                 """, p);
 
@@ -1019,10 +1019,18 @@ public class MessageRepository(AppDatabase db)
         db.ExecuteWrite(conn =>
         {
             using var cmd = conn.CreateCommand();
-            // Being linked to a folder means the message is on the server, so clear any
-            // soft delete left from when it vanished from another folder.
+            // Foreign keys are off, so guard by hand: never link a message row that no
+            // longer exists (a cache clear can delete it between a sync's insert and
+            // its link), and drop any such dangling link that would otherwise hold
+            // this (folder, uid) slot forever via the unique index.
+            // Being linked also means the message is on the server, so clear any soft
+            // delete left from when it vanished from another folder.
             cmd.CommandText = """
-                INSERT OR IGNORE INTO message_folders (message_id, folder_id, uid) VALUES ($mid, $fid, $uid);
+                DELETE FROM message_folders
+                 WHERE folder_id = $fid AND uid = $uid
+                   AND NOT EXISTS (SELECT 1 FROM messages m WHERE m.id = message_folders.message_id);
+                INSERT OR IGNORE INTO message_folders (message_id, folder_id, uid)
+                SELECT $mid, $fid, $uid WHERE EXISTS (SELECT 1 FROM messages WHERE id = $mid);
                 UPDATE messages SET deleted_at = NULL WHERE id = $mid AND deleted_at IS NOT NULL;
                 """;
             cmd.Parameters.AddWithValue("$mid", messageDbId);
