@@ -93,6 +93,8 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
+          # Binaries only: the dashboard-spa artifact (index.html, svgs) is a build input
+          pattern: awesome-imap-mcp-*
           path: artifacts/
           merge-multiple: true
       - name: Generate SHA256SUMS
@@ -112,6 +114,8 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
+          # Binaries only: the dashboard-spa artifact (index.html, svgs) is a build input
+          pattern: awesome-imap-mcp-*
           path: artifacts/
           merge-multiple: true
       - name: Generate SHA256SUMS
