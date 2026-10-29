@@ -132,6 +132,93 @@ public class MessageFolderLinkTests : IDisposable
         Assert.Null(_repo.Resolve(null, "acct", _inbox, 1880, _folderRepo));
     }
 
+    // ---- per-folder deletion ----
+
+    private bool IsSoftDeleted(int id)
+    {
+        using var conn = _db.GetReadConnection();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT deleted_at IS NOT NULL FROM messages WHERE id = $id";
+        cmd.Parameters.AddWithValue("$id", id);
+        return Convert.ToInt64(cmd.ExecuteScalar()) == 1;
+    }
+
+    private void MarkDeletedTheOldWay(int id)
+    {
+        _db.ExecuteWrite(conn =>
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "UPDATE messages SET deleted_at = datetime('now') WHERE id = $id";
+            cmd.Parameters.AddWithValue("$id", id);
+            cmd.ExecuteNonQuery();
+        });
+    }
+
+    [Fact]
+    public void SoftDeleteByUids_GoneFromOneFolder_StaysVisibleInTheOther()
+    {
+        var id = AddDeduplicated();
+
+        Assert.Equal(1, _repo.SoftDeleteByUids("acct", _inbox, [39950]));
+
+        Assert.False(IsSoftDeleted(id));
+        Assert.Empty(_repo.GetByFolder("acct", _inbox));
+        Assert.Equal(id, Assert.Single(_repo.GetByFolder("acct", _spam)).Id);
+        Assert.DoesNotContain(39950L, _repo.GetCachedUids("acct", _inbox));
+    }
+
+    [Fact]
+    public void SoftDeleteByUids_GoneFromItsOnlyFolder_IsSoftDeleted()
+    {
+        var id = Add(_inbox, 7, "<only@example.com>", "Only here");
+
+        Assert.Equal(1, _repo.SoftDeleteByUids("acct", _inbox, [7]));
+
+        Assert.True(IsSoftDeleted(id));
+        Assert.Empty(_repo.GetByFolder("acct", _inbox));
+    }
+
+    [Fact]
+    public void SoftDeleteByUids_RepairsAMessageHiddenByTheOldWholeMessageDelete()
+    {
+        // The old behaviour: moved INBOX -> Spam, INBOX sync then soft-deleted the
+        // whole message and left the stale INBOX link behind.
+        var id = AddDeduplicated();
+        MarkDeletedTheOldWay(id);
+        Assert.Empty(_repo.GetByFolder("acct", _spam));
+
+        // Next INBOX sync finds 39950 gone from the server.
+        _repo.SoftDeleteByUids("acct", _inbox, [39950]);
+
+        Assert.False(IsSoftDeleted(id));
+        Assert.Equal(id, Assert.Single(_repo.GetByFolder("acct", _spam)).Id);
+    }
+
+    [Fact]
+    public void SoftDeleteByUids_UnknownUid_ChangesNothing()
+    {
+        var id = AddDeduplicated();
+
+        Assert.Equal(0, _repo.SoftDeleteByUids("acct", _inbox, [123456]));
+
+        Assert.False(IsSoftDeleted(id));
+        Assert.Single(_repo.GetByFolder("acct", _inbox));
+    }
+
+    [Fact]
+    public void Relinking_ASoftDeletedMessage_MakesItVisibleAgain()
+    {
+        // Restored on the server: the folder sync sees the same RFC Message-ID again.
+        var id = Add(_inbox, 7, "<restored@example.com>", "Restored");
+        _repo.SoftDeleteByUids("acct", _inbox, [7]);
+        Assert.True(IsSoftDeleted(id));
+
+        Assert.Equal(id, Add(_spam, 900, "<restored@example.com>", "Restored"));
+
+        Assert.False(IsSoftDeleted(id));
+        Assert.Equal(900, Assert.Single(_repo.GetByFolder("acct", _spam)).Uid);
+    }
+
     public void Dispose()
     {
         _db.Dispose();

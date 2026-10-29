@@ -371,7 +371,12 @@ public class MessageRepository(AppDatabase db)
         return set;
     }
 
-    /// <summary>Soft-delete messages that were removed from the server (marks deleted_at).</summary>
+    /// <summary>
+    /// Records that these UIDs are gone from one folder: removes that folder's
+    /// links, then soft-deletes only the messages left with no folder at all. A
+    /// message that is still in another folder (after a move, or a copy) stays
+    /// visible there. Returns the number of folder links removed.
+    /// </summary>
     public int SoftDeleteByUids(string accountId, int folderId, IEnumerable<long> uids)
     {
         var uidList = uids.ToList();
@@ -379,29 +384,49 @@ public class MessageRepository(AppDatabase db)
 
         return db.ExecuteWrite(conn =>
         {
-            // Batch UIDs into groups to reduce round-trips
+            using var tx = conn.BeginTransaction();
             const int batchSize = 100;
-            var count = 0;
+            var removed = 0;
             for (var i = 0; i < uidList.Count; i += batchSize)
             {
                 var batch = uidList.Skip(i).Take(batchSize).ToList();
-                using var cmd = conn.CreateCommand();
                 var placeholders = string.Join(", ", batch.Select((_, idx) => $"$u{idx}"));
+                using var cmd = conn.CreateCommand();
+                cmd.Transaction = tx;
                 cmd.CommandText = $"""
-                    UPDATE messages SET deleted_at = datetime('now')
-                    WHERE id IN (
+                    CREATE TEMP TABLE IF NOT EXISTS gone_links (message_id INTEGER PRIMARY KEY);
+                    DELETE FROM gone_links;
+                    INSERT OR IGNORE INTO gone_links (message_id)
                         SELECT mf.message_id FROM message_folders mf
                         JOIN messages m ON m.id = mf.message_id
-                        WHERE m.account_id = $a AND mf.folder_id = $f AND mf.uid IN ({placeholders})
-                    ) AND deleted_at IS NULL;
+                        WHERE m.account_id = $a AND mf.folder_id = $f AND mf.uid IN ({placeholders});
+                    DELETE FROM message_folders
+                        WHERE folder_id = $f AND uid IN ({placeholders})
+                          AND message_id IN (SELECT message_id FROM gone_links);
+                    SELECT changes();
                     """;
                 cmd.Parameters.AddWithValue("$a", accountId);
                 cmd.Parameters.AddWithValue("$f", folderId);
                 for (var j = 0; j < batch.Count; j++)
                     cmd.Parameters.AddWithValue($"$u{j}", batch[j]);
-                count += cmd.ExecuteNonQuery();
+                removed += Convert.ToInt32(cmd.ExecuteScalar());
+
+                // Gone from every folder: soft-delete. Still in some folder: make sure
+                // it is visible (repairs rows hidden by the old whole-message delete).
+                using var state = conn.CreateCommand();
+                state.Transaction = tx;
+                state.CommandText = """
+                    UPDATE messages SET deleted_at = datetime('now')
+                     WHERE id IN (SELECT message_id FROM gone_links) AND deleted_at IS NULL
+                       AND NOT EXISTS (SELECT 1 FROM message_folders mf WHERE mf.message_id = messages.id);
+                    UPDATE messages SET deleted_at = NULL
+                     WHERE id IN (SELECT message_id FROM gone_links) AND deleted_at IS NOT NULL
+                       AND EXISTS (SELECT 1 FROM message_folders mf WHERE mf.message_id = messages.id);
+                    """;
+                state.ExecuteNonQuery();
             }
-            return count;
+            tx.Commit();
+            return removed;
         });
     }
 
@@ -777,7 +802,12 @@ public class MessageRepository(AppDatabase db)
         db.ExecuteWrite(conn =>
         {
             using var cmd = conn.CreateCommand();
-            cmd.CommandText = "INSERT OR IGNORE INTO message_folders (message_id, folder_id, uid) VALUES ($mid, $fid, $uid);";
+            // Being linked to a folder means the message is on the server, so clear any
+            // soft delete left from when it vanished from another folder.
+            cmd.CommandText = """
+                INSERT OR IGNORE INTO message_folders (message_id, folder_id, uid) VALUES ($mid, $fid, $uid);
+                UPDATE messages SET deleted_at = NULL WHERE id = $mid AND deleted_at IS NOT NULL;
+                """;
             cmd.Parameters.AddWithValue("$mid", messageDbId);
             cmd.Parameters.AddWithValue("$fid", folderId);
             cmd.Parameters.AddWithValue("$uid", uid);

@@ -121,6 +121,8 @@ CREATE INDEX idx_message_folders_folder ON message_folders(folder_id, uid DESC);
 > ```
 >
 > The same goes for `messages.uid`: it is the UID in the origin folder. In any other folder the message has a different UID (`message_folders.uid`), and the origin UID names a different message there, or none. `MessageRepository` therefore reports a folder link's `folder_id`/`uid`: the queried folder's link for folder-scoped lookups, otherwise an existing link (the origin one while it exists). Looking up a UID without a folder fails if that UID names different messages in different folders.
+>
+> Deletion is per folder too. When a UID disappears from a folder (sync, delete, or the source side of a move), only that folder's link is removed; `messages.deleted_at` is set only once a message has no links left, and cleared again if a sync links it to a folder.
 
 ### messages_fts (Full-Text Search)
 
