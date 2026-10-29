@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useSettings, useUpdateSettings, useAuthStatus, useChangePin, useSetupPin, useLlmModels, useTestLlm, useServerInfo, useShutdownServer, useInstances, useShutdownInstance, useAccounts, useClearCache, useClearAccountCache, useCacheStats, type InstanceHeartbeat } from '../hooks/useApi'
+import { useSettings, useUpdateSettings, useAuthStatus, useChangePin, useSetupPin, useLlmModels, useTestLlm, useServerInfo, useShutdownServer, useInstances, useShutdownInstance, useAccounts, useClearCache, useResetCacheDatabase, useClearAccountCache, useCacheStats, type InstanceHeartbeat } from '../hooks/useApi'
 
 /** Fields that require a server restart when changed. */
 const RESTART_FIELDS = new Set([
@@ -882,34 +882,53 @@ function CacheStatsCard() {
 function CacheManagementCard() {
   const { data: accounts } = useAccounts()
   const clearCache = useClearCache()
+  const resetDb = useResetCacheDatabase()
   const clearAccountCache = useClearAccountCache()
   const [resultMsg, setResultMsg] = useState<string | null>(null)
 
+  const showResult = (msg: string, persist = false) => {
+    setResultMsg(msg)
+    if (!persist) setTimeout(() => setResultMsg(null), 8000)
+  }
+
   const handleClearAll = () => {
-    if (!window.confirm('Clear ALL cached messages? This cannot be undone.')) return
+    if (!window.confirm(
+      'Clear ALL cached messages for every account?\n\n' +
+      'Removed: cached messages, bodies, attachment records and the LLM analysis stored for those messages.\n' +
+      'Kept: accounts, folders and their settings, labels, pending queued writes, LLM rules and usage history.\n\n' +
+      'Mail on the server is not touched. Messages are re-downloaded by a background sync (unless sync is stopped or turned off). This cannot be undone.',
+    )) return
     clearCache.mutate(undefined, {
-      onSuccess: (data) => {
-        setResultMsg(`Cleared ${data.deleted} cached messages.`)
-        setTimeout(() => setResultMsg(null), 5000)
-      },
-      onError: (err) => {
-        setResultMsg(`Error: ${err.message}`)
-        setTimeout(() => setResultMsg(null), 5000)
-      },
+      onSuccess: (data) => showResult(data.message),
+      onError: (err) => showResult(`Error: ${err.message}`),
     })
   }
 
-  const handleClearAccount = (accountId: string) => {
-    if (!window.confirm('Clear cached messages for this account?')) return
+  const handleResetDb = () => {
+    if (!window.confirm(
+      'Delete the entire cache database and stop the server?\n\n' +
+      'This deletes everything stored in cache.db, not just cached mail:\n' +
+      '  - PENDING QUEUED WRITES that have not reached the server yet (moves, flags, labels, deletes, scheduled sends) are LOST\n' +
+      '  - LLM analysis results, usage/cost history and LLM rules are lost\n' +
+      '  - sync history is lost and everyone is signed out of the dashboard\n\n' +
+      'The server then STOPS and must be restarted by hand. Use "Clear All Cache" instead unless the database itself is broken.',
+    )) return
+    resetDb.mutate(undefined, {
+      onSuccess: (data) => showResult(data.message, true),
+      onError: (err) => showResult(`Error: ${err.message}`),
+    })
+  }
+
+  const handleClearAccount = (accountId: string, name: string) => {
+    if (!window.confirm(
+      `Clear cached messages for ${name}?\n\n` +
+      'Removed: this account\'s cached messages, bodies, attachment records and their LLM analysis.\n' +
+      'Kept: everything else, including labels and pending queued writes.\n\n' +
+      'Mail on the server is not touched; the account is re-synced in the background.',
+    )) return
     clearAccountCache.mutate(accountId, {
-      onSuccess: (data) => {
-        setResultMsg(`Cleared ${data.deleted} cached messages for account.`)
-        setTimeout(() => setResultMsg(null), 5000)
-      },
-      onError: (err) => {
-        setResultMsg(`Error: ${err.message}`)
-        setTimeout(() => setResultMsg(null), 5000)
-      },
+      onSuccess: (data) => showResult(data.message),
+      onError: (err) => showResult(`Error: ${err.message}`),
     })
   }
 
@@ -918,14 +937,15 @@ function CacheManagementCard() {
       <h3 className="text-lg font-medium text-gray-800 mb-4">Cache Management</h3>
 
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-4">
           <div>
             <p className="text-sm text-gray-700">Clear all cached messages across every account.</p>
+            <p className="text-xs text-gray-500">Mail on the server is untouched and is re-downloaded in the background.</p>
           </div>
           <button
             onClick={handleClearAll}
-            disabled={clearCache.isPending}
-            className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={clearCache.isPending || resetDb.isPending}
+            className="shrink-0 px-4 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {clearCache.isPending ? 'Clearing...' : 'Clear All Cache'}
           </button>
@@ -939,7 +959,7 @@ function CacheManagementCard() {
                 <div key={a.id as string} className="flex items-center justify-between py-1">
                   <span className="text-sm text-gray-700">{a.name as string}</span>
                   <button
-                    onClick={() => handleClearAccount(a.id as string)}
+                    onClick={() => handleClearAccount(a.id as string, a.name as string)}
                     disabled={clearAccountCache.isPending}
                     className="px-3 py-1 text-xs text-red-600 bg-red-50 border border-red-200 rounded hover:bg-red-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
@@ -950,6 +970,23 @@ function CacheManagementCard() {
             </div>
           </div>
         )}
+
+        <div className="border-t border-gray-200 pt-4 flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm text-gray-700">Reset the cache database</p>
+            <p className="text-xs text-gray-500">
+              Last resort for a broken database. Deletes the whole file, including pending queued writes and
+              LLM analysis history, then stops the server. You must restart it.
+            </p>
+          </div>
+          <button
+            onClick={handleResetDb}
+            disabled={clearCache.isPending || resetDb.isPending || resetDb.isSuccess}
+            className="shrink-0 px-3 py-1 text-xs text-red-700 bg-white border border-red-300 rounded hover:bg-red-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {resetDb.isPending ? 'Resetting...' : 'Delete Database & Stop'}
+          </button>
+        </div>
 
         {resultMsg && (
           <div className={`rounded-lg p-3 text-sm ${

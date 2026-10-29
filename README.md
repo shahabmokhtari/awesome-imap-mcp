@@ -419,7 +419,7 @@ On first launch (no accounts configured), the dashboard shows a guided setup wiz
 - **Duplicates** — cross-account duplicate detection, selectable copies per duplicate group, bulk delete via queue, page-size selector
 - **Queue** — view pending operations with account names, confirm or cancel sends
 - **Sync** — per-folder real-time sync status, trigger manual syncs
-- **Settings** — edit all configuration in-browser. Changes saved to `config.json` automatically
+- **Settings** — edit all configuration in-browser. Changes saved to `config.json` automatically. Also shows cache statistics and lets you clear the cache (see [Clearing the cache](#clearing-the-cache))
 - **Tools** — direct MCP tool execution from the dashboard UI
 - **Logs** — live log viewer with level filtering
 
@@ -619,6 +619,21 @@ Override or add OAuth client IDs for providers. Built-in client IDs are provided
 | `default_window_days` | `0` | Default number of days to cache (0 = unlimited) |
 | `max_body_age_days` | `0` | Auto-evict message bodies older than N days (0 = keep forever) |
 | `imap_fallback_ttl_hours` | `1` | Hours before a cache miss triggers IMAP fallback |
+
+#### Clearing the cache
+
+The cache can be cleared from the dashboard: **Settings → Cache Management** (everything, or one account) and the **Clear Cache** button above a folder's message list on the **Messages** page. The same actions are available over the dashboard API:
+
+| Endpoint | What it does |
+|----------|--------------|
+| `DELETE /api/cache` | Deletes every cached message with its folder links, attachment records and LLM analysis, resets every folder's sync cursor, and starts a background re-sync. The server keeps running. Returns `{ deleted, resync, message }`. |
+| `DELETE /api/cache/{accountId}` | The same for one account; only that account is re-synced. Other accounts keep syncing. |
+| `DELETE /api/cache/{accountId}/{folderId}` | Takes one folder out of the cache and re-syncs just that folder. A message that is also cached in another folder only loses its link to this folder; it is deleted only when no folder holds it any more. Returns `{ deleted, removedFromFolder, resync, message }`. |
+| `DELETE /api/cache?mode=reset-db` | Last resort for a broken database: deletes `cache.db` (and its WAL/SHM files) and **stops the server**, which must then be restarted. |
+
+The three clear actions remove cached mail only. Mail on the server is never touched, and they keep accounts, folders and their per-folder settings, labels, **pending queued writes**, LLM rules, LLM usage history and dashboard sessions. If sync is stopped, or turned off with `sync.enabled: false`, nothing is re-downloaded until you resume or sync manually; the response says so (`resync: false`).
+
+`mode=reset-db` deletes everything in `cache.db`: pending queued writes that have not reached the server yet (moves, flags, labels, deletes, scheduled sends), LLM analysis results, LLM usage history and rules, sync history and dashboard sessions. Labels kept in `labels.db`, metrics, logs and `accounts.json` are separate files and survive.
 
 ### Queue
 

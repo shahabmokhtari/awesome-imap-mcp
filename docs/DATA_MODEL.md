@@ -302,6 +302,6 @@ CREATE TABLE dashboard_sessions (
 - All timestamps stored as ISO 8601 strings in UTC
 - JSON fields use SQLite's built-in json functions for querying (e.g., `json_extract(flags, '$')`)
 - WAL mode enabled at database creation: `PRAGMA journal_mode=WAL;`
-- Foreign keys enabled: `PRAGMA foreign_keys=ON;`
+- Foreign keys are **off** on cache.db connections (`ForeignKeys = false`), so the `REFERENCES ... ON DELETE CASCADE` clauses above are not enforced. Code that deletes messages must delete the dependent rows itself: `message_folders`, `attachments` and `llm_analysis` (the FTS index is maintained by the `messages_fts_delete` trigger). `MessageRepository.ClearAll` / `ClearAccount` / `ClearFolder` do this in one transaction.
 - Database file default location: `~/.awesome-imap-mcp/cache.db`
 - Encryption key for credentials derived from machine ID + user-provided passphrase (optional)
