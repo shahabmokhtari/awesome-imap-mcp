@@ -619,6 +619,9 @@ Override or add OAuth client IDs for providers. Built-in client IDs are provided
 | `default_window_days` | `0` | Default number of days to cache (0 = unlimited) |
 | `max_body_age_days` | `0` | Auto-evict message bodies older than N days (0 = keep forever) |
 | `imap_fallback_ttl_hours` | `1` | Hours before a cache miss triggers IMAP fallback |
+| `deleted_retention_days` | `30` | Days a message deleted on the server stays in the cache (hidden) before it is purged |
+
+When a message leaves the cache — trimmed for size or age, purged after deletion, or cleared — its folder links, attachment records, AI analysis and search-index entry go with it. Local labels (kept for accounts without IMAP keyword support) are removed only when the message is purged after being deleted on the server; trimming or clearing the cache keeps them, because that mail still exists. Attachment files you downloaded with `download_attachment` are yours and are never deleted.
 
 #### Clearing the cache
 
