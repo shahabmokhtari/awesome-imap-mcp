@@ -98,38 +98,7 @@ public sealed class HttpMcpTransportHost : BackgroundService
 
         ListenAddress.AddHostFiltering(builder.Services, _config.Server.BindAddress);
 
-        // Share singleton services from the root host
-        builder.Services.AddSingleton(_config);
-        builder.Services.AddSingleton(_rootServices.GetRequiredService<AppDatabase>());
-        builder.Services.AddSingleton(_rootServices.GetRequiredService<CredentialEncryptor>());
-        builder.Services.AddSingleton(_rootServices.GetRequiredService<AccountRepository>());
-        builder.Services.AddSingleton(_rootServices.GetRequiredService<FolderRepository>());
-        builder.Services.AddSingleton(_rootServices.GetRequiredService<MessageRepository>());
-        builder.Services.AddSingleton(_rootServices.GetRequiredService<AttachmentRepository>());
-        builder.Services.AddSingleton(_rootServices.GetRequiredService<SyncLogRepository>());
-        builder.Services.AddSingleton(_rootServices.GetRequiredService<ImapSyncService>());
-        builder.Services.AddSingleton(_rootServices.GetRequiredService<SyncManager>());
-        builder.Services.AddSingleton(_rootServices.GetRequiredService<CacheConfig>());
-        builder.Services.AddSingleton(_rootServices.GetRequiredService<QueueRepository>());
-        builder.Services.AddSingleton(_rootServices.GetRequiredService<QueueManager>());
-        builder.Services.AddSingleton(_rootServices.GetRequiredService<QueueConfig>());
-        builder.Services.AddSingleton(_rootServices.GetRequiredService<LlmConfig>());
-        builder.Services.AddSingleton(_rootServices.GetRequiredService<LlmUsageRepository>());
-        builder.Services.AddSingleton(_rootServices.GetRequiredService<LlmAnalysisRepository>());
-        builder.Services.AddSingleton(_rootServices.GetRequiredService<BudgetTracker>());
-        builder.Services.AddSingleton(_rootServices.GetRequiredService<IEmailAnalyzer>());
-        builder.Services.AddSingleton(_rootServices.GetRequiredService<MetricsRepository>());
-        builder.Services.AddSingleton(_rootServices.GetRequiredService<LogsRepository>());
-        builder.Services.AddSingleton(_rootServices.GetRequiredService<IOAuthAccessTokenProvider>());
-
-        // Local labels fallback
-        builder.Services.AddSingleton(_rootServices.GetRequiredService<LabelsDatabase>());
-        builder.Services.AddSingleton(_rootServices.GetRequiredService<LocalLabelRepository>());
-
-        // Additional services needed for tool API execution
-        builder.Services.AddSingleton(_rootServices.GetRequiredService<IEmailBackendFactory>());
-        builder.Services.AddSingleton(_rootServices.GetRequiredService<ProviderProfileRegistry>());
-        builder.Services.AddSingleton(_rootServices.GetRequiredService<AccountsStore>());
+        ForwardRootServices(builder.Services, _rootServices, _config);
 
         // Register MCP server with HTTP transport only when configured
         var addMcpTransport = _config.Server.Transport is "http" or "both";
@@ -184,4 +153,45 @@ public sealed class HttpMcpTransportHost : BackgroundService
         }
         await base.StopAsync(cancellationToken).ConfigureAwait(false);
     }
+
+    /// <summary>
+    /// Shares the root host's singletons with this transport's container, which
+    /// builds the MCP tool classes. Every tool constructor dependency must be
+    /// forwarded here (enforced by a test).
+    /// </summary>
+    public static void ForwardRootServices(IServiceCollection services, IServiceProvider root, AppConfig config)
+    {
+        services.AddSingleton(config);
+        services.AddSingleton(root.GetRequiredService<AppDatabase>());
+        services.AddSingleton(root.GetRequiredService<CredentialEncryptor>());
+        services.AddSingleton(root.GetRequiredService<AccountRepository>());
+        services.AddSingleton(root.GetRequiredService<FolderRepository>());
+        services.AddSingleton(root.GetRequiredService<MessageRepository>());
+        services.AddSingleton(root.GetRequiredService<AttachmentRepository>());
+        services.AddSingleton(root.GetRequiredService<SyncLogRepository>());
+        services.AddSingleton(root.GetRequiredService<ImapSyncService>());
+        services.AddSingleton(root.GetRequiredService<SyncManager>());
+        services.AddSingleton(root.GetRequiredService<CacheConfig>());
+        services.AddSingleton(root.GetRequiredService<QueueRepository>());
+        services.AddSingleton(root.GetRequiredService<QueueManager>());
+        services.AddSingleton(root.GetRequiredService<QueueConfig>());
+        services.AddSingleton(root.GetRequiredService<LlmConfig>());
+        services.AddSingleton(root.GetRequiredService<LlmUsageRepository>());
+        services.AddSingleton(root.GetRequiredService<LlmAnalysisRepository>());
+        services.AddSingleton(root.GetRequiredService<BudgetTracker>());
+        services.AddSingleton(root.GetRequiredService<IEmailAnalyzer>());
+        services.AddSingleton(root.GetRequiredService<MetricsRepository>());
+        services.AddSingleton(root.GetRequiredService<LogsRepository>());
+        services.AddSingleton(root.GetRequiredService<IOAuthAccessTokenProvider>());
+
+        // Local labels fallback
+        services.AddSingleton(root.GetRequiredService<LabelsDatabase>());
+        services.AddSingleton(root.GetRequiredService<LocalLabelRepository>());
+
+        // Additional services needed for tool API execution
+        services.AddSingleton(root.GetRequiredService<IEmailBackendFactory>());
+        services.AddSingleton(root.GetRequiredService<ProviderProfileRegistry>());
+        services.AddSingleton(root.GetRequiredService<AccountsStore>());
+    }
+
 }

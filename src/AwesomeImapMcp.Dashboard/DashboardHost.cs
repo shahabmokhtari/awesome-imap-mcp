@@ -118,57 +118,9 @@ public sealed class DashboardHost : BackgroundService
         builder.Services.AddHttpClient();
         builder.Services.AddSignalR();
 
-        // Share singleton services from the root host
-        builder.Services.AddSingleton(_config);
-        builder.Services.AddSingleton(_rootServices.GetRequiredService<AwesomeImapMcp.Core.Database.AppDatabase>());
-        builder.Services.AddSingleton(_rootServices.GetRequiredService<AwesomeImapMcp.Core.Encryption.CredentialEncryptor>());
-        builder.Services.AddSingleton(_rootServices.GetRequiredService<AwesomeImapMcp.ImapClient.Repositories.AccountRepository>());
-        builder.Services.AddSingleton(_rootServices.GetRequiredService<AwesomeImapMcp.ImapClient.Repositories.FolderRepository>());
-        builder.Services.AddSingleton(_rootServices.GetRequiredService<AwesomeImapMcp.ImapClient.Repositories.MessageRepository>());
-        builder.Services.AddSingleton(_rootServices.GetRequiredService<AwesomeImapMcp.ImapClient.Repositories.SyncLogRepository>());
-        builder.Services.AddSingleton(_rootServices.GetRequiredService<AwesomeImapMcp.ImapClient.SyncManager>());
-        builder.Services.AddSingleton(_rootServices.GetRequiredService<AwesomeImapMcp.Queue.QueueRepository>());
-        builder.Services.AddSingleton(_rootServices.GetRequiredService<AwesomeImapMcp.Queue.QueueManager>());
-
-        // Tool execution dependencies (for ToolsApi to construct MCP tool classes)
-        builder.Services.AddSingleton(_rootServices.GetRequiredService<AwesomeImapMcp.ImapClient.Repositories.AttachmentRepository>());
-        builder.Services.AddSingleton(_rootServices.GetRequiredService<AwesomeImapMcp.Llm.Repositories.LlmAnalysisRepository>());
-        builder.Services.AddSingleton(_rootServices.GetRequiredService<AwesomeImapMcp.Llm.IEmailAnalyzer>());
-
-        // Observability repositories
-        builder.Services.AddSingleton(_rootServices.GetRequiredService<MetricsRepository>());
-        builder.Services.AddSingleton(_rootServices.GetRequiredService<LogsRepository>());
-
-        // Multi-instance coordination
-        builder.Services.AddSingleton(_rootServices.GetRequiredService<AwesomeImapMcp.Core.Database.HealthDatabase>());
-        builder.Services.AddSingleton(_rootServices.GetRequiredService<AwesomeImapMcp.Core.Coordination.IInstanceCoordinator>());
-
-        // OAuth services (from root host)
-        builder.Services.AddSingleton(_rootServices.GetRequiredService<OAuthTokenRepository>());
-        builder.Services.AddSingleton(_rootServices.GetRequiredService<OAuthTokenService>());
-        builder.Services.AddSingleton(_rootServices.GetRequiredService<OAuthStateStore>());
-        builder.Services.AddSingleton(_rootServices.GetRequiredService<IOAuthAccessTokenProvider>());
-
-        // LLM config (for test endpoint)
-        builder.Services.AddSingleton(_rootServices.GetRequiredService<AwesomeImapMcp.Core.Configuration.LlmConfig>());
-        builder.Services.AddSingleton(_rootServices.GetRequiredService<AwesomeImapMcp.Llm.Repositories.LlmUsageRepository>());
-        builder.Services.AddSingleton(_rootServices.GetRequiredService<AwesomeImapMcp.Llm.BudgetTracker>());
-
-        // Email backend factory (for on-demand body fetch)
-        builder.Services.AddSingleton(_rootServices.GetRequiredService<AwesomeImapMcp.Core.Email.IEmailBackendFactory>());
-
-        // ACP pool (optional — only registered when ACP provider is enabled)
-        var acpPool = _rootServices.GetService<AwesomeImapMcp.Llm.Acp.IAcpClientPool>();
-        if (acpPool is not null)
-            builder.Services.AddSingleton(acpPool);
-
-        // Instance info + root lifetime (for shutdown endpoint)
-        builder.Services.AddSingleton(_rootServices.GetRequiredService<InstanceInfo>());
-        builder.Services.AddSingleton(new RootLifetime(
-            _rootServices.GetRequiredService<IHostApplicationLifetime>()));
+        ForwardRootServices(builder.Services, _rootServices, _config);
 
         // Dashboard-own services
-        builder.Services.AddSingleton(_rootServices.GetRequiredService<IEventBus>());
         builder.Services.AddSingleton<DashboardAuthRepository>();
         builder.Services.AddHostedService<DashboardHubRelay>();
 
@@ -241,4 +193,68 @@ public sealed class DashboardHost : BackgroundService
         await base.StopAsync(cancellationToken).ConfigureAwait(false);
         _webApp = null;
     }
+
+    /// <summary>
+    /// Shares the root host's singletons with the dashboard's own container. The
+    /// Tools page builds MCP tool classes from this container, so every tool
+    /// constructor dependency must be forwarded here (enforced by a test).
+    /// </summary>
+    public static void ForwardRootServices(IServiceCollection services, IServiceProvider root, AppConfig config)
+    {
+        services.AddSingleton(config);
+        services.AddSingleton(root.GetRequiredService<AwesomeImapMcp.Core.Database.AppDatabase>());
+        services.AddSingleton(root.GetRequiredService<AwesomeImapMcp.Core.Encryption.CredentialEncryptor>());
+        services.AddSingleton(root.GetRequiredService<AwesomeImapMcp.ImapClient.Repositories.AccountRepository>());
+        services.AddSingleton(root.GetRequiredService<AwesomeImapMcp.ImapClient.Repositories.FolderRepository>());
+        services.AddSingleton(root.GetRequiredService<AwesomeImapMcp.ImapClient.Repositories.MessageRepository>());
+        services.AddSingleton(root.GetRequiredService<AwesomeImapMcp.ImapClient.Repositories.SyncLogRepository>());
+        services.AddSingleton(root.GetRequiredService<AwesomeImapMcp.ImapClient.SyncManager>());
+        services.AddSingleton(root.GetRequiredService<AwesomeImapMcp.Queue.QueueRepository>());
+        services.AddSingleton(root.GetRequiredService<AwesomeImapMcp.Queue.QueueManager>());
+
+        // Tool execution dependencies (for ToolsApi to construct MCP tool classes)
+        services.AddSingleton(root.GetRequiredService<AwesomeImapMcp.ImapClient.Repositories.AttachmentRepository>());
+        services.AddSingleton(root.GetRequiredService<AwesomeImapMcp.Llm.Repositories.LlmAnalysisRepository>());
+        services.AddSingleton(root.GetRequiredService<AwesomeImapMcp.Llm.IEmailAnalyzer>());
+
+        // Observability repositories
+        services.AddSingleton(root.GetRequiredService<MetricsRepository>());
+        services.AddSingleton(root.GetRequiredService<LogsRepository>());
+
+        // Multi-instance coordination
+        services.AddSingleton(root.GetRequiredService<AwesomeImapMcp.Core.Database.HealthDatabase>());
+        services.AddSingleton(root.GetRequiredService<AwesomeImapMcp.Core.Coordination.IInstanceCoordinator>());
+
+        // OAuth services (from root host)
+        services.AddSingleton(root.GetRequiredService<OAuthTokenRepository>());
+        services.AddSingleton(root.GetRequiredService<OAuthTokenService>());
+        services.AddSingleton(root.GetRequiredService<OAuthStateStore>());
+        services.AddSingleton(root.GetRequiredService<IOAuthAccessTokenProvider>());
+
+        // LLM config (for test endpoint)
+        services.AddSingleton(root.GetRequiredService<AwesomeImapMcp.Core.Configuration.LlmConfig>());
+        services.AddSingleton(root.GetRequiredService<AwesomeImapMcp.Llm.Repositories.LlmUsageRepository>());
+        services.AddSingleton(root.GetRequiredService<AwesomeImapMcp.Llm.BudgetTracker>());
+
+        // Email backend factory (for on-demand body fetch)
+        services.AddSingleton(root.GetRequiredService<AwesomeImapMcp.Core.Email.IEmailBackendFactory>());
+
+        // Account config store (account management tools: add_account_*, start_dashboard)
+        services.AddSingleton(root.GetRequiredService<AccountsStore>());
+
+        // ACP pool (optional — only registered when ACP provider is enabled)
+        var acpPool = root.GetService<AwesomeImapMcp.Llm.Acp.IAcpClientPool>();
+        if (acpPool is not null)
+            services.AddSingleton(acpPool);
+
+        // Instance info + root lifetime (for shutdown endpoint)
+        services.AddSingleton(root.GetRequiredService<InstanceInfo>());
+        services.AddSingleton(new RootLifetime(
+            root.GetRequiredService<IHostApplicationLifetime>()));
+
+
+        // Event bus (relayed to SignalR clients)
+        services.AddSingleton(root.GetRequiredService<IEventBus>());
+    }
+
 }
