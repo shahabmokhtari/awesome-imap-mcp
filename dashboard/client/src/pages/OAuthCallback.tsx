@@ -1,50 +1,45 @@
 import { useEffect, useState } from 'react'
 
+type CallbackResult =
+  | { status: 'done'; errorMessage: null; tempId: string; email: string | null; name: string | null }
+  | { status: 'error'; errorMessage: string }
+
+function readCallbackParams(): CallbackResult {
+  const params = new URLSearchParams(window.location.search)
+  const tempId = params.get('temp_id')
+  const error = params.get('error')
+
+  if (error) return { status: 'error', errorMessage: error }
+  if (!tempId) return { status: 'error', errorMessage: 'No authorization data received.' }
+  return { status: 'done', errorMessage: null, tempId, email: params.get('email'), name: params.get('name') }
+}
+
 /**
  * This page is loaded in the OAuth popup after the provider redirects back.
  * The server redirects here with ?temp_id=...&email=...
  * We send the result back to the opener via BroadcastChannel, then close.
  */
 export default function OAuthCallback() {
-  const [status, setStatus] = useState<'sending' | 'done' | 'error'>('sending')
-  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  // The query string never changes while this popup is open, so read it once.
+  const [result] = useState(readCallbackParams)
+  const { status, errorMessage } = result
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    const tempId = params.get('temp_id')
-    const email = params.get('email')
-    const name = params.get('name')
-    const error = params.get('error')
-
-    if (error) {
-      setErrorMessage(error)
-      setStatus('error')
-      return
-    }
-
-    if (!tempId) {
-      setErrorMessage('No authorization data received.')
-      setStatus('error')
-      return
-    }
+    if (result.status !== 'done') return
 
     // Notify the opener via BroadcastChannel
     const channel = new BroadcastChannel('oauth-callback')
-    channel.postMessage({ type: 'oauth-complete', tempId, email, name })
+    channel.postMessage({ type: 'oauth-complete', tempId: result.tempId, email: result.email, name: result.name })
     channel.close()
 
-    setStatus('done')
-
     // Auto-close popup after a brief moment
-    setTimeout(() => window.close(), 1500)
-  }, [])
+    const timer = setTimeout(() => window.close(), 1500)
+    return () => clearTimeout(timer)
+  }, [result])
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-xl shadow-lg p-8 max-w-sm w-full text-center">
-        {status === 'sending' && (
-          <p className="text-gray-500">Completing authorization...</p>
-        )}
         {status === 'done' && (
           <>
             <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
