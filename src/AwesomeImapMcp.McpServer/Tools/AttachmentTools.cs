@@ -30,7 +30,9 @@ public class AttachmentTools(
             new Dictionary<string, object?> { ["messageId"] = messageId, ["accountId"] = accountId, ["uid"] = uid },
             () =>
             {
-                var msg = messageRepo.Resolve(messageId, accountId, folderId, uid, folderRepo);
+                MessageRecord? msg;
+                try { msg = messageRepo.Resolve(messageId, accountId, folderId, uid, folderRepo); }
+                catch (InvalidOperationException ex) { return McpJsonDefaults.Error(ex.Message); }
                 if (msg is null)
                     return McpJsonDefaults.Error("Message not found. Provide 'messageId' or 'accountId'+'uid'.");
 

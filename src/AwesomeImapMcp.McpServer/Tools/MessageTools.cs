@@ -52,7 +52,8 @@ public class MessageTools(
                                 await using var backend = backendFactory.CreateSyncBackend(msg.AccountId);
                                 await backend.FetchMessageBodyAsync(msg.AccountId, folder.Path, msg.Uid).ConfigureAwait(false);
                                 // Re-read from DB after fetch
-                                msg = messageRepo.GetById(msg.Id) ?? msg;
+                                // Keep the folder link we resolved: GetById alone reports the origin folder's.
+                                msg = messageRepo.GetById(msg.Id) is { } fresh ? fresh with { FolderId = msg.FolderId, Uid = msg.Uid } : msg;
                             }
                         }
                         catch (OperationCanceledException) { throw; }

@@ -115,10 +115,12 @@ CREATE INDEX idx_message_folders_folder ON message_folders(folder_id, uid DESC);
 >
 > To ask "what is in this folder?":
 > ```sql
-> SELECT m.* FROM messages m
+> SELECT m.*, mf.uid AS folder_uid FROM messages m
 >   JOIN message_folders mf ON mf.message_id = m.id AND mf.folder_id = $folderId
 >  WHERE m.deleted_at IS NULL;
 > ```
+>
+> The same goes for `messages.uid`: it is the UID in the origin folder. In any other folder the message has a different UID (`message_folders.uid`), and the origin UID names a different message there, or none. `MessageRepository` therefore reports a folder link's `folder_id`/`uid`: the queried folder's link for folder-scoped lookups, otherwise an existing link (the origin one while it exists). Looking up a UID without a folder fails if that UID names different messages in different folders.
 
 ### messages_fts (Full-Text Search)
 
