@@ -781,17 +781,26 @@ public class MessageRepository(AppDatabase db)
 
         using var conn = db.GetReadConnection();
         using var cmd = conn.CreateCommand();
-        var folderFilter = folderId is not null
-            ? "SELECT 1 FROM message_folders x WHERE x.message_id = m.id AND x.folder_id = $f"
-            : "SELECT 1 FROM message_folders x WHERE x.message_id = m.id";
+        // Folder scope starts from that folder's links (CROSS JOIN pins the join
+        // order, so a big account isn't scanned for a small folder). Account scope
+        // walks idx_messages_account_date newest-first and stops at the limit.
+        var recent = folderId is not null
+            ? """
+              SELECT m.id, m.subject, m.date_epoch
+              FROM message_folders x CROSS JOIN messages m ON m.id = x.message_id
+              WHERE x.folder_id = $f AND m.account_id = $a AND m.deleted_at IS NULL
+              ORDER BY m.date_epoch DESC, m.id DESC
+              LIMIT $limit
+              """
+            : """
+              SELECT m.id, m.subject, m.date_epoch FROM messages m
+              WHERE m.account_id = $a AND m.deleted_at IS NULL
+                AND EXISTS (SELECT 1 FROM message_folders x WHERE x.message_id = m.id)
+              ORDER BY m.date_epoch DESC, m.id DESC
+              LIMIT $limit
+              """;
         cmd.CommandText = $"""
-            WITH recent AS (
-                SELECT m.id, m.subject, m.date_epoch FROM messages m
-                WHERE m.account_id = $a AND m.deleted_at IS NULL
-                  AND EXISTS ({folderFilter})
-                ORDER BY m.date_epoch DESC, m.id DESC
-                LIMIT $limit
-            )
+            WITH recent AS ({recent})
             SELECT r.id, mf.folder_id, mf.uid, r.subject, r.date_epoch
             FROM recent r
             JOIN message_folders mf ON mf.message_id = r.id

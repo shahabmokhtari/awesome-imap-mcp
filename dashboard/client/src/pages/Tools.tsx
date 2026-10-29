@@ -17,6 +17,10 @@ const PARAM_SUGGESTION_MAP: Record<string, SuggestionKey> = {
   folderpath: 'folderPath',
   folder_path: 'folderPath',
   folder: 'folderPath',
+  // move_messages' source folder: it scopes the uids. toFolder is deliberately
+  // unmapped so the destination never narrows which messages are offered.
+  fromfolder: 'folderPath',
+  from_folder: 'folderPath',
   folderid: 'folderId',
   folder_id: 'folderId',
   uid: 'uid',
