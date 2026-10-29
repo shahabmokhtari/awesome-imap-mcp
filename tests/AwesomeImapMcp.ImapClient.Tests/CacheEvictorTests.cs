@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using AwesomeImapMcp.Core.Configuration;
 using AwesomeImapMcp.Core.Coordination;
 using AwesomeImapMcp.Core.Database;
+using AwesomeImapMcp.Core.Repositories;
 using AwesomeImapMcp.ImapClient.Repositories;
 
 namespace AwesomeImapMcp.ImapClient.Tests;
@@ -23,6 +24,9 @@ public class CacheEvictorTests : IDisposable
     private readonly AccountRepository _accountRepo;
     private readonly FolderRepository _folderRepo;
     private readonly MessageRepository _messageRepo;
+    private readonly string _labelsPath = Path.Combine(Path.GetTempPath(), $"test_labels_{Guid.NewGuid()}.db");
+    private readonly LabelsDatabase _labelsDb;
+    private readonly LocalLabelRepository _labelRepo;
 
     public CacheEvictorTests()
     {
@@ -34,6 +38,8 @@ public class CacheEvictorTests : IDisposable
         _accountRepo = new AccountRepository(store);
         _folderRepo = new FolderRepository(_db);
         _messageRepo = new MessageRepository(_db);
+        _labelsDb = new LabelsDatabase(_labelsPath);
+        _labelRepo = new LocalLabelRepository(_labelsDb);
 
         // Seed test data
         _accountRepo.Insert("test", "Test", "imap.test.com", 993,
@@ -105,7 +111,7 @@ public class CacheEvictorTests : IDisposable
         // until exhausted. This tests the ordering: bodies evicted before
         // message rows deleted.
         var config = new CacheConfig { MaxSizeMb = 0 };
-        var evictor = new CacheEvictor(_db, _messageRepo, config,
+        var evictor = new CacheEvictor(_db, _messageRepo, _labelRepo, config,
             new AlwaysLeaderCoordinator(), NullLogger<CacheEvictor>.Instance);
 
         evictor.RunEviction();
@@ -140,7 +146,7 @@ public class CacheEvictorTests : IDisposable
 
         // 0 MB limit → body eviction finds nothing, proceeds to delete messages
         var config = new CacheConfig { MaxSizeMb = 0 };
-        var evictor = new CacheEvictor(_db, _messageRepo, config,
+        var evictor = new CacheEvictor(_db, _messageRepo, _labelRepo, config,
             new AlwaysLeaderCoordinator(), NullLogger<CacheEvictor>.Instance);
 
         evictor.RunEviction();
@@ -188,7 +194,7 @@ public class CacheEvictorTests : IDisposable
         // MaxBodyAgeDays=30 → bodies older than 30 days get evicted
         var config = new CacheConfig { MaxSizeMb = 1000, MaxBodyAgeDays = 30 };
 
-        var evictor = new CacheEvictor(_db, _messageRepo, config,
+        var evictor = new CacheEvictor(_db, _messageRepo, _labelRepo, config,
             new AlwaysLeaderCoordinator(), NullLogger<CacheEvictor>.Instance);
 
         evictor.RunEviction();
@@ -240,7 +246,7 @@ public class CacheEvictorTests : IDisposable
         // DefaultWindowDays=90 → messages older than 90 days get deleted
         var config = new CacheConfig { MaxSizeMb = 1000, DefaultWindowDays = 90 };
 
-        var evictor = new CacheEvictor(_db, _messageRepo, config,
+        var evictor = new CacheEvictor(_db, _messageRepo, _labelRepo, config,
             new AlwaysLeaderCoordinator(), NullLogger<CacheEvictor>.Instance);
 
         evictor.RunEviction();
@@ -269,7 +275,7 @@ public class CacheEvictorTests : IDisposable
         // Large size limit and no time-based eviction
         var config = new CacheConfig { MaxSizeMb = 1000 };
 
-        var evictor = new CacheEvictor(_db, _messageRepo, config,
+        var evictor = new CacheEvictor(_db, _messageRepo, _labelRepo, config,
             new AlwaysLeaderCoordinator(), NullLogger<CacheEvictor>.Instance);
 
         evictor.RunEviction();
@@ -280,6 +286,103 @@ public class CacheEvictorTests : IDisposable
         Assert.True(msg.BodyFetched);
     }
 
+    // ---- removing a message removes everything attached to it ----
+
+    private int SeedWithDependents(long uid, string rfcId)
+    {
+        var folderId = _folderRepo.GetByPath("test", "INBOX")!.Id;
+        var id = _messageRepo.InsertOrLink("test", folderId, uid, rfcId, null, null, null,
+            $"Subject {uid}", "Sender <sender@example.com>", "sender@example.com", "[]", null, null,
+            "2026-03-18T10:00:00Z", 1774040400, "[]", 512, true, "snippet");
+        new AttachmentRepository(_db).Insert(id, $"file{uid}.pdf", "application/pdf", 100, null, false);
+        Sql($"INSERT INTO llm_analysis (message_id, analysis_type, result) VALUES ({id}, 'category', '{{}}');");
+        _labelRepo.AddLabel("test", rfcId, "work");
+        return id;
+    }
+
+    private void Sql(string sql) => _db.ExecuteWrite(conn =>
+    {
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = sql;
+        cmd.ExecuteNonQuery();
+    });
+
+    private long Count(string sql)
+    {
+        using var conn = _db.GetReadConnection();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = sql;
+        return Convert.ToInt64(cmd.ExecuteScalar());
+    }
+
+    private void AssertNoTrace(int id)
+    {
+        Assert.Equal(0, Count($"SELECT COUNT(*) FROM messages WHERE id = {id}"));
+        Assert.Equal(0, Count($"SELECT COUNT(*) FROM message_folders WHERE message_id = {id}"));
+        Assert.Equal(0, Count($"SELECT COUNT(*) FROM attachments WHERE message_id = {id}"));
+        Assert.Equal(0, Count($"SELECT COUNT(*) FROM llm_analysis WHERE message_id = {id}"));
+        Assert.Equal(0, Count($"SELECT COUNT(*) FROM messages_fts_docsize WHERE id = {id}"));
+    }
+
+    [Fact]
+    public void EvictMessages_RemovesDependentRows_KeepsLabels()
+    {
+        var id = SeedWithDependents(1, "<trim1@example.com>");
+
+        Assert.Equal(1, _messageRepo.EvictMessages(10));
+
+        AssertNoTrace(id);
+        // Trimmed from the cache, still on the server: its labels must survive.
+        Assert.Equal(["work"], _labelRepo.GetLabels("test", "<trim1@example.com>"));
+    }
+
+    [Fact]
+    public void EvictMessagesOlderThan_RemovesDependentRows_OnlyForOldMessages()
+    {
+        var old = SeedWithDependents(1, "<old@example.com>");
+        var fresh = SeedWithDependents(2, "<fresh@example.com>");
+        Sql($"UPDATE messages SET cached_at = datetime('now', '-400 days') WHERE id = {old}");
+
+        Assert.Equal(1, _messageRepo.EvictMessagesOlderThan(365));
+
+        AssertNoTrace(old);
+        Assert.Equal(1, Count($"SELECT COUNT(*) FROM attachments WHERE message_id = {fresh}"));
+        Assert.Equal(1, Count($"SELECT COUNT(*) FROM llm_analysis WHERE message_id = {fresh}"));
+    }
+
+    [Fact]
+    public void Purge_RemovesDependentRowsAndLocalLabels()
+    {
+        var gone = SeedWithDependents(1, "<gone@example.com>");
+        var kept = SeedWithDependents(2, "<kept@example.com>");
+        var folderId = _folderRepo.GetByPath("test", "INBOX")!.Id;
+        _messageRepo.SoftDeleteByUids("test", folderId, [1]);
+        Sql($"UPDATE messages SET deleted_at = datetime('now', '-60 days') WHERE id = {gone}");
+
+        var evictor = new CacheEvictor(_db, _messageRepo, _labelRepo, new CacheConfig { DeletedRetentionDays = 30 },
+            new AlwaysLeaderCoordinator(), NullLogger<CacheEvictor>.Instance);
+        evictor.RunEviction();
+
+        AssertNoTrace(gone);
+        Assert.Empty(_labelRepo.GetLabels("test", "<gone@example.com>"));
+        Assert.Equal(["work"], _labelRepo.GetLabels("test", "<kept@example.com>"));
+        Assert.Equal(1, Count($"SELECT COUNT(*) FROM attachments WHERE message_id = {kept}"));
+    }
+
+    [Fact]
+    public void Purge_WithinRetention_KeepsEverything()
+    {
+        var id = SeedWithDependents(1, "<recent@example.com>");
+        var folderId = _folderRepo.GetByPath("test", "INBOX")!.Id;
+        _messageRepo.SoftDeleteByUids("test", folderId, [1]);
+
+        var purged = _messageRepo.PurgeSoftDeletedMessages(30);
+
+        Assert.Equal(0, purged.Count);
+        Assert.Empty(purged.GoneMessageIds);
+        Assert.Equal(1, Count($"SELECT COUNT(*) FROM attachments WHERE message_id = {id}"));
+    }
+
     public void Dispose()
     {
         _db.Dispose();
@@ -287,5 +390,8 @@ public class CacheEvictorTests : IDisposable
         if (File.Exists(_dbPath + "-wal")) File.Delete(_dbPath + "-wal");
         if (File.Exists(_dbPath + "-shm")) File.Delete(_dbPath + "-shm");
         if (File.Exists(_accountsPath)) File.Delete(_accountsPath);
+        _labelsDb.Dispose();
+        foreach (var f in new[] { _labelsPath, _labelsPath + "-wal", _labelsPath + "-shm" })
+            if (File.Exists(f)) File.Delete(f);
     }
 }

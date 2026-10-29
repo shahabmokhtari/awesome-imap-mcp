@@ -23,6 +23,35 @@ public class LocalLabelRepository(LabelsDatabase db)
         });
     }
 
+    /// <summary>
+    /// Drops every local label of the given messages. Only for mail that no longer
+    /// exists on the server: these labels are the only copy for accounts without
+    /// keyword support, so a cache trim or clear must not call this.
+    /// </summary>
+    public int RemoveAllForMessages(IEnumerable<(string AccountId, string MessageId)> messages)
+    {
+        var list = messages.ToList();
+        if (list.Count == 0) return 0;
+        var removed = 0;
+        db.ExecuteWrite(conn =>
+        {
+            using var tx = conn.BeginTransaction();
+            using var cmd = conn.CreateCommand();
+            cmd.Transaction = tx;
+            cmd.CommandText = "DELETE FROM local_labels WHERE account_id = $accountId AND message_id = $messageId";
+            var account = cmd.Parameters.Add("$accountId", Microsoft.Data.Sqlite.SqliteType.Text);
+            var message = cmd.Parameters.Add("$messageId", Microsoft.Data.Sqlite.SqliteType.Text);
+            foreach (var (accountId, messageId) in list)
+            {
+                account.Value = accountId;
+                message.Value = messageId;
+                removed += cmd.ExecuteNonQuery();
+            }
+            tx.Commit();
+        });
+        return removed;
+    }
+
     public void RemoveLabel(string accountId, string messageId, string label)
     {
         db.ExecuteWrite(conn =>

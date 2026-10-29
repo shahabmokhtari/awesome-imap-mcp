@@ -21,6 +21,9 @@ public record MessageFolderEntry(
     int MessageDbId, string AccountId, int FolderId, long Uid, string? Subject, long? DateEpoch);
 
 /// <summary>Volume stats per folder.</summary>
+/// <summary>Result of purging soft-deleted messages.</summary>
+public record PurgedMessages(int Count, IReadOnlyList<(string AccountId, string RfcMessageId)> GoneMessageIds);
+
 public record EmailVolumeRecord(string FolderPath, int MessageCount, long TotalSizeBytes, int WithAttachments);
 
 /// <summary>Top sender stats.</summary>
@@ -449,33 +452,48 @@ public class MessageRepository(AppDatabase db)
         });
     }
 
-    /// <summary>Permanently delete messages that were soft-deleted more than N days ago.</summary>
-    public int PurgeSoftDeleted(int retentionDays)
-    {
-        return db.ExecuteWrite(conn =>
-        {
-            // Remove junction entries for soft-deleted messages
-            using var unlinkCmd = conn.CreateCommand();
-            unlinkCmd.CommandText = """
-                DELETE FROM message_folders WHERE message_id IN (
-                    SELECT id FROM messages
-                    WHERE deleted_at IS NOT NULL
-                      AND deleted_at < datetime('now', $days)
-                );
-                """;
-            unlinkCmd.Parameters.AddWithValue("$days", $"-{retentionDays} days");
-            unlinkCmd.ExecuteNonQuery();
+    /// <summary>
+    /// Permanently deletes messages that were soft-deleted more than N days ago,
+    /// together with their links, attachments and analysis. Returns the number of
+    /// messages deleted.
+    /// </summary>
+    public int PurgeSoftDeleted(int retentionDays) => PurgeSoftDeletedMessages(retentionDays).Count;
 
-            // Remove the messages themselves
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                DELETE FROM messages
-                WHERE deleted_at IS NOT NULL
-                  AND deleted_at < datetime('now', $days);
-                """;
-            cmd.Parameters.AddWithValue("$days", $"-{retentionDays} days");
-            return cmd.ExecuteNonQuery();
-        });
+    /// <summary>
+    /// Like <see cref="PurgeSoftDeleted"/>, and also reports the RFC Message-IDs that no
+    /// longer exist anywhere in their account, so state kept elsewhere (local labels)
+    /// can be dropped with them.
+    /// </summary>
+    public PurgedMessages PurgeSoftDeletedMessages(int retentionDays)
+    {
+        return db.ExecuteWrite(conn => InTransaction(conn, tx =>
+        {
+            var p = new Dictionary<string, object> { ["$days"] = $"-{retentionDays} days" };
+            StartDoomed(conn, tx);
+            Exec(conn, tx, """
+                INSERT INTO temp.doomed_messages (id)
+                SELECT id FROM messages
+                WHERE deleted_at IS NOT NULL AND deleted_at < datetime('now', $days);
+                """, p);
+
+            var gone = new List<(string AccountId, string RfcMessageId)>();
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.Transaction = tx;
+                cmd.CommandText = """
+                    SELECT DISTINCT d.account_id, d.message_id FROM messages d
+                    WHERE d.id IN (SELECT id FROM temp.doomed_messages) AND d.message_id IS NOT NULL
+                      AND NOT EXISTS (
+                          SELECT 1 FROM messages o
+                          WHERE o.account_id = d.account_id AND o.message_id = d.message_id
+                            AND o.id NOT IN (SELECT id FROM temp.doomed_messages));
+                    """;
+                using var r = cmd.ExecuteReader();
+                while (r.Read()) gone.Add((r.GetString(0), r.GetString(1)));
+            }
+
+            return new PurgedMessages(DeleteDoomed(conn, tx), gone);
+        }));
     }
 
     /// <summary>
@@ -541,36 +559,20 @@ public class MessageRepository(AppDatabase db)
     }
 
     /// <summary>
-    /// Delete the oldest message rows (by cached_at).
-    /// Returns the number of rows deleted.
+    /// Delete the oldest message rows (by cached_at), with their links, attachments
+    /// and analysis. Returns the number of messages deleted.
     /// </summary>
     public int EvictMessages(int batchSize)
     {
-        return db.ExecuteWrite(conn =>
+        return db.ExecuteWrite(conn => InTransaction(conn, tx =>
         {
-            // Clean up junction table entries first to prevent orphaned rows
-            using var unlinkCmd = conn.CreateCommand();
-            unlinkCmd.CommandText = """
-                DELETE FROM message_folders WHERE message_id IN (
-                    SELECT id FROM messages
-                    ORDER BY cached_at ASC
-                    LIMIT $batchSize
-                );
-                """;
-            unlinkCmd.Parameters.AddWithValue("$batchSize", batchSize);
-            unlinkCmd.ExecuteNonQuery();
-
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                DELETE FROM messages WHERE id IN (
-                    SELECT id FROM messages
-                    ORDER BY cached_at ASC
-                    LIMIT $batchSize
-                );
-                """;
-            cmd.Parameters.AddWithValue("$batchSize", batchSize);
-            return cmd.ExecuteNonQuery();
-        });
+            StartDoomed(conn, tx);
+            Exec(conn, tx, """
+                INSERT INTO temp.doomed_messages (id)
+                SELECT id FROM messages ORDER BY cached_at ASC LIMIT $batchSize;
+                """, new Dictionary<string, object> { ["$batchSize"] = batchSize });
+            return DeleteDoomed(conn, tx);
+        }));
     }
 
     /// <summary>
@@ -593,32 +595,42 @@ public class MessageRepository(AppDatabase db)
     }
 
     /// <summary>
-    /// Delete messages older than the specified number of days.
-    /// Returns the number of rows deleted.
+    /// Delete messages cached more than N days ago, with their links, attachments and
+    /// analysis. Returns the number of messages deleted.
     /// </summary>
     public int EvictMessagesOlderThan(int days)
     {
-        return db.ExecuteWrite(conn =>
+        return db.ExecuteWrite(conn => InTransaction(conn, tx =>
         {
-            // Clean up junction table entries first to prevent orphaned rows
-            using var unlinkCmd = conn.CreateCommand();
-            unlinkCmd.CommandText = """
-                DELETE FROM message_folders WHERE message_id IN (
-                    SELECT id FROM messages
-                    WHERE cached_at < datetime('now', $days)
-                );
-                """;
-            unlinkCmd.Parameters.AddWithValue("$days", $"-{days} days");
-            unlinkCmd.ExecuteNonQuery();
+            StartDoomed(conn, tx);
+            Exec(conn, tx, """
+                INSERT INTO temp.doomed_messages (id)
+                SELECT id FROM messages WHERE cached_at < datetime('now', $days);
+                """, new Dictionary<string, object> { ["$days"] = $"-{days} days" });
+            return DeleteDoomed(conn, tx);
+        }));
+    }
 
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                DELETE FROM messages
-                WHERE cached_at < datetime('now', $days);
-                """;
-            cmd.Parameters.AddWithValue("$days", $"-{days} days");
-            return cmd.ExecuteNonQuery();
-        });
+    // Every path that deletes message rows outside a full cache clear goes through
+    // these two helpers. Foreign keys are off on this database, so nothing cascades:
+    // links, attachments and analysis must be deleted explicitly with the message.
+    // The FTS index follows through the messages_fts_delete trigger.
+
+    private static void StartDoomed(SqliteConnection conn, SqliteTransaction tx)
+    {
+        Exec(conn, tx, "CREATE TEMP TABLE IF NOT EXISTS doomed_messages (id INTEGER PRIMARY KEY);");
+        Exec(conn, tx, "DELETE FROM temp.doomed_messages;");
+    }
+
+    /// <summary>Deletes every message in temp.doomed_messages and everything hanging off it.</summary>
+    private static int DeleteDoomed(SqliteConnection conn, SqliteTransaction tx)
+    {
+        Exec(conn, tx, "DELETE FROM message_folders WHERE message_id IN (SELECT id FROM temp.doomed_messages);");
+        Exec(conn, tx, "DELETE FROM llm_analysis WHERE message_id IN (SELECT id FROM temp.doomed_messages);");
+        Exec(conn, tx, "DELETE FROM attachments WHERE message_id IN (SELECT id FROM temp.doomed_messages);");
+        var deleted = Exec(conn, tx, "DELETE FROM messages WHERE id IN (SELECT id FROM temp.doomed_messages);");
+        Exec(conn, tx, "DELETE FROM temp.doomed_messages;");
+        return deleted;
     }
 
     // ------------------------------------------------------------------

@@ -5,6 +5,8 @@ using AwesomeImapMcp.Core.Coordination;
 using AwesomeImapMcp.Core.Database;
 using AwesomeImapMcp.ImapClient.Repositories;
 
+using AwesomeImapMcp.Core.Repositories;
+
 namespace AwesomeImapMcp.ImapClient;
 
 /// <summary>
@@ -15,6 +17,7 @@ namespace AwesomeImapMcp.ImapClient;
 public class CacheEvictor(
     AppDatabase db,
     MessageRepository messageRepo,
+    LocalLabelRepository localLabelRepo,
     CacheConfig cacheConfig,
     IInstanceCoordinator coordinator,
     ILogger<CacheEvictor> logger) : BackgroundService
@@ -120,10 +123,13 @@ public class CacheEvictor(
         // Purge soft-deleted messages past retention
         if (cacheConfig.DeletedRetentionDays > 0)
         {
-            var purged = messageRepo.PurgeSoftDeleted(cacheConfig.DeletedRetentionDays);
-            if (purged > 0)
-                logger.LogInformation("Purged {Count} soft-deleted messages (retention: {Days} days)",
-                    purged, cacheConfig.DeletedRetentionDays);
+            // Purged mail is gone from the server, so its local labels go with it.
+            // (Trimming the cache above keeps labels: that mail still exists.)
+            var purged = messageRepo.PurgeSoftDeletedMessages(cacheConfig.DeletedRetentionDays);
+            var labelsRemoved = localLabelRepo.RemoveAllForMessages(purged.GoneMessageIds);
+            if (purged.Count > 0)
+                logger.LogInformation("Purged {Count} soft-deleted messages and {Labels} local labels (retention: {Days} days)",
+                    purged.Count, labelsRemoved, cacheConfig.DeletedRetentionDays);
         }
     }
 }
