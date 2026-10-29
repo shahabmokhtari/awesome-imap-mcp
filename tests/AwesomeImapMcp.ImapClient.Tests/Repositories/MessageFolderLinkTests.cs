@@ -219,6 +219,27 @@ public class MessageFolderLinkTests : IDisposable
         Assert.Equal(900, Assert.Single(_repo.GetByFolder("acct", _spam)).Uid);
     }
 
+    [Fact]
+    public void GetByUid_OriginPairOfAMessageThatLeftThatFolder_IsNotFound()
+    {
+        // Moved out of Spam: only the INBOX link remains, but the row still
+        // carries Spam/1880 as its origin pair.
+        var id = AddDeduplicated();
+        _repo.SoftDeleteByUids("acct", _spam, [1880]);
+
+        Assert.Null(_repo.GetByUid("acct", _spam, 1880));
+        Assert.Equal(id, _repo.GetByUid("acct", _inbox, 39950)!.Id);
+    }
+
+    [Fact]
+    public void GetByUid_LegacyUnlinkedRow_IsStillFoundByItsOwnPair()
+    {
+        var id = Add(_inbox, 42, "<legacy@example.com>", "Legacy");
+        _repo.UnlinkFromFolder(id, _inbox);
+
+        Assert.Equal(id, _repo.GetByUid("acct", _inbox, 42)!.Id);
+    }
+
     public void Dispose()
     {
         _db.Dispose();

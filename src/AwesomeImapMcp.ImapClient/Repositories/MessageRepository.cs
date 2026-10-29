@@ -165,13 +165,15 @@ public class MessageRepository(AppDatabase db)
         if (reader.Read()) return ReadRecord(reader);
         reader.Close();
 
-        // Fallback: look directly in messages table (covers messages whose
-        // folder_id/uid in the messages table was never linked into message_folders,
-        // e.g. due to deduplication or legacy data)
+        // Fallback: look directly in messages table (covers legacy messages that
+        // were never linked into message_folders). Only for rows with no links at
+        // all: once a message is linked, its links are the truth, and its origin
+        // pair may be a folder it has since left.
         using var fallbackCmd = conn.CreateCommand();
         fallbackCmd.CommandText = """
             SELECT * FROM messages
             WHERE account_id = $a AND folder_id = $f AND uid = $u AND deleted_at IS NULL
+              AND NOT EXISTS (SELECT 1 FROM message_folders mf WHERE mf.message_id = messages.id)
             LIMIT 1;
             """;
         fallbackCmd.Parameters.AddWithValue("$a", accountId);
