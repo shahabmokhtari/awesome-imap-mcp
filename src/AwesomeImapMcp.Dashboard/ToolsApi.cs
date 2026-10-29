@@ -26,71 +26,18 @@ public static class ToolsApi
             return Results.Ok(tools);
         });
 
-        // GET /api/tools/suggestions — returns autocomplete options for tool parameters
-        // keyed by parameter name pattern (e.g. "accountId" -> [{value, label}])
+        // GET /api/tools/suggestions — returns autocomplete options for tool parameters,
+        // keyed by suggestion kind (accountId, folderPath, folderId, uid, messageId) ->
+        // [{value, label, accountId?, folderId?, folderPath?, messageId?, folderIds?, folderPaths?}].
+        // Optional ?accountId=&folderId=&folderPath= narrow the message lists (uid, messageId).
         app.MapGet("/api/tools/suggestions", (
+            string? accountId, int? folderId, string? folderPath,
             AwesomeImapMcp.ImapClient.Repositories.AccountRepository accountRepo,
             AwesomeImapMcp.ImapClient.Repositories.FolderRepository folderRepo,
             AwesomeImapMcp.ImapClient.Repositories.MessageRepository messageRepo) =>
         {
-            var suggestions = new Dictionary<string, List<object>>();
-
-            // Account IDs
-            var accounts = accountRepo.GetAll();
-            suggestions["accountId"] = accounts.Select(a => (object)new
-            {
-                value = a.Id,
-                label = $"{a.Name} ({a.Provider})"
-            }).ToList();
-
-            // Folder paths and IDs per account (single query per account)
-            var folderPaths = new List<object>();
-            var folderIdSuggestions = new List<object>();
-            foreach (var account in accounts)
-            {
-                var folders = folderRepo.GetByAccount(account.Id);
-                foreach (var f in folders)
-                {
-                    folderPaths.Add(new
-                    {
-                        value = f.Path,
-                        label = $"{f.DisplayName ?? f.Path} — {account.Name}",
-                        accountId = account.Id
-                    });
-                    folderIdSuggestions.Add(new
-                    {
-                        value = f.Id,
-                        label = $"{f.DisplayName ?? f.Path} (ID: {f.Id}) — {account.Name}",
-                        accountId = account.Id
-                    });
-                }
-            }
-            suggestions["folderPath"] = folderPaths;
-            suggestions["folderId"] = folderIdSuggestions;
-
-            // Recent message UIDs per account (last 20 per account)
-            var messageUids = new List<object>();
-            foreach (var account in accounts)
-            {
-                var folders = folderRepo.GetByAccount(account.Id);
-                var inbox = folders.FirstOrDefault(f =>
-                    string.Equals(f.Role, "inbox", StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(f.Path, "INBOX", StringComparison.OrdinalIgnoreCase));
-                if (inbox is null) continue;
-                var messages = messageRepo.GetByFolder(account.Id, inbox.Id, 20);
-                foreach (var m in messages)
-                {
-                    messageUids.Add(new
-                    {
-                        value = m.Uid,
-                        label = $"[{m.Uid}] {m.Subject ?? "(no subject)"} — {account.Name}",
-                        accountId = account.Id
-                    });
-                }
-            }
-            suggestions["uid"] = messageUids;
-
-            return Results.Ok(suggestions);
+            var scope = new ToolSuggestionScope(accountId, folderId, folderPath);
+            return Results.Ok(ToolSuggestionsBuilder.Build(accountRepo, folderRepo, messageRepo, scope));
         });
 
         // POST /api/tools/{name}/execute — execute a tool by name

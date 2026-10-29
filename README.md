@@ -27,7 +27,7 @@ Every existing IMAP MCP server hits the IMAP server on every single tool call. N
 ## Key Features
 
 - **OAuth2 sign-in** - one-click sign-in for Gmail, Outlook, and Yahoo via PKCE (no client secrets needed). App passwords also supported for all providers
-- **Web dashboard with setup wizard** - guided first-run setup, account management, message browsing with bulk operations, an analytics page (volume charts, top senders, label distribution), editable settings, sync monitoring, queue viewer, duplicate detection, and direct tool execution
+- **Web dashboard with setup wizard** - guided first-run setup, account management, message browsing with bulk operations, an analytics page (volume charts, top senders, label distribution), editable settings, sync monitoring, queue viewer, duplicate detection, and direct tool execution (parameter autocomplete narrows by context: pick an account and folder to see its messages, or pick a message to see the folders it is in)
 - **Local SQLite cache with full-text search** - instant search, no IMAP round-trips
 - **IMAP IDLE + polling** - real-time inbox sync, configurable per folder
 - **Operation queue** - all writes are queued with priority tiers, retry logic, and undo

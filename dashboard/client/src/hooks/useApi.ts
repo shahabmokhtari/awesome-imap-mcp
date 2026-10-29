@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 
 class ApiError extends Error {
   status: number
@@ -664,13 +664,35 @@ export interface ToolSuggestion {
   value: string | number
   label: string
   accountId?: string
+  /** Folder the option belongs to (folder options and per-folder UID options). */
+  folderId?: number
+  folderPath?: string
+  /** Database message ID (UID options). */
+  messageId?: number
+  /** Every folder the message is linked to (messageId options). */
+  folderIds?: number[]
+  folderPaths?: string[]
 }
 
-export function useToolSuggestions() {
+/** Narrows the server's message suggestions (uid, messageId) to an account and/or folder. */
+export interface ToolSuggestionScope {
+  accountId?: string
+  folderId?: number
+  folderPath?: string
+}
+
+export function useToolSuggestions(scope?: ToolSuggestionScope) {
+  const params = new URLSearchParams()
+  if (scope?.accountId) params.set('accountId', scope.accountId)
+  if (scope?.folderId != null) params.set('folderId', String(scope.folderId))
+  if (scope?.folderPath) params.set('folderPath', scope.folderPath)
+  const qs = params.toString()
   return useQuery({
-    queryKey: ['tool-suggestions'],
-    queryFn: () => apiFetch<Record<string, ToolSuggestion[]>>('/api/tools/suggestions'),
+    queryKey: ['tool-suggestions', qs],
+    queryFn: () => apiFetch<Record<string, ToolSuggestion[]>>(`/api/tools/suggestions${qs ? `?${qs}` : ''}`),
     staleTime: 30000,
+    // Keep showing the previous list while a newly scoped one loads
+    placeholderData: keepPreviousData,
   })
 }
 
@@ -689,6 +711,7 @@ export function useExecuteTool() {
       qc.invalidateQueries({ queryKey: ['messages-search'] })
       qc.invalidateQueries({ queryKey: ['message'] })
       qc.invalidateQueries({ queryKey: ['folders'] })
+      qc.invalidateQueries({ queryKey: ['tool-suggestions'] })
     },
   })
 }

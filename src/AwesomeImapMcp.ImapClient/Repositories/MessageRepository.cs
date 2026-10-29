@@ -11,6 +11,14 @@ public record MessageRecord(
     bool HasAttachments, string? BodyText, string? BodyHtml,
     bool BodyFetched, string? Snippet, string? RawHeaders, string CachedAt);
 
+/// <summary>
+/// One folder membership of a message, taken from the <c>message_folders</c> junction:
+/// <see cref="FolderId"/> and <see cref="Uid"/> are that folder's values, not the
+/// origin-folder columns on the <c>messages</c> row (which moves never update).
+/// </summary>
+public record MessageFolderEntry(
+    int MessageDbId, string AccountId, int FolderId, long Uid, string? Subject, long? DateEpoch);
+
 /// <summary>Volume stats per folder.</summary>
 public record EmailVolumeRecord(string FolderPath, int MessageCount, long TotalSizeBytes, int WithAttachments);
 
@@ -756,6 +764,54 @@ public class MessageRepository(AppDatabase db)
                 reader.GetString(0),
                 reader.GetInt32(1),
                 reader.GetInt64(2)));
+        }
+        return list;
+    }
+
+    /// <summary>
+    /// Returns the newest <paramref name="limit"/> non-deleted messages of an account
+    /// (optionally only those linked to <paramref name="folderId"/>), with one entry per
+    /// folder each message belongs to. Folder membership and per-folder UIDs come from
+    /// <c>message_folders</c>, so a message that lives in two folders yields two entries
+    /// with each folder's own UID. Ordered newest first, then by message ID and folder ID.
+    /// </summary>
+    public List<MessageFolderEntry> GetRecentFolderEntries(string accountId, int? folderId, int limit)
+    {
+        if (limit <= 0) return [];
+
+        using var conn = db.GetReadConnection();
+        using var cmd = conn.CreateCommand();
+        var folderFilter = folderId is not null
+            ? "SELECT 1 FROM message_folders x WHERE x.message_id = m.id AND x.folder_id = $f"
+            : "SELECT 1 FROM message_folders x WHERE x.message_id = m.id";
+        cmd.CommandText = $"""
+            WITH recent AS (
+                SELECT m.id, m.subject, m.date_epoch FROM messages m
+                WHERE m.account_id = $a AND m.deleted_at IS NULL
+                  AND EXISTS ({folderFilter})
+                ORDER BY m.date_epoch DESC, m.id DESC
+                LIMIT $limit
+            )
+            SELECT r.id, mf.folder_id, mf.uid, r.subject, r.date_epoch
+            FROM recent r
+            JOIN message_folders mf ON mf.message_id = r.id
+            ORDER BY r.date_epoch DESC, r.id DESC, mf.folder_id;
+            """;
+        cmd.Parameters.AddWithValue("$a", accountId);
+        if (folderId is not null) cmd.Parameters.AddWithValue("$f", folderId.Value);
+        cmd.Parameters.AddWithValue("$limit", limit);
+
+        using var reader = cmd.ExecuteReader();
+        var list = new List<MessageFolderEntry>();
+        while (reader.Read())
+        {
+            list.Add(new MessageFolderEntry(
+                reader.GetInt32(0),
+                accountId,
+                reader.GetInt32(1),
+                reader.GetInt64(2),
+                reader.IsDBNull(3) ? null : reader.GetString(3),
+                reader.IsDBNull(4) ? null : reader.GetInt64(4)));
         }
         return list;
     }

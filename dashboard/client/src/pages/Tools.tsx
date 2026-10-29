@@ -1,12 +1,17 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
-import { useTools, useExecuteTool, useToolSuggestions, type ToolInfo, type ToolParameterInfo, type ToolSuggestion } from '../hooks/useApi'
+import {
+  useTools, useExecuteTool, useToolSuggestions,
+  type ToolInfo, type ToolParameterInfo, type ToolSuggestion, type ToolSuggestionScope,
+} from '../hooks/useApi'
 
 // ---------------------------------------------------------------------------
 // Map parameter names to suggestion keys
 // ---------------------------------------------------------------------------
 
+type SuggestionKey = 'accountId' | 'folderPath' | 'folderId' | 'uid' | 'messageId'
+
 /** Maps tool parameter names (case-insensitive) to suggestion dictionary keys. */
-const PARAM_SUGGESTION_MAP: Record<string, string> = {
+const PARAM_SUGGESTION_MAP: Record<string, SuggestionKey> = {
   accountid: 'accountId',
   account_id: 'accountId',
   folderpath: 'folderPath',
@@ -17,10 +22,67 @@ const PARAM_SUGGESTION_MAP: Record<string, string> = {
   uid: 'uid',
   messageuid: 'uid',
   message_uid: 'uid',
+  uids: 'uid',
+  messageid: 'messageId',
+  message_id: 'messageId',
 }
 
-function getSuggestionKey(paramName: string): string | undefined {
+/** Parameters that take a comma-separated list: picking a suggestion appends to it. */
+const MULTI_VALUE_PARAMS = new Set(['uids'])
+
+function getSuggestionKey(paramName: string): SuggestionKey | undefined {
   return PARAM_SUGGESTION_MAP[paramName.toLowerCase()]
+}
+
+function isMultiValue(paramName: string): boolean {
+  return MULTI_VALUE_PARAMS.has(paramName.toLowerCase())
+}
+
+/** Splits a comma-separated parameter value into trimmed, non-empty tokens. */
+function splitTokens(value: string): string[] {
+  return value.split(',').map(t => t.trim()).filter(Boolean)
+}
+
+/**
+ * Values chosen so far in the form, resolved against the suggestion lists, used to
+ * narrow each parameter's options: account → folders/messages, folder → messages,
+ * message → the folder(s) it is in.
+ */
+interface SuggestionContext {
+  accountId?: string
+  /** Folder(s) chosen via a folderId or folder/folderPath parameter. */
+  folderIds?: Set<number>
+  /** Folder(s) holding the message(s) chosen via uid/uids/messageId parameters. */
+  messageFolderIds?: Set<number>
+}
+
+/** Returns the options for one parameter, narrowed by the other parameters' values. */
+function narrowSuggestions(
+  key: SuggestionKey,
+  suggestions: ToolSuggestion[],
+  ctx: SuggestionContext,
+): ToolSuggestion[] {
+  if (key === 'accountId') return suggestions
+  let items = suggestions
+  if (ctx.accountId) {
+    items = items.filter(s => !s.accountId || s.accountId === ctx.accountId)
+  }
+  if ((key === 'folderPath' || key === 'folderId') && ctx.messageFolderIds) {
+    const allowed = ctx.messageFolderIds
+    items = items.filter(s => {
+      const id = key === 'folderId' ? Number(s.value) : s.folderId
+      return id == null || allowed.has(id)
+    })
+  }
+  if (key === 'uid' && ctx.folderIds) {
+    const allowed = ctx.folderIds
+    items = items.filter(s => s.folderId == null || allowed.has(s.folderId))
+  }
+  if (key === 'messageId' && ctx.folderIds) {
+    const allowed = ctx.folderIds
+    items = items.filter(s => !s.folderIds || s.folderIds.some(id => allowed.has(id)))
+  }
+  return items
 }
 
 // ---------------------------------------------------------------------------
@@ -33,15 +95,16 @@ function ComboboxInput({
   suggestions,
   placeholder,
   inputType,
-  contextFilter,
+  multiple = false,
 }: {
   value: string
   onChange: (val: string) => void
+  /** Options, already narrowed by the form's context (see narrowSuggestions) */
   suggestions: ToolSuggestion[]
   placeholder: string
   inputType: string
-  /** If set, filter suggestions to only those matching this accountId */
-  contextFilter?: { accountId?: string }
+  /** Comma-separated list: selecting appends a value instead of replacing */
+  multiple?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const [filter, setFilter] = useState('')
@@ -58,12 +121,13 @@ function ComboboxInput({
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
+  const selectedValues = useMemo(
+    () => new Set(multiple ? splitTokens(value) : [value]),
+    [multiple, value],
+  )
+
   const filtered = useMemo(() => {
     let items = suggestions
-    // Filter by accountId context if available
-    if (contextFilter?.accountId) {
-      items = items.filter(s => !s.accountId || s.accountId === contextFilter.accountId)
-    }
     // Filter by typed text
     if (filter) {
       const lower = filter.toLowerCase()
@@ -73,21 +137,37 @@ function ComboboxInput({
       )
     }
     return items
-  }, [suggestions, contextFilter, filter])
+  }, [suggestions, filter])
 
   const handleInputChange = (val: string) => {
     onChange(val)
-    setFilter(val)
+    // For lists, match against the token being typed (after the last comma)
+    setFilter(multiple ? (val.split(',').pop() ?? '').trim() : val)
     if (!open) setOpen(true)
   }
 
   const handleSelect = (s: ToolSuggestion) => {
-    onChange(String(s.value))
+    const picked = String(s.value)
+    if (multiple) {
+      // Replace the token being typed (if any) and append the pick, without duplicates
+      const parts = value.split(',').map(t => t.trim())
+      if (filter) parts.pop()
+      const tokens = parts.filter(Boolean)
+      if (!tokens.includes(picked)) tokens.push(picked)
+      onChange(tokens.join(','))
+    } else {
+      onChange(picked)
+      setOpen(false)
+    }
     setFilter('')
-    setOpen(false)
   }
 
-  const selectedLabel = suggestions.find(s => String(s.value) === value)?.label
+  const selectedLabel = multiple
+    ? splitTokens(value)
+        .map(t => suggestions.find(s => String(s.value) === t)?.label)
+        .filter(Boolean)
+        .join(' | ')
+    : suggestions.find(s => String(s.value) === value)?.label
 
   return (
     <div ref={wrapperRef} className="relative">
@@ -126,7 +206,7 @@ function ComboboxInput({
               type="button"
               onClick={() => handleSelect(s)}
               className={`w-full text-left px-3 py-2 text-sm hover:bg-blue-50 transition-colors ${
-                String(s.value) === value ? 'bg-blue-50 text-blue-700' : 'text-gray-700'
+                selectedValues.has(String(s.value)) ? 'bg-blue-50 text-blue-700' : 'text-gray-700'
               }`}
             >
               <span className="font-mono text-xs">{s.value}</span>
@@ -148,13 +228,11 @@ function ParameterInput({
   value,
   onChange,
   suggestions,
-  contextFilter,
 }: {
   param: ToolParameterInfo
   value: string
   onChange: (val: string) => void
   suggestions?: ToolSuggestion[]
-  contextFilter?: { accountId?: string }
 }) {
   const inputType = param.type === 'integer' || param.type === 'number' ? 'number' : 'text'
   const placeholder = param.defaultValue != null ? `Default: ${param.defaultValue}` : param.required ? 'Required' : 'Optional'
@@ -178,14 +256,14 @@ function ParameterInput({
           <option value="true">true</option>
           <option value="false">false</option>
         </select>
-      ) : suggestions && suggestions.length > 0 ? (
+      ) : suggestions ? (
         <ComboboxInput
           value={value}
           onChange={onChange}
           suggestions={suggestions}
           placeholder={placeholder}
           inputType={inputType}
-          contextFilter={contextFilter}
+          multiple={isMultiValue(param.name)}
         />
       ) : (
         <input
@@ -216,16 +294,70 @@ function ToolPanel({ tool, allSuggestions }: { tool: ToolInfo; allSuggestions?: 
     setParamValues((prev) => ({ ...prev, [name]: value }))
   }, [])
 
-  // Derive accountId from current param values for context filtering (e.g. filter folders by selected account)
-  const currentAccountId = useMemo(() => {
+  // Current value of each kind of parameter (e.g. the "folder" param fills folderPath)
+  const chosen = useMemo(() => {
+    const values: Partial<Record<SuggestionKey, string>> = {}
     for (const param of tool.parameters) {
       const key = getSuggestionKey(param.name)
-      if (key === 'accountId' && paramValues[param.name]) {
-        return paramValues[param.name]
+      const v = paramValues[param.name]?.trim()
+      if (key && v) values[key] = v
+    }
+    return values
+  }, [tool.parameters, paramValues])
+
+  // Ask the server for messages in the chosen account/folder, but only once a value
+  // matches a known option, so partial typing doesn't trigger a request per keystroke.
+  const scope = useMemo<ToolSuggestionScope>(() => {
+    const s: ToolSuggestionScope = {}
+    const accountId = chosen.accountId
+    if (accountId && allSuggestions?.accountId?.some(o => String(o.value) === accountId)) {
+      s.accountId = accountId
+    }
+    const inAccount = (o: ToolSuggestion) => !s.accountId || o.accountId === s.accountId
+    if (chosen.folderId && allSuggestions?.folderId?.some(o => String(o.value) === chosen.folderId && inAccount(o))) {
+      s.folderId = Number(chosen.folderId)
+    }
+    if (chosen.folderPath && allSuggestions?.folderPath?.some(o => o.value === chosen.folderPath && inAccount(o))) {
+      s.folderPath = chosen.folderPath
+    }
+    return s
+  }, [chosen, allSuggestions])
+  const { data: scopedSuggestions } = useToolSuggestions(scope)
+  const suggestionsSource = scopedSuggestions ?? allSuggestions
+
+  // Resolve the chosen values into the folder sets used to narrow each other's options
+  const context = useMemo<SuggestionContext>(() => {
+    const ctx: SuggestionContext = { accountId: chosen.accountId }
+    const inAccount = (o: ToolSuggestion) => !ctx.accountId || o.accountId === ctx.accountId
+
+    const folderIds = new Set<number>()
+    if (chosen.folderId) {
+      const id = Number(chosen.folderId)
+      if (Number.isInteger(id)) folderIds.add(id)
+    }
+    if (chosen.folderPath) {
+      for (const o of allSuggestions?.folderPath ?? []) {
+        if (o.value === chosen.folderPath && inAccount(o) && o.folderId != null) folderIds.add(o.folderId)
       }
     }
-    return undefined
-  }, [tool.parameters, paramValues])
+    if (folderIds.size > 0) ctx.folderIds = folderIds
+
+    const messageFolderIds = new Set<number>()
+    if (chosen.uid) {
+      const tokens = new Set(splitTokens(chosen.uid))
+      for (const o of suggestionsSource?.uid ?? []) {
+        if (tokens.has(String(o.value)) && inAccount(o) && o.folderId != null) messageFolderIds.add(o.folderId)
+      }
+    }
+    if (chosen.messageId) {
+      for (const o of suggestionsSource?.messageId ?? []) {
+        if (String(o.value) === chosen.messageId && inAccount(o)) o.folderIds?.forEach(id => messageFolderIds.add(id))
+      }
+    }
+    if (messageFolderIds.size > 0) ctx.messageFolderIds = messageFolderIds
+
+    return ctx
+  }, [chosen, allSuggestions, suggestionsSource])
 
   const handleExecute = async () => {
     setResult(null)
@@ -290,10 +422,10 @@ function ToolPanel({ tool, allSuggestions }: { tool: ToolInfo; allSuggestions?: 
         ) : (
           tool.parameters.map((param) => {
             const suggestionKey = getSuggestionKey(param.name)
-            const suggestions = suggestionKey ? allSuggestions?.[suggestionKey] : undefined
-            // For non-accountId params, pass accountId as context filter
-            const contextFilter = suggestionKey !== 'accountId' && currentAccountId
-              ? { accountId: currentAccountId }
+            const options = suggestionKey ? suggestionsSource?.[suggestionKey] : undefined
+            // Narrow by the other parameters' values (account, folder, message)
+            const suggestions = suggestionKey && options
+              ? narrowSuggestions(suggestionKey, options, context)
               : undefined
 
             return (
@@ -303,7 +435,6 @@ function ToolPanel({ tool, allSuggestions }: { tool: ToolInfo; allSuggestions?: 
                 value={paramValues[param.name] ?? ''}
                 onChange={(val) => handleParamChange(param.name, val)}
                 suggestions={suggestions}
-                contextFilter={contextFilter}
               />
             )
           })
