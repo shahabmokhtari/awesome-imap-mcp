@@ -419,7 +419,7 @@ On first launch (no accounts configured), the dashboard shows a guided setup wiz
 - **Duplicates** — cross-account duplicate detection, selectable copies per duplicate group, bulk delete via queue, page-size selector
 - **Queue** — view pending operations with account names, confirm or cancel sends
 - **Sync** — per-folder real-time sync status, trigger manual syncs
-- **Settings** — edit all configuration in-browser. Changes saved to `config.json` automatically. Also shows cache statistics and lets you clear the cache (see [Clearing the cache](#clearing-the-cache))
+- **Settings** — edit all configuration in-browser. Changes saved to `config.json` automatically. Also shows cache statistics and lets you clear the cache (see [Clearing the cache](#clearing-the-cache)). Also has a **Send feedback** button (see [Sending feedback](#sending-feedback))
 - **Tools** — direct MCP tool execution from the dashboard UI
 - **Logs** — live log viewer with level filtering
 
@@ -431,6 +431,18 @@ On first launch (no accounts configured), the dashboard shows a guided setup wiz
 | `"pin"` | PIN protected — set a PIN on first access, required for all API calls |
 
 Without a PIN, anyone who can reach the dashboard port can use it — fine on the default loopback binding, not fine on a network. Set a PIN before changing `bind_address`.
+
+### Sending feedback
+
+**Send feedback** (in the sidebar and on the Settings page) opens a short form: pick Bug, Idea or Other, write up to 2,000 characters, and optionally leave an email address if you'd like a reply. Each note becomes an issue in this repository, filed through the [issues.awesomehq.app](https://issues.awesomehq.app) relay.
+
+- **Nothing is sent unless you press Send.** There is no background reporting.
+- **What is sent:** your message, your email address only if you typed one, and coarse diagnostics: app version, the server's operating system and version (e.g. `macOS 26.2`), your browser and its major version (e.g. `Edge 142`), your browser language, and the dashboard page you were on. No mail, account names, logs, screenshots, IP-derived data or install IDs.
+- **How it is sent:** the dashboard backend posts to the relay with this app's public key. That key can only open new issues in this repository. No GitHub token is in the app, and your browser never contacts the relay directly.
+- **Retention and use:** the note is used only for support and to improve the app. It is not linked to an identity and not used for tracking. The relay deletes its copy of the text 30 days after filing, but **the GitHub issue is public**: the message, the diagnostics and the email address you typed (shown as *Reply-to*) can be read by anyone. Don't include anything private.
+- **Debug builds** (`dotnet run`, `dotnet build`) only log the request instead of sending it. Set `AWESOME_IMAP_FEEDBACK_SEND=1` to send for real from a Debug build. Release builds and published binaries always send.
+
+`POST /api/feedback` takes `{ kind, message, contact?, clientId, source?, screen?, language?, browser? }`. It returns `200 { ref, status }` once the relay accepts the note, `503` when the relay is unreachable or busy (retry with the same `clientId`, so the note is filed only once), `502` when the relay refuses it, and `400` for invalid input.
 
 ---
 

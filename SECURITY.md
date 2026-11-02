@@ -32,7 +32,7 @@ Awesome IMAP MCP processes email content, account credentials, and OAuth tokens.
 - **Agent-driven writes:** Mail changes go through an undoable operation queue. `download_attachment` will not replace an existing file unless the caller passes `overwrite: true`, so a prompt-injected email cannot clobber a shell profile or config file.
 - **Protocol logging:** `server.log_protocol` records raw MCP traffic, including message bodies and credentials passed to tools. It is off by default; never enable it on shared machines or attach its output to bug reports.
 - **Releases:** Binaries are published with `SHA256SUMS`; `install.sh` refuses to install a binary that doesn't match.
-- **No telemetry by default:** No outbound calls except to your configured IMAP servers, OAuth providers (Google/Microsoft/Yahoo), and any LLM provider you enable.
+- **No telemetry:** No outbound calls except to your configured IMAP servers, OAuth providers (Google/Microsoft/Yahoo), any LLM provider you enable, and `issues.awesomehq.app` when you press **Send** in the dashboard's feedback form. That call carries only your note, your optional email address and coarse diagnostics (app version, OS, browser, language, page); see [Sending feedback](README.md#sending-feedback).
 
 ## Threat Model
 
