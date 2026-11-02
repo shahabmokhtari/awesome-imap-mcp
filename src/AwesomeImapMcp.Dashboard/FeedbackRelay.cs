@@ -92,14 +92,14 @@ public sealed class FeedbackRelay
             return "kind must be bug, idea or other.";
         var message = CleanMessage(request.Message);
         if (message.Length == 0)
-            return "message is required.";
+            return "Please write a message.";
         if (CountCodePoints(message) > MaxMessage)
-            return $"message is longer than {MaxMessage} characters.";
+            return $"Your message is longer than {MaxMessage} characters.";
         if (!Guid.TryParse(request.ClientId, out _))
             return "clientId must be a UUID.";
         var contact = request.Contact?.Trim();
         if (!string.IsNullOrEmpty(contact) && !LooksLikeEmail(contact))
-            return "contact must be an email address.";
+            return "That email address doesn't look right. Check it, or leave it empty.";
         if (request.Source is not null && !Sources.Contains(request.Source))
             return "source must be button, shake, page or qr.";
         return null;

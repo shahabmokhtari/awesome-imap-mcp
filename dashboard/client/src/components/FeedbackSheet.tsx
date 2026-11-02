@@ -38,6 +38,7 @@ function FeedbackSheet({ source, onClose }: { source: FeedbackSource; onClose: (
   const [message, setMessage] = useState('')
   const [contact, setContact] = useState('')
   const [state, setState] = useState<SendState>('idle')
+  const [invalidReason, setInvalidReason] = useState<string | null>(null)
   // One ID per sheet, reused on every retry so the relay never files the same note twice.
   const [clientId] = useState(newClientId)
   const send = useSendFeedback()
@@ -80,6 +81,8 @@ function FeedbackSheet({ source, onClose }: { source: FeedbackSource; onClose: (
         onSuccess: () => setState('sent'),
         onError: (err) => {
           const status = err instanceof ApiError ? err.status : 0
+          // A 400 names the field to fix (e.g. a mistyped email), so show it.
+          setInvalidReason(status === 400 ? err.message : null)
           // 0 = the dashboard itself was unreachable; 503 = the relay asked us to try again.
           setState(status === 0 || status === 503 || status === 408 || status === 429 ? 'retry' : 'failed')
         },
@@ -160,7 +163,9 @@ function FeedbackSheet({ source, onClose }: { source: FeedbackSource; onClose: (
               <p className="mt-3 text-sm text-red-600">Couldn't send — check your connection and try again.</p>
             )}
             {state === 'failed' && (
-              <p className="mt-3 text-sm text-red-600">Something went wrong and your feedback wasn't sent.</p>
+              <p className="mt-3 text-sm text-red-600">
+                {invalidReason ?? "Something went wrong and your feedback wasn't sent."}
+              </p>
             )}
 
             <div className="mt-4 flex justify-end gap-2">
