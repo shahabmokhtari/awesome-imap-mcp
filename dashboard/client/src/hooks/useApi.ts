@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 
-class ApiError extends Error {
+export class ApiError extends Error {
   status: number
   constructor(message: string, status: number) {
     super(message)
@@ -946,4 +946,31 @@ export interface CreateAccountRequest {
   authType: string
   password?: string
   provider: string
+}
+
+// ---------- Feedback ----------
+
+export type FeedbackKind = 'bug' | 'idea' | 'other'
+export type FeedbackSource = 'button' | 'shake' | 'page' | 'qr'
+
+export interface FeedbackPayload {
+  kind: FeedbackKind
+  message: string
+  contact?: string
+  clientId: string
+  source: FeedbackSource
+  screen?: string
+  language?: string
+  browser?: string
+}
+
+/** Sends a note to the dashboard backend, which relays it to the issue tracker. A 503 means "retry". */
+export function useSendFeedback() {
+  return useMutation({
+    mutationFn: (payload: FeedbackPayload) =>
+      apiFetch<{ ref: string; status: string }>('/api/feedback', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+  })
 }

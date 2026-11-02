@@ -15,6 +15,8 @@ import Duplicates from './pages/Duplicates'
 import Logs from './pages/Logs'
 import Tools from './pages/Tools'
 import Analytics from './pages/Analytics'
+import { FeedbackProvider } from './components/FeedbackSheet'
+import { useFeedback } from './components/feedbackContext'
 
 const navItems = [
   { to: '/', label: 'Overview' },
@@ -28,6 +30,18 @@ const navItems = [
   { to: '/tools', label: 'Tools' },
   { to: '/settings', label: 'Settings' },
 ]
+
+function SidebarFeedbackButton() {
+  const { openFeedback } = useFeedback()
+  return (
+    <button
+      onClick={() => openFeedback('button')}
+      className="block w-full text-left text-xs text-gray-400 hover:text-white transition-colors mb-2"
+    >
+      Send feedback
+    </button>
+  )
+}
 
 function MainLayout({ onLogout }: { onLogout?: () => void }) {
   const handleLogout = async () => {
@@ -43,6 +57,7 @@ function MainLayout({ onLogout }: { onLogout?: () => void }) {
   }
 
   return (
+    <FeedbackProvider>
     <div className="flex h-screen bg-gray-50">
       {/* Sidebar */}
       <nav className="w-56 bg-gray-900 text-gray-300 flex flex-col">
@@ -69,6 +84,7 @@ function MainLayout({ onLogout }: { onLogout?: () => void }) {
           ))}
         </ul>
         <div className="px-4 py-3 border-t border-gray-700">
+          <SidebarFeedbackButton />
           {onLogout && (
             <button
               onClick={handleLogout}
@@ -97,6 +113,7 @@ function MainLayout({ onLogout }: { onLogout?: () => void }) {
         </Routes>
       </main>
     </div>
+    </FeedbackProvider>
   )
 }
 

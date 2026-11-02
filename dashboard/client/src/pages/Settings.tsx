@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useSettings, useUpdateSettings, useAuthStatus, useChangePin, useSetupPin, useLlmModels, useTestLlm, useServerInfo, useShutdownServer, useInstances, useShutdownInstance, useAccounts, useClearCache, useResetCacheDatabase, useClearAccountCache, useCacheStats, type InstanceHeartbeat } from '../hooks/useApi'
+import { useFeedback } from '../components/feedbackContext'
 
 /** Fields that require a server restart when changed. */
 const RESTART_FIELDS = new Set([
@@ -1296,6 +1297,9 @@ export default function Settings() {
         {/* Dashboard PIN card - always shown */}
         <DashboardPinCard />
 
+        {/* Feedback card - always shown */}
+        <FeedbackCard />
+
         {/* Cache statistics card */}
         <CacheStatsCard />
 
@@ -1346,6 +1350,24 @@ export default function Settings() {
           </>
         )}
       </div>
+    </div>
+  )
+}
+
+function FeedbackCard() {
+  const { openFeedback } = useFeedback()
+  return (
+    <div className="bg-white rounded-lg shadow p-5">
+      <h3 className="text-lg font-medium text-gray-800 mb-2">Feedback</h3>
+      <p className="text-sm text-gray-600 mb-4">
+        Found a bug or have an idea? Send a note straight to the developers.
+      </p>
+      <button
+        onClick={() => openFeedback('button')}
+        className="px-4 py-2 text-sm text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+      >
+        Send feedback
+      </button>
     </div>
   )
 }

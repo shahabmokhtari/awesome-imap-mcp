@@ -116,6 +116,7 @@ public sealed class DashboardHost : BackgroundService
             opts.SerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
         });
         builder.Services.AddHttpClient();
+        builder.Services.AddHttpClient(FeedbackRelay.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(15));
         builder.Services.AddSignalR();
 
         ForwardRootServices(builder.Services, _rootServices, _config);
@@ -159,6 +160,7 @@ public sealed class DashboardHost : BackgroundService
         app.MapToolsApi();
         app.MapCacheApi();
         app.MapAnalyticsApi();
+        app.MapFeedbackApi();
 
         // Map SignalR hub
         app.MapHub<DashboardHub>("/hub");
