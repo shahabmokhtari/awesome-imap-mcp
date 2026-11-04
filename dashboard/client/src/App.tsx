@@ -38,7 +38,7 @@ function SidebarFeedbackButton() {
       onClick={() => openFeedback('button')}
       className="block w-full text-left text-xs text-gray-400 hover:text-white transition-colors mb-2"
     >
-      Send feedback
+      Report an issue
     </button>
   )
 }

@@ -419,7 +419,7 @@ On first launch (no accounts configured), the dashboard shows a guided setup wiz
 - **Duplicates** — cross-account duplicate detection, selectable copies per duplicate group, bulk delete via queue, page-size selector
 - **Queue** — view pending operations with account names, confirm or cancel sends
 - **Sync** — per-folder real-time sync status, trigger manual syncs
-- **Settings** — edit all configuration in-browser. Changes saved to `config.json` automatically. Also shows cache statistics and lets you clear the cache (see [Clearing the cache](#clearing-the-cache)). Also has a **Send feedback** button (see [Sending feedback](#sending-feedback))
+- **Settings** — edit all configuration in-browser. Changes saved to `config.json` automatically. Also shows cache statistics and lets you clear the cache (see [Clearing the cache](#clearing-the-cache)). Also has a **Report an issue** button (see [Reporting an issue](#reporting-an-issue))
 - **Tools** — direct MCP tool execution from the dashboard UI
 - **Logs** — live log viewer with level filtering
 
@@ -432,9 +432,9 @@ On first launch (no accounts configured), the dashboard shows a guided setup wiz
 
 Without a PIN, anyone who can reach the dashboard port can use it — fine on the default loopback binding, not fine on a network. Set a PIN before changing `bind_address`.
 
-### Sending feedback
+### Reporting an issue
 
-**Send feedback** (in the sidebar and on the Settings page) opens a short form: pick Bug, Idea or Other, write up to 2,000 characters, and optionally leave an email address if you'd like a reply. Each note becomes an issue in this repository, filed through the [issues.awesomehq.app](https://issues.awesomehq.app) relay.
+**Report an issue** (in the sidebar and on the Settings page) opens a short form: pick Bug, Idea or Other, write up to 2,000 characters, and optionally leave an email address if you'd like a reply. Each note becomes an issue in this repository, filed through the [issues.awesomehq.app](https://issues.awesomehq.app) relay.
 
 - **Nothing is sent unless you press Send.** There is no background reporting.
 - **What is sent:** your message, your email address only if you typed one, and coarse diagnostics: app version, the server's operating system and version (e.g. `macOS 26.2`), your browser and its major version (e.g. `Edge 142`), your browser language, and the dashboard page you were on. No mail, account names, logs, screenshots, IP-derived data or install IDs.

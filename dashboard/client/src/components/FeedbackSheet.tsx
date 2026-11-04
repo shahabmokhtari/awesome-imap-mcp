@@ -100,7 +100,7 @@ function FeedbackSheet({ source, onClose }: { source: FeedbackSource; onClose: (
     >
       <div role="dialog" aria-modal="true" aria-labelledby="feedback-title" className="w-full max-w-lg rounded-lg bg-white p-5 shadow-xl">
         <div className="mb-4 flex items-center justify-between">
-          <h2 id="feedback-title" className="text-lg font-semibold text-gray-900">Send feedback</h2>
+          <h2 id="feedback-title" className="text-lg font-semibold text-gray-900">Report an issue</h2>
           <button onClick={onClose} aria-label="Close" className="text-xl leading-none text-gray-400 hover:text-gray-600">
             &times;
           </button>
