@@ -1,30 +1,158 @@
-# Awesome IMAP MCP
+<div align="center">
 
-A batteries-included MCP server for email. Works with any IMAP provider (Gmail, Outlook, Fastmail, ProtonMail, Yahoo, Zoho, self-hosted, etc.).
+# 📬 Awesome IMAP MCP
 
-Unlike every other email MCP server out there, this one has a **local cache**, an **operation queue with undo**, a **web dashboard with setup wizard**, **OAuth2 sign-in**, **LLM-powered email analysis**, and **44 MCP tools** covering search, compose, organize, attachments, labels, duplicates, reports, and more.
+### Give your AI agent a real email client.
 
-Built with **.NET 10** and **MailKit** for maximum performance and cross-platform support.
+**Local cache · undo for every write · web dashboard · one-click OAuth · LLM triage · 44 MCP tools**<br>
+Works with Gmail, Outlook, Yahoo, iCloud, Zoho, Fastmail, ProtonMail (via Bridge) and any other IMAP server.
 
-![Messages view: an email open beside the inbox, with AI-assigned labels on every message](docs/images/dashboard-message-detail.png)
+[![CI](https://github.com/shahabmokhtari/awesome-imap-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/shahabmokhtari/awesome-imap-mcp/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![.NET 10](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/)
+[![MCP](https://img.shields.io/badge/MCP-server-000000)](https://modelcontextprotocol.io)
+[![44 tools](https://img.shields.io/badge/MCP%20tools-44-2ea44f)](#mcp-tools-44)
+[![Platforms](https://img.shields.io/badge/macOS%20%C2%B7%20Linux%20%C2%B7%20Windows-single%20binary-lightgrey)](#installation)
 
-<sub>All screenshots use an invented demo mailbox — fictional people and companies on reserved `example` domains.</sub>
+[**Quick start**](#-up-and-running-in-60-seconds) · [**Why it's different**](#-why-its-different) · [**Screenshots**](#-see-it) · [**All 44 tools**](#mcp-tools-44) · [**Report an issue**](https://github.com/shahabmokhtari/awesome-imap-mcp/issues)
 
-## See It in Action
+<br>
 
-Point an agent like Claude at your inbox and ask it to triage. It searches the local cache, reads bodies, labels and files messages through the undoable queue, and hands back something like this:
+<img src="docs/images/dashboard-message-detail.png" alt="Messages view: an email open beside the inbox, with AI-assigned labels on every message" width="900">
 
-<p align="center"><img src="docs/images/sample-triage-report.png" alt="A sample triage report: one phishing attempt caught, five messages that need a reply with suggested next steps, and unsubscribe recommendations" width="820"></p>
+<sub>All screenshots use an invented demo mailbox: fictional people and companies on reserved <code>example</code> domains.</sub>
+
+</div>
+
+---
+
+## 🤯 One sentence. A clean inbox.
 
 > *"Triage everything that arrived since yesterday. Label it, move the promos out, and tell me what actually needs me."*
 
-Everything the agent changed is in the operation queue, and every write can be undone.
+Point Claude, Cursor, Windsurf or any MCP client at your inbox and ask. The agent searches a **local cache** (no waiting on IMAP), reads the mail, labels and files it through an **undoable queue**, and hands back something like this:
 
-## Why This Exists
+<p align="center"><img src="docs/images/sample-triage-report.png" alt="A sample triage report: one phishing attempt caught, five messages that need a reply with suggested next steps, and unsubscribe recommendations" width="820"></p>
 
-Every existing IMAP MCP server hits the IMAP server on every single tool call. No caching, no queuing, no UI, no intelligence. This project fixes all of that.
+Every change the agent made is listed in the queue. **Any of them can be undone.**
 
-## Key Features
+## 💡 Why it's different
+
+Most email MCP servers are thin wrappers that hit your mail server on every call and change things the moment the model asks. Awesome IMAP MCP is built like a real email client:
+
+| | Typical email MCP server | **Awesome IMAP MCP** |
+|---|---|---|
+| **Speed** | Every tool call is an IMAP round-trip | **Local SQLite cache with full-text search**, kept in sync in real time (IMAP IDLE) |
+| **Safety** | Deletes and sends happen instantly | **Every write is queued and undoable**; sends wait in an undo window or need your confirmation |
+| **Setup** | Hand-edited config and app passwords | **Setup wizard and one-click OAuth** for Gmail, Outlook and Yahoo (PKCE, no client secrets) |
+| **Visibility** | A black box | **Full web dashboard**: browse mail, watch the queue, run any tool by hand |
+| **Intelligence** | Raw messages | **LLM analysis**: spam scoring, categories, priority, custom rules |
+| **Scale** | One account | **Many accounts**, cross-account search and duplicate detection |
+| **Context window** | Huge dumps | **Token-budget-aware** responses that fit the model |
+
+## 🚀 Up and running in 60 seconds
+
+```bash
+# 1. Install (macOS / Linux; checksum-verified single binary, no runtime needed)
+curl -fsSL https://raw.githubusercontent.com/shahabmokhtari/awesome-imap-mcp/main/install.sh | bash
+
+# 2. Add your mailbox in the browser: setup wizard with one-click OAuth
+awesome-imap-mcp --dashboard --dashboard-auto-open
+
+# 3. Connect your agent
+claude mcp add awesome-imap-mcp -- awesome-imap-mcp
+```
+
+That's it. Ask your agent about your email. Windows binaries, Docker and other MCP clients are covered in [Installation](#installation) and [Adding to MCP Clients](#adding-to-mcp-clients).
+
+## 💬 Things you can ask
+
+- *"What needs a reply from me this week? Draft the answers. I'll confirm before anything sends."*
+- *"Find every invoice from last quarter and download the PDFs."*
+- *"Who sends me the most email? Move their promotions into an archive folder."*
+- *"Flag anything that looks like phishing and explain why."*
+- *"Find duplicate emails across all my accounts and clean them up."*
+- *"Give me a report on my mailbox: volume by month, top senders, categories."*
+
+## 📸 See it
+
+| | |
+|---|---|
+| ![Messages: inbox with AI labels and attachment indicators](docs/images/dashboard-messages.png) | ![Analytics: volume over 13 months, account breakdown, label distribution](docs/images/dashboard-analytics.png) |
+| **Messages**: every account and folder, with AI-assigned labels | **Analytics**: volume trends, top senders, label mix, one-click cleanup |
+| ![Queue: a pending send with Cancel and Confirm, plus completed label, move, flag and delete operations](docs/images/dashboard-queue.png) | ![Tools: running category_breakdown from the dashboard and viewing its JSON response](docs/images/dashboard-tools.png) |
+| **Queue**: every write is queued; sends wait in an undo window | **Tools**: run any of the 44 MCP tools by hand |
+
+<p align="center"><img src="docs/images/dashboard-setup.png" alt="Setup wizard, step one: set an optional dashboard PIN" width="640"><br><b>Setup wizard</b>: PIN, account, done</p>
+
+## ✨ Highlights
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+### 🔌 Works with your mail
+- Any IMAP provider, with **provider quirk profiles** that adapt folder names, auth and search
+- **One-click OAuth** for Gmail, Outlook and Yahoo; app passwords everywhere else
+- **Multi-account** from day one
+- **Real-time sync** with IMAP IDLE plus polling, configurable per folder
+
+</td>
+<td width="50%" valign="top">
+
+### ⚡ Fast
+- **Local SQLite cache with full-text search**: instant results, no IMAP round-trips
+- **Token-budget-aware** responses that don't blow your context window
+- **Single-file binaries** for macOS, Linux and Windows (x64 and arm64)
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+### 🛟 Safe by design
+- **Operation queue with undo** for every write, with priority tiers and retries
+- **Send with undo**: email waits in a cancel window before it goes out
+- **Loopback-only by default**, DNS-rebinding protection, optional dashboard PIN
+- **Encrypted credentials** (AES-256-GCM), sanitized HTML, remote images blocked
+- **Prompt-injection aware**: an email can't trick the agent into overwriting your files
+
+</td>
+<td valign="top">
+
+### 🧠 Smart
+- **LLM analysis**: spam scoring, categories, priority, custom rules (API, ACP or in-context)
+- **Labels** with a configurable vocabulary, even on servers without keyword support
+- **Thread reconstruction**, **mailbox reports** and **duplicate detection**
+- **Readable bodies**: placeholder text parts are skipped, so agents see the real content
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+### 📊 Web dashboard
+- Guided **setup wizard**, account management and editable settings
+- **Messages** with bulk actions, **Analytics**, **Queue**, **Sync** and **Logs**
+- **Tools** page with context-aware parameter suggestions
+- Built-in **Report an issue** form
+
+</td>
+<td valign="top">
+
+### 🏗️ Built for real use
+- **.NET 10 + MailKit**, cross-platform
+- **stdio or HTTP+SSE** transport, or both at once
+- **Multi-instance** coordination with leader election and port standby
+- **OpenTelemetry** metrics, logs and tracing
+- **Claude Code plugin** with ready-made email skills
+
+</td>
+</tr>
+</table>
+
+<details>
+<summary><b>Full feature list</b></summary>
 
 - **OAuth2 sign-in** - one-click sign-in for Gmail, Outlook, and Yahoo via PKCE (no client secrets needed). App passwords also supported for all providers
 - **Web dashboard with setup wizard** - guided first-run setup, account management, message browsing with bulk operations, an analytics page (volume charts, top senders, label distribution), editable settings, sync monitoring, queue viewer, duplicate detection, and direct tool execution (parameter autocomplete narrows by context: pick an account and folder to see its messages, or pick a message to see the folders it is in)
@@ -52,6 +180,8 @@ Every existing IMAP MCP server hits the IMAP server on every single tool call. N
 - **Port standby** - multiple instances share a port gracefully; standby processes auto-take over when the primary exits
 - **Single-file binaries** - download one file per platform, no runtime dependencies
 - **Multiple SQLite databases** - cache.db, health.db, labels.db, metrics.db, logs.db with WAL mode
+
+</details>
 
 ---
 
@@ -88,10 +218,12 @@ chmod +x awesome-imap-mcp-*
 
 ### Option 2: .NET Global Tool
 
-Requires [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0).
+Requires [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0). The package is not on NuGet yet, so build it from a clone:
 
 ```bash
-dotnet tool install -g awesome-imap-mcp
+git clone https://github.com/shahabmokhtari/awesome-imap-mcp.git && cd awesome-imap-mcp
+dotnet pack src/AwesomeImapMcp.McpServer -c Release -o ./nupkg
+dotnet tool install -g awesome-imap-mcp --add-source ./nupkg
 ```
 
 ### Option 3: From Source
@@ -382,14 +514,7 @@ On first launch (no accounts configured), the dashboard shows a guided setup wiz
 
 ### Screenshots
 
-| | |
-|---|---|
-| ![Messages: inbox with AI labels and attachment indicators](docs/images/dashboard-messages.png) | ![Analytics: volume over 13 months, account breakdown, label distribution](docs/images/dashboard-analytics.png) |
-| **Messages** — every account and folder, with AI-assigned labels | **Analytics** — volume trends, unread and flagged counts, label mix |
-| ![Queue: a pending send with Cancel and Confirm, plus completed label, move, flag and delete operations](docs/images/dashboard-queue.png) | ![Tools: running category_breakdown from the dashboard and viewing its JSON response](docs/images/dashboard-tools.png) |
-| **Queue** — every write is queued; sends wait in an undo window | **Tools** — run any of the 44 MCP tools by hand |
-
-<p align="center"><img src="docs/images/dashboard-setup.png" alt="Setup wizard, step one: set an optional dashboard PIN" width="640"><br><b>Setup wizard</b> — PIN, account, done</p>
+See [**See it**](#-see-it) at the top of this page.
 
 ### Dashboard Pages
 
@@ -861,7 +986,7 @@ This project was renamed from `ultimate-imap-mcp` to `awesome-imap-mcp`. If you 
    This preserves `accounts.json`, all SQLite caches (`cache.db`, `health.db`, `labels.db`, `metrics.db`, `logs.db`), and the `logs/` folder.
 2. **Rename environment variables**: `UIMAP_CONFIG_PATH` → `AIMAP_CONFIG_PATH`, `UIMAP_PASSPHRASE` → `AIMAP_PASSPHRASE`.
 3. **Update the binary name** in any wrapper scripts: `ultimate-imap-mcp` → `awesome-imap-mcp`.
-4. **Reinstall** via `dotnet tool install -g awesome-imap-mcp` or `curl -fsSL https://raw.githubusercontent.com/shahabmokhtari/awesome-imap-mcp/main/install.sh | bash`.
+4. **Reinstall** via `curl -fsSL https://raw.githubusercontent.com/shahabmokhtari/awesome-imap-mcp/main/install.sh | bash`.
 5. **Update MCP client configs** to point at the new command name.
 
 The old GitHub URL `github.com/shahabmokhtari/ultimate-imap-mcp` redirects to the new one, but it's worth updating any pinned references.
@@ -876,6 +1001,16 @@ The old GitHub URL `github.com/shahabmokhtari/ultimate-imap-mcp` redirects to th
 
 Report vulnerabilities privately — see [SECURITY.md](SECURITY.md).
 
+## 🤝 Contributing
+
+Bug reports, ideas and pull requests are welcome. Use **Report an issue** in the dashboard, [open an issue](https://github.com/shahabmokhtari/awesome-imap-mcp/issues), or read [CONTRIBUTING.md](CONTRIBUTING.md) to get started.
+
 ## License
 
-MIT
+[MIT](LICENSE). Free for personal and commercial use.
+
+<div align="center">
+
+**If Awesome IMAP MCP saves you from your inbox, give it a ⭐ so others can find it.**
+
+</div>
