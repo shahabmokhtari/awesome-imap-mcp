@@ -1358,15 +1358,15 @@ function FeedbackCard() {
   const { openFeedback } = useFeedback()
   return (
     <div className="bg-white rounded-lg shadow p-5">
-      <h3 className="text-lg font-medium text-gray-800 mb-2">Feedback</h3>
+      <h3 className="text-lg font-medium text-gray-800 mb-2">Report an issue</h3>
       <p className="text-sm text-gray-600 mb-4">
-        Found a bug or have an idea? Send a note straight to the developers.
+        Found a bug or have an idea? Report it and it becomes an issue in the project's GitHub tracker.
       </p>
       <button
         onClick={() => openFeedback('button')}
         className="px-4 py-2 text-sm text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
       >
-        Send feedback
+        Report an issue
       </button>
     </div>
   )
